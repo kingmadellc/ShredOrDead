@@ -686,6 +686,207 @@
         }
 
         /* ============================================
+           Corner Buttons (Settings & Fullscreen)
+           ============================================ */
+        .corner-buttons {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            display: flex;
+            gap: 8px;
+            z-index: 20;
+        }
+
+        .corner-btn {
+            padding: 8px 10px;
+            font-size: 18px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            color: var(--white);
+        }
+
+        .corner-btn:hover {
+            background: rgba(0, 255, 255, 0.3);
+            border-color: var(--cyan);
+        }
+
+        .corner-settings-btn:hover {
+            transform: rotate(45deg);
+        }
+
+        .corner-fullscreen-btn:hover {
+            transform: scale(1.1);
+        }
+
+        /* ============================================
+           Settings Menu
+           ============================================ */
+        #settingsMenu {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: none;
+            z-index: 500;
+            justify-content: center;
+            align-items: center;
+            backdrop-filter: blur(5px);
+        }
+
+        #settingsMenu.active {
+            display: flex;
+        }
+
+        #settingsMenu .settings-overlay {
+            background: linear-gradient(180deg, rgba(26, 10, 46, 0.98) 0%, rgba(15, 10, 30, 0.99) 100%);
+            padding: 30px 40px;
+            border-radius: 12px;
+            text-align: left;
+            border: 3px solid var(--cyan);
+            box-shadow:
+                0 0 60px rgba(0, 255, 255, 0.4),
+                0 0 100px rgba(255, 0, 255, 0.2);
+            max-width: 420px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        #settingsMenu h2 {
+            font-family: var(--font-pixel);
+            font-size: 24px;
+            color: var(--cyan);
+            margin-bottom: 20px;
+            text-align: center;
+            text-shadow: 0 0 20px rgba(0, 255, 255, 0.6);
+            letter-spacing: 4px;
+        }
+
+        #settingsMenu h3 {
+            font-family: var(--font-pixel);
+            font-size: 11px;
+            color: var(--magenta);
+            margin: 20px 0 10px 0;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            border-bottom: 1px solid rgba(255, 0, 255, 0.3);
+            padding-bottom: 5px;
+        }
+
+        .settings-section {
+            margin-bottom: 15px;
+        }
+
+        .setting-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 10px 0;
+            padding: 8px 0;
+        }
+
+        .setting-row label {
+            font-family: var(--font-pixel);
+            color: var(--white);
+            font-size: 10px;
+            opacity: 0.9;
+        }
+
+        .setting-row select,
+        .setting-row button {
+            padding: 6px 12px;
+            font-family: var(--font-pixel);
+            font-size: 9px;
+            background: rgba(0, 255, 255, 0.1);
+            color: var(--white);
+            border: 2px solid var(--cyan);
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .setting-row select:hover,
+        .setting-row button:hover {
+            background: rgba(0, 255, 255, 0.25);
+            box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
+        }
+
+        .setting-row select {
+            min-width: 140px;
+        }
+
+        .setting-row input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+            accent-color: var(--cyan);
+        }
+
+        .setting-row input[type="range"] {
+            width: 100px;
+            accent-color: var(--cyan);
+            cursor: pointer;
+        }
+
+        .setting-row span {
+            font-family: var(--font-pixel);
+            color: var(--cyan);
+            font-size: 9px;
+            min-width: 35px;
+            text-align: right;
+        }
+
+        .setting-row .device-info {
+            font-size: 8px;
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .settings-buttons {
+            display: flex;
+            gap: 15px;
+            margin-top: 25px;
+            justify-content: center;
+        }
+
+        .settings-buttons button {
+            font-family: var(--font-pixel);
+            font-size: 10px;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .settings-buttons .btn-back {
+            background: transparent;
+            color: var(--white);
+            border: 2px solid rgba(255, 255, 255, 0.4);
+        }
+
+        .settings-buttons .btn-back:hover {
+            border-color: var(--cyan);
+            color: var(--cyan);
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.3);
+        }
+
+        .settings-buttons .btn-reset {
+            background: rgba(255, 0, 255, 0.2);
+            color: var(--magenta);
+            border: 2px solid rgba(255, 0, 255, 0.4);
+        }
+
+        .settings-buttons .btn-reset:hover {
+            background: rgba(255, 0, 255, 0.35);
+            border-color: var(--magenta);
+            box-shadow: 0 0 15px rgba(255, 0, 255, 0.3);
+        }
+
+        /* ============================================
            Responsive Adjustments
            ============================================ */
         @media (max-width: 520px) {
@@ -733,6 +934,11 @@
 
         <!-- Start Screen Modal -->
         <div id="startScreen">
+            <!-- Corner Buttons: Settings & Fullscreen -->
+            <div class="corner-buttons">
+                <button onclick="toggleFullscreen()" class="corner-btn corner-fullscreen-btn" aria-label="Toggle fullscreen" title="Fullscreen">⛶</button>
+                <button onclick="showSettingsMenu()" class="corner-btn corner-settings-btn" aria-label="Settings" title="Settings">⚙️</button>
+            </div>
             <canvas id="snowCanvas"></canvas>
             <div class="content-overlay">
                 <!-- Title Section with Wordmark Logo -->
@@ -827,6 +1033,79 @@
                 <div class="btn-back">
                     <button onclick="hideHighScores()">BACK</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Menu (Global Overlay) -->
+    <div id="settingsMenu">
+        <div class="settings-overlay">
+            <h2>SETTINGS</h2>
+
+            <div class="settings-section">
+                <h3>Display</h3>
+                <div class="setting-row">
+                    <label>Device:</label>
+                    <span id="deviceProfileLabel" class="device-info">Detecting...</span>
+                </div>
+                <div class="setting-row">
+                    <label>Auto Detect:</label>
+                    <input type="checkbox" id="autoDetectToggle" checked onchange="toggleAutoDetect(this.checked)">
+                </div>
+                <div class="setting-row">
+                    <label>Resolution:</label>
+                    <select id="resolutionSelect" onchange="changeResolution(this.value)">
+                        <optgroup label="Portrait (3:4)">
+                            <option value="480x640">480×640 (1x)</option>
+                            <option value="600x800">600×800 (1.25x)</option>
+                            <option value="720x960">720×960 (1.5x)</option>
+                            <option value="768x1024">768×1024 (1.6x)</option>
+                            <option value="900x1200">900×1200 (1.875x)</option>
+                        </optgroup>
+                        <optgroup label="Mobile (9:16)">
+                            <option value="405x720">405×720</option>
+                            <option value="608x1080">608×1080</option>
+                        </optgroup>
+                        <optgroup label="Steam Deck (10:16)">
+                            <option value="500x800">500×800</option>
+                        </optgroup>
+                    </select>
+                </div>
+                <div class="setting-row">
+                    <label>Fullscreen:</label>
+                    <button onclick="toggleFullscreen()">Toggle (F11)</button>
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <h3>Game Feel</h3>
+                <div class="setting-row">
+                    <label>Screen Shake:</label>
+                    <input type="checkbox" id="screenShakeToggle" checked onchange="toggleScreenShakeSetting(this.checked)">
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <h3>Controls</h3>
+                <div class="setting-row" style="flex-direction: column; align-items: flex-start; gap: 8px;">
+                    <div style="display: flex; gap: 15px;">
+                        <span style="color: var(--cyan);">←/→ or A/D</span>
+                        <span style="opacity: 0.7;">Carve</span>
+                    </div>
+                    <div style="display: flex; gap: 15px;">
+                        <span style="color: var(--cyan);">↓ or S</span>
+                        <span style="opacity: 0.7;">Tuck (Speed)</span>
+                    </div>
+                    <div style="display: flex; gap: 15px;">
+                        <span style="color: var(--cyan);">SPACE</span>
+                        <span style="opacity: 0.7;">Jump</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-buttons">
+                <button class="btn-reset" onclick="resetAllSettings()">RESET</button>
+                <button class="btn-back" onclick="hideSettingsMenu()">BACK</button>
             </div>
         </div>
     </div>
