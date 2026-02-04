@@ -3393,6 +3393,7 @@ function resizeStartScreenCanvases() {
 
     // Directly set start screen styles via JavaScript for fullscreen
     if (isFullscreen) {
+        startScreen.style.position = 'fixed';
         startScreen.style.width = '100vw';
         startScreen.style.height = '100vh';
         startScreen.style.top = '0';
@@ -3400,8 +3401,10 @@ function resizeStartScreenCanvases() {
         startScreen.style.transform = 'none';
         startScreen.style.borderRadius = '0';
         startScreen.style.border = 'none';
+        startScreen.style.boxShadow = 'none';
     } else {
         // Reset to CSS defaults
+        startScreen.style.position = '';
         startScreen.style.width = '';
         startScreen.style.height = '';
         startScreen.style.top = '';
@@ -3409,6 +3412,7 @@ function resizeStartScreenCanvases() {
         startScreen.style.transform = '';
         startScreen.style.borderRadius = '';
         startScreen.style.border = '';
+        startScreen.style.boxShadow = '';
     }
 
     // Wait a frame for layout to update, then resize canvases
