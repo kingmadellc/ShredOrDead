@@ -60,7 +60,7 @@ const TERRAIN = {
     maxDensity: 0.18,           // Less cluttered
     densityRampDistance: 4000,
     jumpChance: 0.20,           // Keep jumps plentiful
-    railChance: 0.08,           // Was 0.14 - fewer rails
+    railChance: 0.04,           // Reduced - fewer rails
     clearPathWidth: 2
 };
 
@@ -450,13 +450,39 @@ function generateTerrainChunk(chunkIndex) {
             } else if (rng < density + TERRAIN.jumpChance + TERRAIN.railChance) {
                 const railLength = 100 + seededRandom(cellSeed + 0.8) * 150;
                 const endCol = col + (seededRandom(cellSeed + 0.9) - 0.5) * 2;
-                chunk.rails.push({
+                const newRail = {
                     x: (col - gridCols / 2 + 0.5) * TERRAIN.laneWidth,
                     y: chunk.y + row * 80,
                     endX: (clamp(endCol, 0, gridCols - 1) - gridCols / 2 + 0.5) * TERRAIN.laneWidth,
                     endY: chunk.y + row * 80 + railLength,
                     length: railLength
-                });
+                };
+
+                // Check for collision with existing rails
+                let collides = false;
+                const minDistX = 50;  // Minimum horizontal distance between rails
+                const minDistY = 120; // Minimum vertical distance between rail starts
+
+                for (const existingRail of chunk.rails) {
+                    // Check if rails are too close horizontally
+                    const xDist = Math.abs(newRail.x - existingRail.x);
+                    // Check if Y ranges overlap
+                    const newTop = newRail.y;
+                    const newBottom = newRail.endY;
+                    const existTop = existingRail.y;
+                    const existBottom = existingRail.endY;
+
+                    const yOverlap = !(newBottom < existTop - minDistY || newTop > existBottom + minDistY);
+
+                    if (xDist < minDistX && yOverlap) {
+                        collides = true;
+                        break;
+                    }
+                }
+
+                if (!collides) {
+                    chunk.rails.push(newRail);
+                }
             }
         }
     }
