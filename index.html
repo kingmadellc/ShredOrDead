@@ -115,6 +115,7 @@
 
         /* Fullscreen mode - start screen fills the viewport */
         body.fullscreen-mode #startScreen {
+            position: fixed !important;
             width: 100vw !important;
             height: 100vh !important;
             top: 0 !important;
@@ -122,6 +123,7 @@
             transform: none !important;
             border-radius: 0;
             border: none;
+            box-shadow: none;
         }
 
         body.fullscreen-mode #startScreen .content-overlay {
