@@ -7,8 +7,34 @@
 // CONSTANTS
 // ===================
 
-const CANVAS_WIDTH = 480;
-const CANVAS_HEIGHT = 640;
+// Base resolution (portrait orientation for snowboarding)
+const BASE_WIDTH = 480;
+const BASE_HEIGHT = 640;
+
+// Resolution scaling system
+const displaySettings = {
+    baseWidth: BASE_WIDTH,
+    baseHeight: BASE_HEIGHT,
+    scale: 1,
+    fullscreen: false,
+    currentResolution: '480x640',
+    autoDetect: true,
+    screenShakeEnabled: true
+};
+
+const RESOLUTIONS = {
+    '480x640': { width: 480, height: 640, scale: 1, aspectRatio: '3:4' },
+    '600x800': { width: 600, height: 800, scale: 1.25, aspectRatio: '3:4' },
+    '720x960': { width: 720, height: 960, scale: 1.5, aspectRatio: '3:4' },
+    '768x1024': { width: 768, height: 1024, scale: 1.6, aspectRatio: '3:4' },
+    '900x1200': { width: 900, height: 1200, scale: 1.875, aspectRatio: '3:4' },
+    '405x720': { width: 405, height: 720, scale: 1.125, aspectRatio: '9:16' },
+    '608x1080': { width: 608, height: 1080, scale: 1.6875, aspectRatio: '9:16' },
+    '500x800': { width: 500, height: 800, scale: 1.25, aspectRatio: '10:16' }
+};
+
+let CANVAS_WIDTH = BASE_WIDTH;
+let CANVAS_HEIGHT = BASE_HEIGHT;
 
 const COLORS = {
     // Neon palette
@@ -111,6 +137,168 @@ const CHASE = {
     slowSpeedThreshold: 120,    // Below this = danger
     slowSpeedDuration: 2.0      // 2 seconds slow = beast
 };
+
+// ===================
+// SPRITE SYSTEM
+// ===================
+
+const SPRITE_CONFIG = {
+    snowboarder: {
+        src: 'assets/sprites/snowboarder-spritesheet.svg',
+        frameWidth: 64,
+        frameHeight: 64,
+        columns: 6,
+        rows: 4,
+        animations: {
+            idle: { row: 0, frames: [0], frameTime: 100 },
+            carveLeft1: { row: 0, frames: [1], frameTime: 100 },
+            carveLeft2: { row: 0, frames: [2], frameTime: 100 },
+            carveLeft3: { row: 0, frames: [3], frameTime: 100 },
+            carveLeft4: { row: 0, frames: [4], frameTime: 100 },
+            carveLeft5: { row: 0, frames: [5], frameTime: 100 },
+            carveRight1: { row: 1, frames: [0], frameTime: 100 },
+            carveRight2: { row: 1, frames: [1], frameTime: 100 },
+            carveRight3: { row: 1, frames: [2], frameTime: 100 },
+            carveRight4: { row: 1, frames: [3], frameTime: 100 },
+            carveRight5: { row: 1, frames: [4], frameTime: 100 },
+            tuck: { row: 1, frames: [5], frameTime: 100 },
+            airborne: { row: 2, frames: [0, 1, 2], frameTime: 150 },
+            spin: { row: 2, frames: [3], frameTime: 100 },
+            grab: { row: 2, frames: [4], frameTime: 100 },
+            land: { row: 2, frames: [5], frameTime: 100 },
+            crash: { row: 3, frames: [0, 1, 2, 3, 4], frameTime: 120 },
+            dazed: { row: 3, frames: [5], frameTime: 200 }
+        }
+    },
+    yeti: {
+        src: 'assets/sprites/yeti-spritesheet.svg',
+        frameWidth: 128,
+        frameHeight: 128,
+        columns: 4,
+        rows: 3,
+        animations: {
+            chase: { row: 0, frames: [0, 1, 2, 3, 2, 1], frameTime: 120 },
+            lunge: { row: 1, frames: [0, 1, 2], frameTime: 100 },
+            recover: { row: 1, frames: [3], frameTime: 150 },
+            rageLow: { row: 2, frames: [0], frameTime: 100 },
+            rageMedium: { row: 2, frames: [1], frameTime: 100 },
+            rageHigh: { row: 2, frames: [2], frameTime: 100 },
+            rageMax: { row: 2, frames: [3], frameTime: 80 }
+        }
+    }
+};
+
+// Sprite state
+const sprites = {
+    sheets: {},
+    player: null,
+    beast: null,
+    loaded: false
+};
+
+class SpriteSheet {
+    constructor(config) {
+        this.config = config;
+        this.image = null;
+        this.loaded = false;
+    }
+
+    load() {
+        return new Promise((resolve, reject) => {
+            this.image = new Image();
+            this.image.onload = () => {
+                this.loaded = true;
+                resolve(this);
+            };
+            this.image.onerror = () => {
+                console.warn(`Failed to load sprite: ${this.config.src}`);
+                resolve(this); // Resolve anyway to allow fallback
+            };
+            this.image.src = this.config.src;
+        });
+    }
+
+    getFrame(row, col) {
+        return {
+            x: col * this.config.frameWidth,
+            y: row * this.config.frameHeight,
+            width: this.config.frameWidth,
+            height: this.config.frameHeight
+        };
+    }
+}
+
+class AnimatedSprite {
+    constructor(sheet) {
+        this.sheet = sheet;
+        this.currentAnim = 'idle';
+        this.frameIndex = 0;
+        this.frameTimer = 0;
+    }
+
+    setAnimation(name) {
+        if (this.currentAnim !== name && this.sheet.config.animations[name]) {
+            this.currentAnim = name;
+            this.frameIndex = 0;
+            this.frameTimer = 0;
+        }
+    }
+
+    update(dt) {
+        const anim = this.sheet.config.animations[this.currentAnim];
+        if (!anim || anim.frames.length <= 1) return;
+
+        this.frameTimer += dt * 1000;
+        if (this.frameTimer >= anim.frameTime) {
+            this.frameTimer = 0;
+            this.frameIndex = (this.frameIndex + 1) % anim.frames.length;
+        }
+    }
+
+    draw(ctx, x, y, scale = 1, rotation = 0, flipX = false) {
+        if (!this.sheet.loaded || !this.sheet.image) return false;
+
+        const anim = this.sheet.config.animations[this.currentAnim];
+        if (!anim) return false;
+
+        const frameNum = anim.frames[this.frameIndex % anim.frames.length];
+        const frame = this.sheet.getFrame(anim.row, frameNum);
+
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(rotation);
+        ctx.scale(flipX ? -scale : scale, scale);
+
+        ctx.drawImage(
+            this.sheet.image,
+            frame.x, frame.y, frame.width, frame.height,
+            -frame.width / 2, -frame.height / 2, frame.width, frame.height
+        );
+
+        ctx.restore();
+        return true;
+    }
+}
+
+async function loadSprites() {
+    const snowboarderSheet = new SpriteSheet(SPRITE_CONFIG.snowboarder);
+    const yetiSheet = new SpriteSheet(SPRITE_CONFIG.yeti);
+
+    await Promise.all([snowboarderSheet.load(), yetiSheet.load()]);
+
+    sprites.sheets.snowboarder = snowboarderSheet;
+    sprites.sheets.yeti = yetiSheet;
+
+    if (snowboarderSheet.loaded) {
+        sprites.player = new AnimatedSprite(snowboarderSheet);
+    }
+    if (yetiSheet.loaded) {
+        sprites.beast = new AnimatedSprite(yetiSheet);
+    }
+
+    sprites.loaded = snowboarderSheet.loaded && yetiSheet.loaded;
+    console.log('Sprites loaded:', sprites.loaded);
+}
 
 // ===================
 // GAME STATE
@@ -1595,6 +1783,69 @@ function drawPlayer() {
         ctx.restore();
     }
 
+    // Try sprite-based rendering first
+    if (sprites.player && sprites.player.sheet.loaded) {
+        // Determine animation based on player state
+        if (player.crashed) {
+            if (player.crashTimer < 0.3) {
+                sprites.player.setAnimation('crash');
+            } else {
+                sprites.player.setAnimation('dazed');
+            }
+        } else if (player.airborne) {
+            const trick = player.autoTrick;
+            if (trick) {
+                if (trick.type === 'spin' || trick.type === 'combo') {
+                    sprites.player.setAnimation('spin');
+                } else if (trick.type === 'grab') {
+                    sprites.player.setAnimation('grab');
+                } else {
+                    sprites.player.setAnimation('airborne');
+                }
+            } else {
+                sprites.player.setAnimation('airborne');
+            }
+        } else if (input.down && player.speed > 300) {
+            sprites.player.setAnimation('tuck');
+        } else if (player.angle < -5) {
+            // Left carve - select frame based on angle intensity
+            const intensity = Math.min(5, Math.floor(Math.abs(player.angle) / 13) + 1);
+            sprites.player.setAnimation('carveLeft' + intensity);
+        } else if (player.angle > 5) {
+            // Right carve - select frame based on angle intensity
+            const intensity = Math.min(5, Math.floor(Math.abs(player.angle) / 13) + 1);
+            sprites.player.setAnimation('carveRight' + intensity);
+        } else {
+            sprites.player.setAnimation('idle');
+        }
+
+        // Calculate rotation
+        let rotation = 0;
+        if (player.airborne) {
+            rotation = player.trickRotation * Math.PI / 180;
+        }
+
+        // Calculate scale (invincibility flash)
+        let alpha = 1;
+        if (player.invincible > 0 && Math.floor(gameState.animationTime * 10) % 2 === 0) {
+            alpha = 0.5;
+        }
+
+        // Draw shadow
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+        ctx.beginPath();
+        ctx.ellipse(screen.x, screen.y + 15 + shadowOffset, 18 - shadowOffset * 0.05, 6, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Draw sprite
+        ctx.globalAlpha = alpha;
+        const drawn = sprites.player.draw(ctx, screen.x, drawY, 1, rotation, false);
+        ctx.globalAlpha = 1;
+
+        if (drawn) return; // Success, skip procedural drawing
+    }
+
+    // Fallback to procedural drawing
     ctx.save();
     ctx.translate(screen.x, drawY);
 
@@ -1841,6 +2092,53 @@ function drawBeast() {
     const screen = worldToScreen(chase.beastX, chase.beastY);
     const time = gameState.animationTime;
 
+    // Try sprite-based rendering first
+    if (sprites.beast && sprites.beast.sheet.loaded) {
+        // Determine animation based on beast state
+        if (chase.beastState === 'lunging') {
+            sprites.beast.setAnimation('lunge');
+        } else if (chase.beastState === 'retreating') {
+            sprites.beast.setAnimation('recover');
+        } else {
+            // Chase state - select based on rage level
+            if (chase.beastRage > 0.75) {
+                sprites.beast.setAnimation('rageMax');
+            } else if (chase.beastRage > 0.5) {
+                sprites.beast.setAnimation('rageHigh');
+            } else if (chase.beastRage > 0.25) {
+                sprites.beast.setAnimation('rageMedium');
+            } else {
+                sprites.beast.setAnimation('chase');
+            }
+        }
+
+        // Calculate scale
+        let scale = 0.9 + chase.beastRage * 0.2;
+        if (chase.beastState === 'lunging') {
+            scale += chase.lungeProgress * 0.3;
+        }
+
+        // Breathing effect
+        const breathe = Math.sin(time * 3) * 0.03 + 1;
+        scale *= breathe;
+
+        // Draw aura behind sprite
+        const pulseIntensity = 0.5 + Math.sin(time * 5) * 0.3;
+        const auraGrad = ctx.createRadialGradient(screen.x, screen.y, 20, screen.x, screen.y, 80 * scale);
+        auraGrad.addColorStop(0, `rgba(255, 0, 255, ${pulseIntensity * 0.4})`);
+        auraGrad.addColorStop(0.5, `rgba(148, 0, 211, ${pulseIntensity * 0.2})`);
+        auraGrad.addColorStop(1, 'rgba(100, 0, 150, 0)');
+        ctx.fillStyle = auraGrad;
+        ctx.beginPath();
+        ctx.arc(screen.x, screen.y, 80 * scale, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Draw sprite
+        const drawn = sprites.beast.draw(ctx, screen.x, screen.y, scale, 0, false);
+        if (drawn) return; // Success, skip procedural drawing
+    }
+
+    // Fallback to procedural drawing
     ctx.save();
     ctx.translate(screen.x, screen.y);
 
@@ -2447,14 +2745,198 @@ function init() {
     canvas = document.getElementById('gameCanvas');
     ctx = canvas.getContext('2d');
 
-    canvas.width = CANVAS_WIDTH;
-    canvas.height = CANVAS_HEIGHT;
+    // Initialize resolution system
+    loadSettings();
+    setResolution(displaySettings.currentResolution);
+    fitCanvasToViewport();
 
     setupInput();
     loadHighScore();
+    updateSettingsUI();
 
     requestAnimationFrame(gameLoop);
 }
+
+// ============================================
+// SETTINGS MENU FUNCTIONS
+// ============================================
+
+function showSettingsMenu() {
+    const menu = document.getElementById('settingsMenu');
+    if (menu) {
+        menu.classList.add('active');
+        updateSettingsUI();
+    }
+}
+
+function hideSettingsMenu() {
+    const menu = document.getElementById('settingsMenu');
+    if (menu) {
+        menu.classList.remove('active');
+    }
+}
+
+function updateSettingsUI() {
+    const deviceLabel = document.getElementById('deviceProfileLabel');
+    if (deviceLabel) deviceLabel.textContent = getDeviceProfile();
+
+    const resSelect = document.getElementById('resolutionSelect');
+    if (resSelect) resSelect.value = displaySettings.currentResolution;
+
+    const autoDetectToggle = document.getElementById('autoDetectToggle');
+    if (autoDetectToggle) autoDetectToggle.checked = displaySettings.autoDetect;
+
+    const screenShakeToggle = document.getElementById('screenShakeToggle');
+    if (screenShakeToggle) screenShakeToggle.checked = displaySettings.screenShakeEnabled;
+}
+
+function setResolution(resKey) {
+    const res = RESOLUTIONS[resKey];
+    if (!res) return;
+
+    displaySettings.currentResolution = resKey;
+    displaySettings.scale = res.scale;
+
+    if (canvas) {
+        canvas.width = res.width;
+        canvas.height = res.height;
+    }
+
+    CANVAS_WIDTH = res.width;
+    CANVAS_HEIGHT = res.height;
+    TERRAIN.slopeWidth = res.width;
+
+    try { localStorage.setItem('shredordead_resolution', resKey); } catch (e) {}
+    fitCanvasToViewport();
+}
+
+function fitCanvasToViewport() {
+    if (!canvas) return;
+
+    const isFullscreen = document.fullscreenElement || displaySettings.fullscreen;
+    const marginX = isFullscreen ? 0 : 20;
+    const marginY = isFullscreen ? 0 : 40;
+
+    const maxWidth = window.innerWidth - marginX;
+    const maxHeight = window.innerHeight - marginY;
+
+    const canvasRatio = canvas.width / canvas.height;
+    const viewportRatio = maxWidth / maxHeight;
+
+    if (canvasRatio > viewportRatio) {
+        canvas.style.width = maxWidth + 'px';
+        canvas.style.height = Math.floor(maxWidth / canvasRatio) + 'px';
+    } else {
+        canvas.style.height = maxHeight + 'px';
+        canvas.style.width = Math.floor(maxHeight * canvasRatio) + 'px';
+    }
+
+    canvas.style.margin = 'auto';
+    canvas.style.display = 'block';
+}
+
+function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => {});
+        displaySettings.fullscreen = true;
+    } else {
+        document.exitFullscreen();
+        displaySettings.fullscreen = false;
+    }
+}
+
+function autoDetectResolution() {
+    const screenHeight = window.innerHeight;
+    if (screenHeight >= 1080) return '720x960';
+    if (screenHeight >= 800) return '600x800';
+    return '480x640';
+}
+
+function getDeviceProfile() {
+    const ua = navigator.userAgent || '';
+    if (/iPhone|iPad|iPod/i.test(ua)) return 'iOS Device';
+    if (/Android/i.test(ua)) return 'Android';
+    if (/Steam Deck/i.test(ua)) return 'Steam Deck';
+    if ('ontouchstart' in window) return 'Mobile';
+    return 'Desktop';
+}
+
+function loadSettings() {
+    try {
+        const savedRes = localStorage.getItem('shredordead_resolution');
+        if (savedRes && RESOLUTIONS[savedRes]) {
+            displaySettings.currentResolution = savedRes;
+        }
+        const savedAutoDetect = localStorage.getItem('shredordead_autodetect');
+        if (savedAutoDetect !== null) {
+            displaySettings.autoDetect = savedAutoDetect === 'true';
+        }
+        const savedScreenShake = localStorage.getItem('shredordead_screenshake');
+        if (savedScreenShake !== null) {
+            displaySettings.screenShakeEnabled = savedScreenShake !== 'false';
+        }
+    } catch (e) {}
+
+    if (displaySettings.autoDetect) {
+        displaySettings.currentResolution = autoDetectResolution();
+    }
+}
+
+function saveSettings() {
+    try {
+        localStorage.setItem('shredordead_resolution', displaySettings.currentResolution);
+        localStorage.setItem('shredordead_autodetect', displaySettings.autoDetect.toString());
+        localStorage.setItem('shredordead_screenshake', displaySettings.screenShakeEnabled.toString());
+    } catch (e) {}
+}
+
+function changeResolution(resKey) {
+    if (RESOLUTIONS[resKey]) {
+        displaySettings.autoDetect = false;
+        setResolution(resKey);
+        saveSettings();
+        updateSettingsUI();
+    }
+}
+
+function toggleAutoDetect(enabled) {
+    displaySettings.autoDetect = enabled;
+    if (enabled) {
+        setResolution(autoDetectResolution());
+    }
+    saveSettings();
+    updateSettingsUI();
+}
+
+function toggleScreenShakeSetting(enabled) {
+    displaySettings.screenShakeEnabled = enabled;
+    saveSettings();
+}
+
+function toggleHapticsSetting(enabled) {
+    // Placeholder for haptics
+    saveSettings();
+}
+
+function resetAllSettings() {
+    displaySettings.autoDetect = true;
+    displaySettings.screenShakeEnabled = true;
+    try {
+        localStorage.removeItem('shredordead_resolution');
+        localStorage.removeItem('shredordead_autodetect');
+        localStorage.removeItem('shredordead_screenshake');
+    } catch (e) {}
+    setResolution(autoDetectResolution());
+    updateSettingsUI();
+}
+
+// Event listeners for resolution system
+document.addEventListener('fullscreenchange', () => {
+    displaySettings.fullscreen = !!document.fullscreenElement;
+    setTimeout(fitCanvasToViewport, 100);
+});
+
+window.addEventListener('resize', fitCanvasToViewport);
 
 // Start the game when the page loads
 window.addEventListener('load', init);

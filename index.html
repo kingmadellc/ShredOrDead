@@ -694,7 +694,7 @@
             right: 12px;
             display: flex;
             gap: 8px;
-            z-index: 20;
+            z-index: 1500;
         }
 
         .corner-btn {
@@ -732,7 +732,7 @@
             height: 100%;
             background: rgba(0, 0, 0, 0.9);
             display: none;
-            z-index: 500;
+            z-index: 2000;
             justify-content: center;
             align-items: center;
             backdrop-filter: blur(5px);
@@ -930,7 +930,7 @@
 <body class="menu-active">
     <div id="game-container">
         <canvas id="gameCanvas" width="480" height="640"></canvas>
-        <p id="controls-hint">ARROW KEYS to carve | SPACE to start</p>
+        <p id="controls-hint">ARROWS / LEFT STICK to carve | SPACE / A to start</p>
 
         <!-- Start Screen Modal -->
         <div id="startScreen">
@@ -981,11 +981,19 @@
                         <p>Race down the mountain, dodge obstacles, and escape the mysterious fog chasing you!</p>
                     </div>
                     <div class="submenu-section">
-                        <h3>CONTROLS</h3>
+                        <h3>KEYBOARD</h3>
                         <ul>
                             <li><span class="control-key">LEFT / RIGHT</span> Carve and steer</li>
                             <li><span class="control-key">DOWN</span> Tuck for speed</li>
-                            <li><span class="control-key">SPACE</span> Jump / Start game</li>
+                            <li><span class="control-key">SPACE</span> Start / Confirm</li>
+                        </ul>
+                    </div>
+                    <div class="submenu-section">
+                        <h3>CONTROLLER</h3>
+                        <ul>
+                            <li><span class="control-key">L STICK / D-PAD</span> Carve and steer</li>
+                            <li><span class="control-key">TRIGGERS</span> Tuck for speed</li>
+                            <li><span class="control-key">A / START</span> Start / Confirm</li>
                         </ul>
                     </div>
                     <div class="submenu-section">
@@ -1083,10 +1091,36 @@
                     <label>Screen Shake:</label>
                     <input type="checkbox" id="screenShakeToggle" checked onchange="toggleScreenShakeSetting(this.checked)">
                 </div>
+                <div class="setting-row">
+                    <label>Controller Haptics:</label>
+                    <input type="checkbox" id="hapticsToggle" checked onchange="toggleHapticsSetting(this.checked)">
+                </div>
             </div>
 
             <div class="settings-section">
-                <h3>Controls</h3>
+                <h3>Controller</h3>
+                <div class="setting-row">
+                    <label>Gamepad:</label>
+                    <span id="gamepadStatus" style="color: #ff6b6b;">Not Connected</span>
+                </div>
+                <div class="setting-row" style="flex-direction: column; align-items: flex-start; gap: 8px;">
+                    <div style="display: flex; gap: 15px;">
+                        <span style="color: var(--magenta);">Left Stick / D-Pad</span>
+                        <span style="opacity: 0.7;">Carve</span>
+                    </div>
+                    <div style="display: flex; gap: 15px;">
+                        <span style="color: var(--magenta);">Triggers / Bumpers</span>
+                        <span style="opacity: 0.7;">Tuck (Speed)</span>
+                    </div>
+                    <div style="display: flex; gap: 15px;">
+                        <span style="color: var(--magenta);">A / Start</span>
+                        <span style="opacity: 0.7;">Start / Confirm</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <h3>Keyboard</h3>
                 <div class="setting-row" style="flex-direction: column; align-items: flex-start; gap: 8px;">
                     <div style="display: flex; gap: 15px;">
                         <span style="color: var(--cyan);">←/→ or A/D</span>
@@ -1098,7 +1132,7 @@
                     </div>
                     <div style="display: flex; gap: 15px;">
                         <span style="color: var(--cyan);">SPACE</span>
-                        <span style="opacity: 0.7;">Jump</span>
+                        <span style="opacity: 0.7;">Start / Confirm</span>
                     </div>
                 </div>
             </div>
