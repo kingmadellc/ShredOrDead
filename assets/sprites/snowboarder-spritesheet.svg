@@ -1,531 +1,581 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="384" height="256" viewBox="0 0 384 256">
   <!-- Snowboarder Sprite Sheet: 6 columns x 4 rows = 24 frames, 64x64 per frame -->
-  <!-- Character: Full body snowboarder with arms, legs, puffy jacket, snow pants -->
-  <!-- Style: Late 80s neon, orange/yellow jacket, purple pants, teal/pink helmet -->
+  <!-- THIN character with baggy jacket that moves, proper snowboarder proportions -->
 
   <defs>
-    <!-- Jacket gradient (orange/yellow) -->
-    <linearGradient id="jacketGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#ffaa00"/>
-      <stop offset="50%" style="stop-color:#ff6600"/>
-      <stop offset="100%" style="stop-color:#ff4400"/>
+    <!-- Jacket main (orange) -->
+    <linearGradient id="jacketMain" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ff8800"/>
+      <stop offset="100%" style="stop-color:#ff5500"/>
     </linearGradient>
-    <!-- Jacket teal accent -->
-    <linearGradient id="jacketTeal" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" style="stop-color:#00cccc"/>
-      <stop offset="100%" style="stop-color:#00aaaa"/>
+    <!-- Jacket panel (yellow) -->
+    <linearGradient id="jacketYellow" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffdd00"/>
+      <stop offset="100%" style="stop-color:#ffaa00"/>
     </linearGradient>
-    <!-- Pants gradient (purple/blue) -->
+    <!-- Jacket panel (teal) -->
+    <linearGradient id="jacketTeal" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#00ddcc"/>
+      <stop offset="100%" style="stop-color:#009999"/>
+    </linearGradient>
+    <!-- Pants (purple) -->
     <linearGradient id="pantsGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" style="stop-color:#6644aa"/>
-      <stop offset="100%" style="stop-color:#4422aa"/>
+      <stop offset="0%" style="stop-color:#7744bb"/>
+      <stop offset="100%" style="stop-color:#553399"/>
     </linearGradient>
-    <!-- Helmet gradient -->
+    <!-- Helmet -->
     <linearGradient id="helmetGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#00dddd"/>
-      <stop offset="100%" style="stop-color:#00aaaa"/>
+      <stop offset="0%" style="stop-color:#ff44aa"/>
+      <stop offset="100%" style="stop-color:#cc2288"/>
     </linearGradient>
-    <!-- Goggle gradient -->
+    <!-- Goggles -->
     <linearGradient id="goggleGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" style="stop-color:#ff00ff"/>
-      <stop offset="50%" style="stop-color:#ff66ff"/>
-      <stop offset="100%" style="stop-color:#00ffff"/>
+      <stop offset="0%" style="stop-color:#00ff88"/>
+      <stop offset="50%" style="stop-color:#00ffcc"/>
+      <stop offset="100%" style="stop-color:#00ff88"/>
     </linearGradient>
-    <!-- Board gradient -->
+    <!-- Board -->
     <linearGradient id="boardGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" style="stop-color:#aa44cc"/>
-      <stop offset="50%" style="stop-color:#cc66ee"/>
-      <stop offset="100%" style="stop-color:#aa44cc"/>
+      <stop offset="0%" style="stop-color:#ff44aa"/>
+      <stop offset="50%" style="stop-color:#ff66cc"/>
+      <stop offset="100%" style="stop-color:#ff44aa"/>
     </linearGradient>
-    <!-- Glow filter -->
     <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
-      <feGaussianBlur stdDeviation="1" result="coloredBlur"/>
-      <feMerge>
-        <feMergeNode in="coloredBlur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
+      <feGaussianBlur stdDeviation="0.8" result="coloredBlur"/>
+      <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
   </defs>
 
   <!-- ROW 0: IDLE + CARVE LEFT -->
 
-  <!-- Frame 0: Neutral idle (facing down-slope) -->
+  <!-- Frame 0: Neutral idle -->
   <g transform="translate(32, 32)">
-    <!-- Shadow -->
-    <ellipse cx="0" cy="28" rx="16" ry="4" fill="rgba(0,0,0,0.3)"/>
-    <!-- Snowboard -->
-    <rect x="-18" y="22" width="36" height="5" rx="2.5" fill="url(#boardGrad)" filter="url(#glow)"/>
-    <rect x="-6" y="23" width="4" height="3" fill="#222"/>
-    <rect x="2" y="23" width="4" height="3" fill="#222"/>
-    <!-- Left leg -->
-    <path d="M-6,8 L-8,22" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
+    <ellipse cx="0" cy="29" rx="14" ry="3" fill="rgba(0,0,0,0.25)"/>
+    <!-- Board -->
+    <rect x="-16" y="24" width="32" height="4" rx="2" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <rect x="-5" y="25" width="3" height="2" fill="#222"/><rect x="2" y="25" width="3" height="2" fill="#222"/>
+    <!-- Left leg (thin) -->
+    <path d="M-4,10 L-5,24" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
     <!-- Right leg -->
-    <path d="M6,8 L8,22" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <!-- Body/Jacket -->
-    <rect x="-10" y="-8" width="20" height="18" rx="4" fill="url(#jacketGrad)"/>
-    <!-- Teal stripe on jacket -->
-    <rect x="-10" y="-2" width="20" height="4" fill="url(#jacketTeal)"/>
+    <path d="M4,10 L5,24" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <!-- Torso - thin rectangle -->
+    <rect x="-6" y="-10" width="12" height="22" rx="2" fill="url(#jacketMain)"/>
+    <!-- Jacket panels (color blocking) -->
+    <rect x="-6" y="-10" width="5" height="22" rx="1" fill="url(#jacketYellow)"/>
+    <rect x="3" y="-4" width="3" height="10" fill="url(#jacketTeal)"/>
+    <!-- Jacket bottom flare (baggy) -->
+    <path d="M-8,10 Q-6,14 -5,12 L5,12 Q6,14 8,10" fill="url(#jacketMain)" opacity="0.8"/>
     <!-- Left arm -->
-    <path d="M-10,0 L-16,8" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="-17" cy="9" r="3" fill="#2244aa"/>
+    <path d="M-6,-4 L-12,4" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M-12,4 L-14,10" stroke="url(#jacketYellow)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="-14" cy="11" r="2.5" fill="#2244aa"/>
     <!-- Right arm -->
-    <path d="M10,0 L16,8" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="17" cy="9" r="3" fill="#2244aa"/>
-    <!-- Helmet -->
-    <ellipse cx="0" cy="-14" rx="9" ry="8" fill="url(#helmetGrad)"/>
-    <!-- Goggles -->
-    <rect x="-8" y="-16" width="16" height="5" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
-    <ellipse cx="-4" cy="-14" rx="2" ry="1" fill="rgba(255,255,255,0.5)"/>
+    <path d="M6,-4 L12,4" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M12,4 L14,10" stroke="url(#jacketTeal)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="14" cy="11" r="2.5" fill="#2244aa"/>
+    <!-- Head (small) -->
+    <ellipse cx="0" cy="-16" rx="6" ry="5" fill="url(#helmetGrad)"/>
+    <rect x="-5" y="-18" width="10" height="4" rx="1.5" fill="url(#goggleGrad)" filter="url(#glow)"/>
+    <ellipse cx="-2" cy="-16" rx="1.5" ry="0.8" fill="rgba(255,255,255,0.5)"/>
   </g>
 
-  <!-- Frame 1: Slight left lean (10°) -->
-  <g transform="translate(96, 32) rotate(-8)">
-    <ellipse cx="0" cy="28" rx="16" ry="4" fill="rgba(0,0,0,0.3)"/>
-    <rect x="-18" y="22" width="36" height="5" rx="2.5" fill="url(#boardGrad)" filter="url(#glow)"/>
-    <rect x="-6" y="23" width="4" height="3" fill="#222"/>
-    <rect x="2" y="23" width="4" height="3" fill="#222"/>
-    <path d="M-5,8 L-6,22" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <path d="M5,8 L6,22" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <rect x="-10" y="-8" width="20" height="18" rx="4" fill="url(#jacketGrad)"/>
-    <rect x="-10" y="-2" width="20" height="4" fill="url(#jacketTeal)"/>
-    <!-- Arms out for balance -->
-    <path d="M-10,0 L-20,4" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="-21" cy="5" r="3" fill="#2244aa"/>
-    <path d="M10,0 L18,10" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="19" cy="11" r="3" fill="#2244aa"/>
-    <ellipse cx="0" cy="-14" rx="9" ry="8" fill="url(#helmetGrad)"/>
-    <rect x="-8" y="-16" width="16" height="5" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+  <!-- Frame 1: Slight left lean -->
+  <g transform="translate(96, 32) rotate(-6)">
+    <ellipse cx="0" cy="29" rx="14" ry="3" fill="rgba(0,0,0,0.25)"/>
+    <rect x="-16" y="24" width="32" height="4" rx="2" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <rect x="-5" y="25" width="3" height="2" fill="#222"/><rect x="2" y="25" width="3" height="2" fill="#222"/>
+    <path d="M-3,10 L-4,24" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <path d="M4,10 L5,24" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <rect x="-6" y="-10" width="12" height="22" rx="2" fill="url(#jacketMain)"/>
+    <rect x="-6" y="-10" width="5" height="22" rx="1" fill="url(#jacketYellow)"/>
+    <rect x="3" y="-4" width="3" height="10" fill="url(#jacketTeal)"/>
+    <!-- Jacket flap moving left -->
+    <path d="M-9,8 Q-8,14 -6,12 L5,12 Q7,13 9,9" fill="url(#jacketMain)" opacity="0.8"/>
+    <path d="M-6,-4 L-14,0" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M-14,0 L-18,6" stroke="url(#jacketYellow)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="-18" cy="7" r="2.5" fill="#2244aa"/>
+    <path d="M6,-4 L12,6" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M12,6 L14,12" stroke="url(#jacketTeal)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="14" cy="13" r="2.5" fill="#2244aa"/>
+    <ellipse cx="0" cy="-16" rx="6" ry="5" fill="url(#helmetGrad)"/>
+    <rect x="-5" y="-18" width="10" height="4" rx="1.5" fill="url(#goggleGrad)" filter="url(#glow)"/>
   </g>
 
-  <!-- Frame 2: Medium left lean (20°) -->
-  <g transform="translate(160, 32) rotate(-16)">
-    <ellipse cx="0" cy="28" rx="16" ry="4" fill="rgba(0,0,0,0.3)"/>
-    <rect x="-18" y="22" width="36" height="5" rx="2.5" fill="url(#boardGrad)" filter="url(#glow)"/>
-    <rect x="-6" y="23" width="4" height="3" fill="#222"/>
-    <rect x="2" y="23" width="4" height="3" fill="#222"/>
-    <!-- Legs bend into turn -->
-    <path d="M-4,8 L-4,22" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <path d="M4,8 L6,22" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <rect x="-10" y="-8" width="20" height="18" rx="4" fill="url(#jacketGrad)"/>
-    <rect x="-10" y="-2" width="20" height="4" fill="url(#jacketTeal)"/>
-    <path d="M-10,0 L-22,0" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="-23" cy="0" r="3" fill="#2244aa"/>
-    <path d="M10,0 L16,12" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="17" cy="13" r="3" fill="#2244aa"/>
-    <ellipse cx="0" cy="-14" rx="9" ry="8" fill="url(#helmetGrad)"/>
-    <rect x="-8" y="-16" width="16" height="5" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+  <!-- Frame 2: Medium left lean -->
+  <g transform="translate(160, 32) rotate(-14)">
+    <ellipse cx="0" cy="29" rx="14" ry="3" fill="rgba(0,0,0,0.25)"/>
+    <rect x="-16" y="24" width="32" height="4" rx="2" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <rect x="-5" y="25" width="3" height="2" fill="#222"/><rect x="2" y="25" width="3" height="2" fill="#222"/>
+    <path d="M-2,10 L-3,24" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <path d="M4,10 L6,24" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <rect x="-6" y="-10" width="12" height="22" rx="2" fill="url(#jacketMain)"/>
+    <rect x="-6" y="-10" width="5" height="22" rx="1" fill="url(#jacketYellow)"/>
+    <rect x="3" y="-4" width="3" height="10" fill="url(#jacketTeal)"/>
+    <!-- Jacket billowing more -->
+    <path d="M-10,6 Q-9,14 -6,11 L5,12 Q8,14 10,8" fill="url(#jacketMain)" opacity="0.8"/>
+    <path d="M-6,-4 L-16,-2" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M-16,-2 L-20,4" stroke="url(#jacketYellow)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="-20" cy="5" r="2.5" fill="#2244aa"/>
+    <path d="M6,-4 L12,8" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M12,8 L12,14" stroke="url(#jacketTeal)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="12" cy="15" r="2.5" fill="#2244aa"/>
+    <ellipse cx="0" cy="-16" rx="6" ry="5" fill="url(#helmetGrad)"/>
+    <rect x="-5" y="-18" width="10" height="4" rx="1.5" fill="url(#goggleGrad)" filter="url(#glow)"/>
   </g>
 
-  <!-- Frame 3: Hard left lean (30°) -->
-  <g transform="translate(224, 32) rotate(-24)">
-    <ellipse cx="0" cy="28" rx="16" ry="4" fill="rgba(0,0,0,0.3)"/>
-    <rect x="-18" y="22" width="36" height="5" rx="2.5" fill="url(#boardGrad)" filter="url(#glow)"/>
-    <rect x="-6" y="23" width="4" height="3" fill="#222"/>
-    <rect x="2" y="23" width="4" height="3" fill="#222"/>
-    <path d="M-3,8 L-2,22" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <path d="M5,8 L7,22" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <rect x="-10" y="-8" width="20" height="18" rx="4" fill="url(#jacketGrad)"/>
-    <rect x="-10" y="-2" width="20" height="4" fill="url(#jacketTeal)"/>
-    <path d="M-10,-2 L-24,-4" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="-25" cy="-4" r="3" fill="#2244aa"/>
-    <path d="M10,0 L14,14" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="15" cy="15" r="3" fill="#2244aa"/>
-    <ellipse cx="0" cy="-14" rx="9" ry="8" fill="url(#helmetGrad)"/>
-    <rect x="-8" y="-16" width="16" height="5" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+  <!-- Frame 3: Hard left lean -->
+  <g transform="translate(224, 32) rotate(-22)">
+    <ellipse cx="0" cy="29" rx="14" ry="3" fill="rgba(0,0,0,0.25)"/>
+    <rect x="-16" y="24" width="32" height="4" rx="2" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <rect x="-5" y="25" width="3" height="2" fill="#222"/><rect x="2" y="25" width="3" height="2" fill="#222"/>
+    <path d="M-1,10 L-2,24" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <path d="M5,10 L7,24" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <rect x="-6" y="-10" width="12" height="22" rx="2" fill="url(#jacketMain)"/>
+    <rect x="-6" y="-10" width="5" height="22" rx="1" fill="url(#jacketYellow)"/>
+    <rect x="3" y="-4" width="3" height="10" fill="url(#jacketTeal)"/>
+    <!-- Jacket really billowing -->
+    <path d="M-11,4 Q-10,14 -7,10 L6,11 Q9,15 11,6" fill="url(#jacketMain)" opacity="0.85"/>
+    <path d="M-6,-4 L-18,-4" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M-18,-4 L-22,2" stroke="url(#jacketYellow)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="-22" cy="3" r="2.5" fill="#2244aa"/>
+    <path d="M6,-2 L10,10" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M10,10 L10,16" stroke="url(#jacketTeal)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="10" cy="17" r="2.5" fill="#2244aa"/>
+    <ellipse cx="0" cy="-16" rx="6" ry="5" fill="url(#helmetGrad)"/>
+    <rect x="-5" y="-18" width="10" height="4" rx="1.5" fill="url(#goggleGrad)" filter="url(#glow)"/>
     <!-- Snow spray -->
-    <circle cx="20" cy="18" r="2" fill="rgba(255,255,255,0.7)"/>
-    <circle cx="23" cy="14" r="1.5" fill="rgba(255,255,255,0.5)"/>
+    <circle cx="18" cy="18" r="2" fill="rgba(255,255,255,0.7)"/>
+    <circle cx="21" cy="14" r="1.5" fill="rgba(255,255,255,0.5)"/>
   </g>
 
-  <!-- Frame 4: Max left carve (40°) -->
-  <g transform="translate(288, 32) rotate(-32)">
-    <ellipse cx="0" cy="28" rx="16" ry="4" fill="rgba(0,0,0,0.3)"/>
-    <rect x="-18" y="22" width="36" height="5" rx="2.5" fill="url(#boardGrad)" filter="url(#glow)"/>
-    <rect x="-6" y="23" width="4" height="3" fill="#222"/>
-    <rect x="2" y="23" width="4" height="3" fill="#222"/>
-    <path d="M-2,8 L0,22" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <path d="M6,8 L8,22" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <rect x="-10" y="-8" width="20" height="18" rx="4" fill="url(#jacketGrad)"/>
-    <rect x="-10" y="-2" width="20" height="4" fill="url(#jacketTeal)"/>
-    <path d="M-10,-4 L-26,-6" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="-27" cy="-6" r="3" fill="#2244aa"/>
-    <path d="M10,2 L12,16" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="13" cy="17" r="3" fill="#2244aa"/>
-    <ellipse cx="0" cy="-14" rx="9" ry="8" fill="url(#helmetGrad)"/>
-    <rect x="-8" y="-16" width="16" height="5" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
-    <circle cx="22" cy="16" r="2.5" fill="rgba(255,255,255,0.8)"/>
-    <circle cx="26" cy="12" r="2" fill="rgba(255,255,255,0.6)"/>
-    <circle cx="24" cy="8" r="1.5" fill="rgba(255,255,255,0.4)"/>
+  <!-- Frame 4: Max left carve -->
+  <g transform="translate(288, 32) rotate(-30)">
+    <ellipse cx="0" cy="29" rx="14" ry="3" fill="rgba(0,0,0,0.25)"/>
+    <rect x="-16" y="24" width="32" height="4" rx="2" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <rect x="-5" y="25" width="3" height="2" fill="#222"/><rect x="2" y="25" width="3" height="2" fill="#222"/>
+    <path d="M0,10 L0,24" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <path d="M6,10 L8,24" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <rect x="-6" y="-10" width="12" height="22" rx="2" fill="url(#jacketMain)"/>
+    <rect x="-6" y="-10" width="5" height="22" rx="1" fill="url(#jacketYellow)"/>
+    <rect x="3" y="-4" width="3" height="10" fill="url(#jacketTeal)"/>
+    <!-- Max billow -->
+    <path d="M-12,2 Q-11,14 -8,9 L7,10 Q10,16 12,4" fill="url(#jacketMain)" opacity="0.9"/>
+    <path d="M-6,-6 L-20,-6" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M-20,-6 L-24,0" stroke="url(#jacketYellow)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="-24" cy="1" r="2.5" fill="#2244aa"/>
+    <path d="M6,0 L8,12" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M8,12 L8,18" stroke="url(#jacketTeal)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="8" cy="19" r="2.5" fill="#2244aa"/>
+    <ellipse cx="0" cy="-16" rx="6" ry="5" fill="url(#helmetGrad)"/>
+    <rect x="-5" y="-18" width="10" height="4" rx="1.5" fill="url(#goggleGrad)" filter="url(#glow)"/>
+    <circle cx="20" cy="16" r="2.5" fill="rgba(255,255,255,0.8)"/>
+    <circle cx="24" cy="12" r="2" fill="rgba(255,255,255,0.6)"/>
+    <circle cx="22" cy="8" r="1.5" fill="rgba(255,255,255,0.4)"/>
   </g>
 
-  <!-- Frame 5: Extreme left with spray -->
-  <g transform="translate(352, 32) rotate(-38)">
-    <ellipse cx="0" cy="28" rx="16" ry="4" fill="rgba(0,0,0,0.3)"/>
-    <rect x="-18" y="22" width="36" height="5" rx="2.5" fill="url(#boardGrad)" filter="url(#glow)"/>
-    <rect x="-6" y="23" width="4" height="3" fill="#222"/>
-    <rect x="2" y="23" width="4" height="3" fill="#222"/>
-    <path d="M-1,8 L1,22" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <path d="M7,8 L9,22" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <rect x="-10" y="-8" width="20" height="18" rx="4" fill="url(#jacketGrad)"/>
-    <rect x="-10" y="-2" width="20" height="4" fill="url(#jacketTeal)"/>
-    <path d="M-10,-6 L-28,-8" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="-29" cy="-8" r="3" fill="#2244aa"/>
-    <path d="M10,4 L10,18" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="10" cy="19" r="3" fill="#2244aa"/>
-    <ellipse cx="0" cy="-14" rx="9" ry="8" fill="url(#helmetGrad)"/>
-    <rect x="-8" y="-16" width="16" height="5" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
-    <circle cx="24" cy="14" r="3" fill="rgba(255,255,255,0.9)"/>
-    <circle cx="28" cy="10" r="2.5" fill="rgba(255,255,255,0.7)"/>
-    <circle cx="26" cy="6" r="2" fill="rgba(255,255,255,0.5)"/>
-    <circle cx="22" cy="4" r="1.5" fill="rgba(255,255,255,0.3)"/>
+  <!-- Frame 5: Extreme left -->
+  <g transform="translate(352, 32) rotate(-36)">
+    <ellipse cx="0" cy="29" rx="14" ry="3" fill="rgba(0,0,0,0.25)"/>
+    <rect x="-16" y="24" width="32" height="4" rx="2" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <rect x="-5" y="25" width="3" height="2" fill="#222"/><rect x="2" y="25" width="3" height="2" fill="#222"/>
+    <path d="M1,10 L1,24" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <path d="M7,10 L9,24" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <rect x="-6" y="-10" width="12" height="22" rx="2" fill="url(#jacketMain)"/>
+    <rect x="-6" y="-10" width="5" height="22" rx="1" fill="url(#jacketYellow)"/>
+    <rect x="3" y="-4" width="3" height="10" fill="url(#jacketTeal)"/>
+    <path d="M-13,0 Q-12,14 -9,8 L8,9 Q11,17 13,2" fill="url(#jacketMain)" opacity="0.9"/>
+    <path d="M-6,-8 L-22,-8" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M-22,-8 L-26,-2" stroke="url(#jacketYellow)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="-26" cy="-1" r="2.5" fill="#2244aa"/>
+    <path d="M6,2 L6,14" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M6,14 L6,20" stroke="url(#jacketTeal)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="6" cy="21" r="2.5" fill="#2244aa"/>
+    <ellipse cx="0" cy="-16" rx="6" ry="5" fill="url(#helmetGrad)"/>
+    <rect x="-5" y="-18" width="10" height="4" rx="1.5" fill="url(#goggleGrad)" filter="url(#glow)"/>
+    <circle cx="22" cy="14" r="3" fill="rgba(255,255,255,0.9)"/>
+    <circle cx="26" cy="10" r="2.5" fill="rgba(255,255,255,0.7)"/>
+    <circle cx="24" cy="6" r="2" fill="rgba(255,255,255,0.5)"/>
   </g>
 
   <!-- ROW 1: CARVE RIGHT + TUCK -->
 
   <!-- Frame 6: Slight right lean -->
-  <g transform="translate(32, 96) rotate(8)">
-    <ellipse cx="0" cy="28" rx="16" ry="4" fill="rgba(0,0,0,0.3)"/>
-    <rect x="-18" y="22" width="36" height="5" rx="2.5" fill="url(#boardGrad)" filter="url(#glow)"/>
-    <rect x="-6" y="23" width="4" height="3" fill="#222"/>
-    <rect x="2" y="23" width="4" height="3" fill="#222"/>
-    <path d="M-5,8 L-6,22" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <path d="M5,8 L6,22" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <rect x="-10" y="-8" width="20" height="18" rx="4" fill="url(#jacketGrad)"/>
-    <rect x="-10" y="-2" width="20" height="4" fill="url(#jacketTeal)"/>
-    <path d="M-10,0 L-18,10" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="-19" cy="11" r="3" fill="#2244aa"/>
-    <path d="M10,0 L20,4" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="21" cy="5" r="3" fill="#2244aa"/>
-    <ellipse cx="0" cy="-14" rx="9" ry="8" fill="url(#helmetGrad)"/>
-    <rect x="-8" y="-16" width="16" height="5" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+  <g transform="translate(32, 96) rotate(6)">
+    <ellipse cx="0" cy="29" rx="14" ry="3" fill="rgba(0,0,0,0.25)"/>
+    <rect x="-16" y="24" width="32" height="4" rx="2" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <rect x="-5" y="25" width="3" height="2" fill="#222"/><rect x="2" y="25" width="3" height="2" fill="#222"/>
+    <path d="M-4,10 L-5,24" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <path d="M3,10 L4,24" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <rect x="-6" y="-10" width="12" height="22" rx="2" fill="url(#jacketMain)"/>
+    <rect x="-6" y="-10" width="5" height="22" rx="1" fill="url(#jacketYellow)"/>
+    <rect x="3" y="-4" width="3" height="10" fill="url(#jacketTeal)"/>
+    <path d="M-9,9 Q-7,13 -5,12 L6,12 Q8,14 9,8" fill="url(#jacketMain)" opacity="0.8"/>
+    <path d="M-6,-4 L-12,6" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M-12,6 L-14,12" stroke="url(#jacketYellow)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="-14" cy="13" r="2.5" fill="#2244aa"/>
+    <path d="M6,-4 L14,0" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M14,0 L18,6" stroke="url(#jacketTeal)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="18" cy="7" r="2.5" fill="#2244aa"/>
+    <ellipse cx="0" cy="-16" rx="6" ry="5" fill="url(#helmetGrad)"/>
+    <rect x="-5" y="-18" width="10" height="4" rx="1.5" fill="url(#goggleGrad)" filter="url(#glow)"/>
   </g>
 
   <!-- Frame 7: Medium right lean -->
-  <g transform="translate(96, 96) rotate(16)">
-    <ellipse cx="0" cy="28" rx="16" ry="4" fill="rgba(0,0,0,0.3)"/>
-    <rect x="-18" y="22" width="36" height="5" rx="2.5" fill="url(#boardGrad)" filter="url(#glow)"/>
-    <rect x="-6" y="23" width="4" height="3" fill="#222"/>
-    <rect x="2" y="23" width="4" height="3" fill="#222"/>
-    <path d="M-4,8 L-6,22" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <path d="M4,8 L4,22" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <rect x="-10" y="-8" width="20" height="18" rx="4" fill="url(#jacketGrad)"/>
-    <rect x="-10" y="-2" width="20" height="4" fill="url(#jacketTeal)"/>
-    <path d="M-10,0 L-16,12" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="-17" cy="13" r="3" fill="#2244aa"/>
-    <path d="M10,0 L22,0" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="23" cy="0" r="3" fill="#2244aa"/>
-    <ellipse cx="0" cy="-14" rx="9" ry="8" fill="url(#helmetGrad)"/>
-    <rect x="-8" y="-16" width="16" height="5" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+  <g transform="translate(96, 96) rotate(14)">
+    <ellipse cx="0" cy="29" rx="14" ry="3" fill="rgba(0,0,0,0.25)"/>
+    <rect x="-16" y="24" width="32" height="4" rx="2" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <rect x="-5" y="25" width="3" height="2" fill="#222"/><rect x="2" y="25" width="3" height="2" fill="#222"/>
+    <path d="M-4,10 L-6,24" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <path d="M2,10 L3,24" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <rect x="-6" y="-10" width="12" height="22" rx="2" fill="url(#jacketMain)"/>
+    <rect x="-6" y="-10" width="5" height="22" rx="1" fill="url(#jacketYellow)"/>
+    <rect x="3" y="-4" width="3" height="10" fill="url(#jacketTeal)"/>
+    <path d="M-10,8 Q-8,14 -5,11 L6,11 Q9,14 10,6" fill="url(#jacketMain)" opacity="0.8"/>
+    <path d="M-6,-4 L-12,8" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M-12,8 L-12,14" stroke="url(#jacketYellow)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="-12" cy="15" r="2.5" fill="#2244aa"/>
+    <path d="M6,-4 L16,-2" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M16,-2 L20,4" stroke="url(#jacketTeal)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="20" cy="5" r="2.5" fill="#2244aa"/>
+    <ellipse cx="0" cy="-16" rx="6" ry="5" fill="url(#helmetGrad)"/>
+    <rect x="-5" y="-18" width="10" height="4" rx="1.5" fill="url(#goggleGrad)" filter="url(#glow)"/>
   </g>
 
   <!-- Frame 8: Hard right lean -->
-  <g transform="translate(160, 96) rotate(24)">
-    <ellipse cx="0" cy="28" rx="16" ry="4" fill="rgba(0,0,0,0.3)"/>
-    <rect x="-18" y="22" width="36" height="5" rx="2.5" fill="url(#boardGrad)" filter="url(#glow)"/>
-    <rect x="-6" y="23" width="4" height="3" fill="#222"/>
-    <rect x="2" y="23" width="4" height="3" fill="#222"/>
-    <path d="M-5,8 L-7,22" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <path d="M3,8 L2,22" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <rect x="-10" y="-8" width="20" height="18" rx="4" fill="url(#jacketGrad)"/>
-    <rect x="-10" y="-2" width="20" height="4" fill="url(#jacketTeal)"/>
-    <path d="M-10,0 L-14,14" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="-15" cy="15" r="3" fill="#2244aa"/>
-    <path d="M10,-2 L24,-4" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="25" cy="-4" r="3" fill="#2244aa"/>
-    <ellipse cx="0" cy="-14" rx="9" ry="8" fill="url(#helmetGrad)"/>
-    <rect x="-8" y="-16" width="16" height="5" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
-    <circle cx="-20" cy="18" r="2" fill="rgba(255,255,255,0.7)"/>
-    <circle cx="-23" cy="14" r="1.5" fill="rgba(255,255,255,0.5)"/>
+  <g transform="translate(160, 96) rotate(22)">
+    <ellipse cx="0" cy="29" rx="14" ry="3" fill="rgba(0,0,0,0.25)"/>
+    <rect x="-16" y="24" width="32" height="4" rx="2" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <rect x="-5" y="25" width="3" height="2" fill="#222"/><rect x="2" y="25" width="3" height="2" fill="#222"/>
+    <path d="M-5,10 L-7,24" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <path d="M1,10 L2,24" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <rect x="-6" y="-10" width="12" height="22" rx="2" fill="url(#jacketMain)"/>
+    <rect x="-6" y="-10" width="5" height="22" rx="1" fill="url(#jacketYellow)"/>
+    <rect x="3" y="-4" width="3" height="10" fill="url(#jacketTeal)"/>
+    <path d="M-11,6 Q-9,15 -6,10 L7,10 Q10,14 11,4" fill="url(#jacketMain)" opacity="0.85"/>
+    <path d="M-6,-2 L-10,10" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M-10,10 L-10,16" stroke="url(#jacketYellow)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="-10" cy="17" r="2.5" fill="#2244aa"/>
+    <path d="M6,-4 L18,-4" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M18,-4 L22,2" stroke="url(#jacketTeal)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="22" cy="3" r="2.5" fill="#2244aa"/>
+    <ellipse cx="0" cy="-16" rx="6" ry="5" fill="url(#helmetGrad)"/>
+    <rect x="-5" y="-18" width="10" height="4" rx="1.5" fill="url(#goggleGrad)" filter="url(#glow)"/>
+    <circle cx="-18" cy="18" r="2" fill="rgba(255,255,255,0.7)"/>
+    <circle cx="-21" cy="14" r="1.5" fill="rgba(255,255,255,0.5)"/>
   </g>
 
   <!-- Frame 9: Max right carve -->
-  <g transform="translate(224, 96) rotate(32)">
-    <ellipse cx="0" cy="28" rx="16" ry="4" fill="rgba(0,0,0,0.3)"/>
-    <rect x="-18" y="22" width="36" height="5" rx="2.5" fill="url(#boardGrad)" filter="url(#glow)"/>
-    <rect x="-6" y="23" width="4" height="3" fill="#222"/>
-    <rect x="2" y="23" width="4" height="3" fill="#222"/>
-    <path d="M-6,8 L-8,22" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <path d="M2,8 L0,22" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <rect x="-10" y="-8" width="20" height="18" rx="4" fill="url(#jacketGrad)"/>
-    <rect x="-10" y="-2" width="20" height="4" fill="url(#jacketTeal)"/>
-    <path d="M-10,2 L-12,16" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="-13" cy="17" r="3" fill="#2244aa"/>
-    <path d="M10,-4 L26,-6" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="27" cy="-6" r="3" fill="#2244aa"/>
-    <ellipse cx="0" cy="-14" rx="9" ry="8" fill="url(#helmetGrad)"/>
-    <rect x="-8" y="-16" width="16" height="5" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
-    <circle cx="-22" cy="16" r="2.5" fill="rgba(255,255,255,0.8)"/>
-    <circle cx="-26" cy="12" r="2" fill="rgba(255,255,255,0.6)"/>
+  <g transform="translate(224, 96) rotate(30)">
+    <ellipse cx="0" cy="29" rx="14" ry="3" fill="rgba(0,0,0,0.25)"/>
+    <rect x="-16" y="24" width="32" height="4" rx="2" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <rect x="-5" y="25" width="3" height="2" fill="#222"/><rect x="2" y="25" width="3" height="2" fill="#222"/>
+    <path d="M-6,10 L-8,24" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <path d="M0,10 L0,24" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <rect x="-6" y="-10" width="12" height="22" rx="2" fill="url(#jacketMain)"/>
+    <rect x="-6" y="-10" width="5" height="22" rx="1" fill="url(#jacketYellow)"/>
+    <rect x="3" y="-4" width="3" height="10" fill="url(#jacketTeal)"/>
+    <path d="M-12,4 Q-10,14 -7,9 L8,9 Q11,15 12,2" fill="url(#jacketMain)" opacity="0.9"/>
+    <path d="M-6,0 L-8,12" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M-8,12 L-8,18" stroke="url(#jacketYellow)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="-8" cy="19" r="2.5" fill="#2244aa"/>
+    <path d="M6,-6 L20,-6" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M20,-6 L24,0" stroke="url(#jacketTeal)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="24" cy="1" r="2.5" fill="#2244aa"/>
+    <ellipse cx="0" cy="-16" rx="6" ry="5" fill="url(#helmetGrad)"/>
+    <rect x="-5" y="-18" width="10" height="4" rx="1.5" fill="url(#goggleGrad)" filter="url(#glow)"/>
+    <circle cx="-20" cy="16" r="2.5" fill="rgba(255,255,255,0.8)"/>
+    <circle cx="-24" cy="12" r="2" fill="rgba(255,255,255,0.6)"/>
   </g>
 
-  <!-- Frame 10: Extreme right with spray -->
-  <g transform="translate(288, 96) rotate(38)">
-    <ellipse cx="0" cy="28" rx="16" ry="4" fill="rgba(0,0,0,0.3)"/>
-    <rect x="-18" y="22" width="36" height="5" rx="2.5" fill="url(#boardGrad)" filter="url(#glow)"/>
-    <rect x="-6" y="23" width="4" height="3" fill="#222"/>
-    <rect x="2" y="23" width="4" height="3" fill="#222"/>
-    <path d="M-7,8 L-9,22" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <path d="M1,8 L-1,22" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <rect x="-10" y="-8" width="20" height="18" rx="4" fill="url(#jacketGrad)"/>
-    <rect x="-10" y="-2" width="20" height="4" fill="url(#jacketTeal)"/>
-    <path d="M-10,4 L-10,18" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="-10" cy="19" r="3" fill="#2244aa"/>
-    <path d="M10,-6 L28,-8" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="29" cy="-8" r="3" fill="#2244aa"/>
-    <ellipse cx="0" cy="-14" rx="9" ry="8" fill="url(#helmetGrad)"/>
-    <rect x="-8" y="-16" width="16" height="5" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
-    <circle cx="-24" cy="14" r="3" fill="rgba(255,255,255,0.9)"/>
-    <circle cx="-28" cy="10" r="2.5" fill="rgba(255,255,255,0.7)"/>
-    <circle cx="-26" cy="6" r="2" fill="rgba(255,255,255,0.5)"/>
+  <!-- Frame 10: Extreme right -->
+  <g transform="translate(288, 96) rotate(36)">
+    <ellipse cx="0" cy="29" rx="14" ry="3" fill="rgba(0,0,0,0.25)"/>
+    <rect x="-16" y="24" width="32" height="4" rx="2" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <rect x="-5" y="25" width="3" height="2" fill="#222"/><rect x="2" y="25" width="3" height="2" fill="#222"/>
+    <path d="M-7,10 L-9,24" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <path d="M-1,10 L-1,24" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <rect x="-6" y="-10" width="12" height="22" rx="2" fill="url(#jacketMain)"/>
+    <rect x="-6" y="-10" width="5" height="22" rx="1" fill="url(#jacketYellow)"/>
+    <rect x="3" y="-4" width="3" height="10" fill="url(#jacketTeal)"/>
+    <path d="M-13,2 Q-11,14 -8,8 L9,8 Q12,16 13,0" fill="url(#jacketMain)" opacity="0.9"/>
+    <path d="M-6,2 L-6,14" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M-6,14 L-6,20" stroke="url(#jacketYellow)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="-6" cy="21" r="2.5" fill="#2244aa"/>
+    <path d="M6,-8 L22,-8" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M22,-8 L26,-2" stroke="url(#jacketTeal)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="26" cy="-1" r="2.5" fill="#2244aa"/>
+    <ellipse cx="0" cy="-16" rx="6" ry="5" fill="url(#helmetGrad)"/>
+    <rect x="-5" y="-18" width="10" height="4" rx="1.5" fill="url(#goggleGrad)" filter="url(#glow)"/>
+    <circle cx="-22" cy="14" r="3" fill="rgba(255,255,255,0.9)"/>
+    <circle cx="-26" cy="10" r="2.5" fill="rgba(255,255,255,0.7)"/>
   </g>
 
-  <!-- Frame 11: Tuck/Speed crouch -->
+  <!-- Frame 11: Tuck -->
   <g transform="translate(352, 96)">
-    <ellipse cx="0" cy="28" rx="16" ry="4" fill="rgba(0,0,0,0.3)"/>
-    <rect x="-18" y="22" width="36" height="5" rx="2.5" fill="url(#boardGrad)" filter="url(#glow)"/>
-    <rect x="-6" y="23" width="4" height="3" fill="#222"/>
-    <rect x="2" y="23" width="4" height="3" fill="#222"/>
-    <!-- Crouched legs -->
-    <path d="M-6,4 L-8,22" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <path d="M6,4 L8,22" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <!-- Crouched body -->
-    <rect x="-12" y="-6" width="24" height="12" rx="4" fill="url(#jacketGrad)"/>
-    <rect x="-12" y="-2" width="24" height="4" fill="url(#jacketTeal)"/>
+    <ellipse cx="0" cy="29" rx="14" ry="3" fill="rgba(0,0,0,0.25)"/>
+    <rect x="-16" y="24" width="32" height="4" rx="2" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <rect x="-5" y="25" width="3" height="2" fill="#222"/><rect x="2" y="25" width="3" height="2" fill="#222"/>
+    <!-- Bent legs for crouch -->
+    <path d="M-4,6 L-6,24" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <path d="M4,6 L6,24" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <!-- Compressed torso -->
+    <rect x="-7" y="-6" width="14" height="14" rx="2" fill="url(#jacketMain)"/>
+    <rect x="-7" y="-6" width="6" height="14" rx="1" fill="url(#jacketYellow)"/>
+    <rect x="4" y="-2" width="3" height="8" fill="url(#jacketTeal)"/>
+    <!-- Jacket compressed billow -->
+    <path d="M-9,6 Q-7,10 -5,8 L5,8 Q7,10 9,6" fill="url(#jacketMain)" opacity="0.8"/>
     <!-- Arms tucked forward -->
-    <path d="M-10,-2 L-6,10" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="-5" cy="11" r="3" fill="#2244aa"/>
-    <path d="M10,-2 L6,10" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="5" cy="11" r="3" fill="#2244aa"/>
+    <path d="M-6,0 L-4,10" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="-3" cy="11" r="2.5" fill="#2244aa"/>
+    <path d="M6,0 L4,10" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="3" cy="11" r="2.5" fill="#2244aa"/>
     <!-- Head lower -->
-    <ellipse cx="0" cy="-10" rx="9" ry="7" fill="url(#helmetGrad)"/>
-    <rect x="-8" y="-12" width="16" height="5" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+    <ellipse cx="0" cy="-10" rx="6" ry="5" fill="url(#helmetGrad)"/>
+    <rect x="-5" y="-12" width="10" height="4" rx="1.5" fill="url(#goggleGrad)" filter="url(#glow)"/>
   </g>
 
-  <!-- ROW 2: AIRBORNE / TRICKS -->
+  <!-- ROW 2: AIRBORNE -->
 
   <!-- Frame 12: Jump launch -->
   <g transform="translate(32, 160)">
-    <ellipse cx="0" cy="32" rx="12" ry="3" fill="rgba(0,0,0,0.15)"/>
-    <rect x="-18" y="20" width="36" height="5" rx="2.5" fill="url(#boardGrad)" filter="url(#glow)"/>
-    <rect x="-6" y="21" width="4" height="3" fill="#222"/>
-    <rect x="2" y="21" width="4" height="3" fill="#222"/>
-    <path d="M-6,6 L-6,20" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <path d="M6,6 L6,20" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <rect x="-10" y="-10" width="20" height="18" rx="4" fill="url(#jacketGrad)"/>
-    <rect x="-10" y="-4" width="20" height="4" fill="url(#jacketTeal)"/>
+    <ellipse cx="0" cy="32" rx="10" ry="2" fill="rgba(0,0,0,0.15)"/>
+    <rect x="-16" y="22" width="32" height="4" rx="2" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <rect x="-5" y="23" width="3" height="2" fill="#222"/><rect x="2" y="23" width="3" height="2" fill="#222"/>
+    <path d="M-4,8 L-4,22" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <path d="M4,8 L4,22" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <rect x="-6" y="-12" width="12" height="22" rx="2" fill="url(#jacketMain)"/>
+    <rect x="-6" y="-12" width="5" height="22" rx="1" fill="url(#jacketYellow)"/>
+    <rect x="3" y="-6" width="3" height="10" fill="url(#jacketTeal)"/>
+    <!-- Jacket flapping up -->
+    <path d="M-8,8 Q-6,12 -4,10 L4,10 Q6,12 8,8" fill="url(#jacketMain)" opacity="0.7"/>
     <!-- Arms up -->
-    <path d="M-10,-4 L-18,-14" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="-19" cy="-15" r="3" fill="#2244aa"/>
-    <path d="M10,-4 L18,-14" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="19" cy="-15" r="3" fill="#2244aa"/>
-    <ellipse cx="0" cy="-16" rx="9" ry="8" fill="url(#helmetGrad)"/>
-    <rect x="-8" y="-18" width="16" height="5" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+    <path d="M-6,-6 L-14,-14" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M-14,-14 L-16,-20" stroke="url(#jacketYellow)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="-16" cy="-21" r="2.5" fill="#2244aa"/>
+    <path d="M6,-6 L14,-14" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M14,-14 L16,-20" stroke="url(#jacketTeal)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="16" cy="-21" r="2.5" fill="#2244aa"/>
+    <ellipse cx="0" cy="-18" rx="6" ry="5" fill="url(#helmetGrad)"/>
+    <rect x="-5" y="-20" width="10" height="4" rx="1.5" fill="url(#goggleGrad)" filter="url(#glow)"/>
   </g>
 
   <!-- Frame 13: Air wave 1 -->
   <g transform="translate(96, 160)">
-    <ellipse cx="0" cy="34" rx="10" ry="2" fill="rgba(0,0,0,0.1)"/>
-    <rect x="-18" y="20" width="36" height="5" rx="2.5" fill="url(#boardGrad)" filter="url(#glow)"/>
-    <rect x="-6" y="21" width="4" height="3" fill="#222"/>
-    <rect x="2" y="21" width="4" height="3" fill="#222"/>
-    <path d="M-6,6 L-6,20" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <path d="M6,6 L6,20" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <rect x="-10" y="-10" width="20" height="18" rx="4" fill="url(#jacketGrad)"/>
-    <rect x="-10" y="-4" width="20" height="4" fill="url(#jacketTeal)"/>
-    <!-- Left arm high, right low -->
-    <path d="M-10,-4 L-22,-12" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="-23" cy="-13" r="3" fill="#2244aa"/>
-    <path d="M10,-2 L20,4" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="21" cy="5" r="3" fill="#2244aa"/>
-    <ellipse cx="0" cy="-16" rx="9" ry="8" fill="url(#helmetGrad)"/>
-    <rect x="-8" y="-18" width="16" height="5" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+    <ellipse cx="0" cy="34" rx="8" ry="1.5" fill="rgba(0,0,0,0.1)"/>
+    <rect x="-16" y="22" width="32" height="4" rx="2" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <rect x="-5" y="23" width="3" height="2" fill="#222"/><rect x="2" y="23" width="3" height="2" fill="#222"/>
+    <path d="M-4,8 L-4,22" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <path d="M4,8 L4,22" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <rect x="-6" y="-12" width="12" height="22" rx="2" fill="url(#jacketMain)"/>
+    <rect x="-6" y="-12" width="5" height="22" rx="1" fill="url(#jacketYellow)"/>
+    <rect x="3" y="-6" width="3" height="10" fill="url(#jacketTeal)"/>
+    <path d="M-9,8 Q-7,13 -4,10 L4,10 Q7,13 9,8" fill="url(#jacketMain)" opacity="0.7"/>
+    <!-- Left arm high -->
+    <path d="M-6,-6 L-18,-12" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M-18,-12 L-22,-16" stroke="url(#jacketYellow)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="-22" cy="-17" r="2.5" fill="#2244aa"/>
+    <!-- Right arm low -->
+    <path d="M6,-4 L14,2" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M14,2 L18,6" stroke="url(#jacketTeal)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="18" cy="7" r="2.5" fill="#2244aa"/>
+    <ellipse cx="0" cy="-18" rx="6" ry="5" fill="url(#helmetGrad)"/>
+    <rect x="-5" y="-20" width="10" height="4" rx="1.5" fill="url(#goggleGrad)" filter="url(#glow)"/>
   </g>
 
   <!-- Frame 14: Air wave 2 -->
   <g transform="translate(160, 160)">
-    <ellipse cx="0" cy="34" rx="10" ry="2" fill="rgba(0,0,0,0.1)"/>
-    <rect x="-18" y="20" width="36" height="5" rx="2.5" fill="url(#boardGrad)" filter="url(#glow)"/>
-    <rect x="-6" y="21" width="4" height="3" fill="#222"/>
-    <rect x="2" y="21" width="4" height="3" fill="#222"/>
-    <path d="M-6,6 L-6,20" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <path d="M6,6 L6,20" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <rect x="-10" y="-10" width="20" height="18" rx="4" fill="url(#jacketGrad)"/>
-    <rect x="-10" y="-4" width="20" height="4" fill="url(#jacketTeal)"/>
-    <!-- Right arm high, left low -->
-    <path d="M-10,-2 L-20,4" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="-21" cy="5" r="3" fill="#2244aa"/>
-    <path d="M10,-4 L22,-12" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="23" cy="-13" r="3" fill="#2244aa"/>
-    <ellipse cx="0" cy="-16" rx="9" ry="8" fill="url(#helmetGrad)"/>
-    <rect x="-8" y="-18" width="16" height="5" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+    <ellipse cx="0" cy="34" rx="8" ry="1.5" fill="rgba(0,0,0,0.1)"/>
+    <rect x="-16" y="22" width="32" height="4" rx="2" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <rect x="-5" y="23" width="3" height="2" fill="#222"/><rect x="2" y="23" width="3" height="2" fill="#222"/>
+    <path d="M-4,8 L-4,22" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <path d="M4,8 L4,22" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <rect x="-6" y="-12" width="12" height="22" rx="2" fill="url(#jacketMain)"/>
+    <rect x="-6" y="-12" width="5" height="22" rx="1" fill="url(#jacketYellow)"/>
+    <rect x="3" y="-6" width="3" height="10" fill="url(#jacketTeal)"/>
+    <path d="M-9,8 Q-7,13 -4,10 L4,10 Q7,13 9,8" fill="url(#jacketMain)" opacity="0.7"/>
+    <!-- Left arm low -->
+    <path d="M-6,-4 L-14,2" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M-14,2 L-18,6" stroke="url(#jacketYellow)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="-18" cy="7" r="2.5" fill="#2244aa"/>
+    <!-- Right arm high -->
+    <path d="M6,-6 L18,-12" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M18,-12 L22,-16" stroke="url(#jacketTeal)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="22" cy="-17" r="2.5" fill="#2244aa"/>
+    <ellipse cx="0" cy="-18" rx="6" ry="5" fill="url(#helmetGrad)"/>
+    <rect x="-5" y="-20" width="10" height="4" rx="1.5" fill="url(#goggleGrad)" filter="url(#glow)"/>
   </g>
 
   <!-- Frame 15: 180 spin (side view) -->
   <g transform="translate(224, 160)">
-    <ellipse cx="0" cy="34" rx="10" ry="2" fill="rgba(0,0,0,0.1)"/>
-    <!-- Board sideways (foreshortened) -->
-    <ellipse cx="0" cy="20" rx="5" ry="18" fill="url(#boardGrad)" filter="url(#glow)"/>
-    <!-- Side view of body -->
-    <path d="M0,6 L0,18" stroke="url(#pantsGrad)" stroke-width="8" stroke-linecap="round"/>
-    <ellipse cx="0" cy="-2" rx="6" ry="10" fill="url(#jacketGrad)"/>
-    <rect x="-6" y="-4" width="12" height="4" fill="url(#jacketTeal)"/>
+    <ellipse cx="0" cy="34" rx="8" ry="1.5" fill="rgba(0,0,0,0.1)"/>
+    <!-- Board sideways -->
+    <ellipse cx="0" cy="22" rx="4" ry="16" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <!-- Thin side view -->
+    <path d="M0,6 L0,20" stroke="url(#pantsGrad)" stroke-width="6" stroke-linecap="round"/>
+    <rect x="-4" y="-12" width="8" height="20" rx="2" fill="url(#jacketMain)"/>
+    <rect x="-4" y="-12" width="4" height="20" rx="1" fill="url(#jacketYellow)"/>
     <!-- Arms out for spin -->
-    <path d="M-4,-2 L-14,-6" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="-15" cy="-7" r="3" fill="#2244aa"/>
-    <path d="M4,-2 L14,-6" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="15" cy="-7" r="3" fill="#2244aa"/>
-    <ellipse cx="0" cy="-14" rx="8" ry="7" fill="url(#helmetGrad)"/>
-    <rect x="-7" y="-16" width="14" height="5" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+    <path d="M-2,-4 L-12,-8" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="-13" cy="-9" r="2.5" fill="#2244aa"/>
+    <path d="M2,-4 L12,-8" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="13" cy="-9" r="2.5" fill="#2244aa"/>
+    <ellipse cx="0" cy="-16" rx="5" ry="5" fill="url(#helmetGrad)"/>
+    <rect x="-4" y="-18" width="8" height="4" rx="1.5" fill="url(#goggleGrad)" filter="url(#glow)"/>
   </g>
 
-  <!-- Frame 16: Board grab (Indy) -->
+  <!-- Frame 16: Board grab -->
   <g transform="translate(288, 160)">
-    <ellipse cx="0" cy="34" rx="10" ry="2" fill="rgba(0,0,0,0.1)"/>
-    <rect x="-18" y="18" width="36" height="5" rx="2.5" fill="url(#boardGrad)" filter="url(#glow)"/>
-    <rect x="-6" y="19" width="4" height="3" fill="#222"/>
-    <rect x="2" y="19" width="4" height="3" fill="#222"/>
-    <!-- Legs tucked up -->
-    <path d="M-5,4 L-5,18" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <path d="M5,4 L5,18" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <rect x="-10" y="-10" width="20" height="16" rx="4" fill="url(#jacketGrad)"/>
-    <rect x="-10" y="-4" width="20" height="4" fill="url(#jacketTeal)"/>
+    <ellipse cx="0" cy="34" rx="8" ry="1.5" fill="rgba(0,0,0,0.1)"/>
+    <rect x="-16" y="20" width="32" height="4" rx="2" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <rect x="-5" y="21" width="3" height="2" fill="#222"/><rect x="2" y="21" width="3" height="2" fill="#222"/>
+    <!-- Legs tucked -->
+    <path d="M-3,6 L-3,20" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <path d="M3,6 L3,20" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <rect x="-6" y="-12" width="12" height="20" rx="2" fill="url(#jacketMain)"/>
+    <rect x="-6" y="-12" width="5" height="20" rx="1" fill="url(#jacketYellow)"/>
+    <rect x="3" y="-6" width="3" height="10" fill="url(#jacketTeal)"/>
     <!-- Right hand grabbing board -->
-    <path d="M10,0 L8,16" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="7" cy="17" r="3" fill="#2244aa"/>
+    <path d="M6,-2 L6,18" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="6" cy="19" r="2.5" fill="#2244aa"/>
     <!-- Left arm out for style -->
-    <path d="M-10,-4 L-22,-10" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="-23" cy="-11" r="3" fill="#2244aa"/>
-    <ellipse cx="0" cy="-16" rx="9" ry="8" fill="url(#helmetGrad)"/>
-    <rect x="-8" y="-18" width="16" height="5" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+    <path d="M-6,-6 L-18,-14" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M-18,-14 L-22,-18" stroke="url(#jacketYellow)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="-22" cy="-19" r="2.5" fill="#2244aa"/>
+    <ellipse cx="0" cy="-18" rx="6" ry="5" fill="url(#helmetGrad)"/>
+    <rect x="-5" y="-20" width="10" height="4" rx="1.5" fill="url(#goggleGrad)" filter="url(#glow)"/>
   </g>
 
   <!-- Frame 17: Landing prep -->
   <g transform="translate(352, 160)">
-    <ellipse cx="0" cy="30" rx="14" ry="3" fill="rgba(0,0,0,0.2)"/>
-    <rect x="-18" y="22" width="36" height="5" rx="2.5" fill="url(#boardGrad)" filter="url(#glow)"/>
-    <rect x="-6" y="23" width="4" height="3" fill="#222"/>
-    <rect x="2" y="23" width="4" height="3" fill="#222"/>
-    <path d="M-6,8 L-6,22" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <path d="M6,8 L6,22" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <rect x="-10" y="-8" width="20" height="18" rx="4" fill="url(#jacketGrad)"/>
-    <rect x="-10" y="-2" width="20" height="4" fill="url(#jacketTeal)"/>
+    <ellipse cx="0" cy="30" rx="12" ry="2.5" fill="rgba(0,0,0,0.2)"/>
+    <rect x="-16" y="24" width="32" height="4" rx="2" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <rect x="-5" y="25" width="3" height="2" fill="#222"/><rect x="2" y="25" width="3" height="2" fill="#222"/>
+    <path d="M-4,10 L-4,24" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <path d="M4,10 L4,24" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <rect x="-6" y="-10" width="12" height="22" rx="2" fill="url(#jacketMain)"/>
+    <rect x="-6" y="-10" width="5" height="22" rx="1" fill="url(#jacketYellow)"/>
+    <rect x="3" y="-4" width="3" height="10" fill="url(#jacketTeal)"/>
+    <path d="M-8,10 Q-6,14 -4,12 L4,12 Q6,14 8,10" fill="url(#jacketMain)" opacity="0.8"/>
     <!-- Arms out for balance -->
-    <path d="M-10,-2 L-20,2" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="-21" cy="3" r="3" fill="#2244aa"/>
-    <path d="M10,-2 L20,2" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="21" cy="3" r="3" fill="#2244aa"/>
-    <ellipse cx="0" cy="-14" rx="9" ry="8" fill="url(#helmetGrad)"/>
-    <rect x="-8" y="-16" width="16" height="5" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+    <path d="M-6,-4 L-16,0" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M-16,0 L-20,4" stroke="url(#jacketYellow)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="-20" cy="5" r="2.5" fill="#2244aa"/>
+    <path d="M6,-4 L16,0" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M16,0 L20,4" stroke="url(#jacketTeal)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="20" cy="5" r="2.5" fill="#2244aa"/>
+    <ellipse cx="0" cy="-16" rx="6" ry="5" fill="url(#helmetGrad)"/>
+    <rect x="-5" y="-18" width="10" height="4" rx="1.5" fill="url(#goggleGrad)" filter="url(#glow)"/>
   </g>
 
-  <!-- ROW 3: CRASH / WIPEOUT -->
+  <!-- ROW 3: CRASH -->
 
   <!-- Frame 18: Initial tumble -->
-  <g transform="translate(32, 224) rotate(20)">
-    <ellipse cx="4" cy="26" rx="16" ry="4" fill="rgba(0,0,0,0.3)"/>
-    <rect x="-18" y="20" width="36" height="5" rx="2.5" fill="url(#boardGrad)" filter="url(#glow)"/>
-    <path d="M-4,6 L-6,20" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <path d="M6,6 L8,20" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <rect x="-10" y="-8" width="20" height="16" rx="4" fill="url(#jacketGrad)"/>
-    <rect x="-10" y="-2" width="20" height="4" fill="url(#jacketTeal)"/>
-    <path d="M-10,-2 L-20,-10" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="-21" cy="-11" r="3" fill="#2244aa"/>
-    <path d="M10,2 L20,8" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="21" cy="9" r="3" fill="#2244aa"/>
-    <ellipse cx="0" cy="-14" rx="9" ry="8" fill="url(#helmetGrad)"/>
-    <rect x="-8" y="-16" width="16" height="5" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+  <g transform="translate(32, 224) rotate(18)">
+    <ellipse cx="4" cy="27" rx="14" ry="3" fill="rgba(0,0,0,0.25)"/>
+    <rect x="-16" y="22" width="32" height="4" rx="2" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <path d="M-3,8 L-4,22" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <path d="M4,8 L5,22" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <rect x="-6" y="-10" width="12" height="20" rx="2" fill="url(#jacketMain)"/>
+    <rect x="-6" y="-10" width="5" height="20" rx="1" fill="url(#jacketYellow)"/>
+    <path d="M-6,-4 L-16,-10" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="-17" cy="-11" r="2.5" fill="#2244aa"/>
+    <path d="M6,0 L16,6" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="17" cy="7" r="2.5" fill="#2244aa"/>
+    <ellipse cx="0" cy="-16" rx="6" ry="5" fill="url(#helmetGrad)"/>
+    <rect x="-5" y="-18" width="10" height="4" rx="1.5" fill="url(#goggleGrad)" filter="url(#glow)"/>
   </g>
 
   <!-- Frame 19: Mid tumble -->
-  <g transform="translate(96, 224) rotate(50)">
-    <rect x="-18" y="18" width="36" height="5" rx="2.5" fill="url(#boardGrad)" filter="url(#glow)"/>
-    <path d="M-4,4 L-4,18" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <path d="M4,4 L4,18" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <rect x="-10" y="-8" width="20" height="14" rx="4" fill="url(#jacketGrad)"/>
-    <rect x="-10" y="-2" width="20" height="4" fill="url(#jacketTeal)"/>
-    <path d="M-10,0 L-22,2" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="-23" cy="3" r="3" fill="#2244aa"/>
-    <path d="M10,0 L22,6" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="23" cy="7" r="3" fill="#2244aa"/>
-    <ellipse cx="0" cy="-14" rx="9" ry="8" fill="url(#helmetGrad)"/>
-    <rect x="-8" y="-16" width="16" height="5" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+  <g transform="translate(96, 224) rotate(55)">
+    <rect x="-16" y="20" width="32" height="4" rx="2" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <path d="M-3,6 L-3,20" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <path d="M3,6 L3,20" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <rect x="-6" y="-10" width="12" height="18" rx="2" fill="url(#jacketMain)"/>
+    <rect x="-6" y="-10" width="5" height="18" rx="1" fill="url(#jacketYellow)"/>
+    <path d="M-6,-2 L-18,0" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="-19" cy="1" r="2.5" fill="#2244aa"/>
+    <path d="M6,-2 L18,4" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="19" cy="5" r="2.5" fill="#2244aa"/>
+    <ellipse cx="0" cy="-16" rx="6" ry="5" fill="url(#helmetGrad)"/>
+    <rect x="-5" y="-18" width="10" height="4" rx="1.5" fill="url(#goggleGrad)" filter="url(#glow)"/>
   </g>
 
   <!-- Frame 20: Upside down -->
-  <g transform="translate(160, 224) rotate(100)">
-    <rect x="-18" y="16" width="36" height="5" rx="2.5" fill="url(#boardGrad)" filter="url(#glow)"/>
-    <path d="M-4,2 L-4,16" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <path d="M4,2 L4,16" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <rect x="-10" y="-10" width="20" height="14" rx="4" fill="url(#jacketGrad)"/>
-    <rect x="-10" y="-4" width="20" height="4" fill="url(#jacketTeal)"/>
-    <path d="M-10,-2 L-20,4" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="-21" cy="5" r="3" fill="#2244aa"/>
-    <path d="M10,-2 L20,4" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="21" cy="5" r="3" fill="#2244aa"/>
-    <ellipse cx="0" cy="-16" rx="9" ry="8" fill="url(#helmetGrad)"/>
-    <rect x="-8" y="-18" width="16" height="5" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+  <g transform="translate(160, 224) rotate(110)">
+    <rect x="-16" y="18" width="32" height="4" rx="2" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <path d="M-3,4 L-3,18" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <path d="M3,4 L3,18" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <rect x="-6" y="-12" width="12" height="18" rx="2" fill="url(#jacketMain)"/>
+    <rect x="-6" y="-12" width="5" height="18" rx="1" fill="url(#jacketYellow)"/>
+    <path d="M-6,-4 L-16,2" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="-17" cy="3" r="2.5" fill="#2244aa"/>
+    <path d="M6,-4 L16,2" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="17" cy="3" r="2.5" fill="#2244aa"/>
+    <ellipse cx="0" cy="-18" rx="6" ry="5" fill="url(#helmetGrad)"/>
+    <rect x="-5" y="-20" width="10" height="4" rx="1.5" fill="url(#goggleGrad)" filter="url(#glow)"/>
   </g>
 
   <!-- Frame 21: Coming down -->
-  <g transform="translate(224, 224) rotate(140)">
-    <rect x="-18" y="16" width="36" height="5" rx="2.5" fill="url(#boardGrad)" filter="url(#glow)"/>
-    <path d="M-4,2 L-4,16" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <path d="M4,2 L4,16" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <rect x="-10" y="-10" width="20" height="14" rx="4" fill="url(#jacketGrad)"/>
-    <rect x="-10" y="-4" width="20" height="4" fill="url(#jacketTeal)"/>
-    <path d="M-10,-4 L-18,6" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="-19" cy="7" r="3" fill="#2244aa"/>
-    <path d="M10,-4 L18,6" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="19" cy="7" r="3" fill="#2244aa"/>
-    <ellipse cx="0" cy="-16" rx="9" ry="8" fill="url(#helmetGrad)"/>
-    <rect x="-8" y="-18" width="16" height="5" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+  <g transform="translate(224, 224) rotate(150)">
+    <rect x="-16" y="18" width="32" height="4" rx="2" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <path d="M-3,4 L-3,18" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <path d="M3,4 L3,18" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <rect x="-6" y="-12" width="12" height="18" rx="2" fill="url(#jacketMain)"/>
+    <rect x="-6" y="-12" width="5" height="18" rx="1" fill="url(#jacketYellow)"/>
+    <path d="M-6,-6 L-14,4" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="-15" cy="5" r="2.5" fill="#2244aa"/>
+    <path d="M6,-6 L14,4" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="15" cy="5" r="2.5" fill="#2244aa"/>
+    <ellipse cx="0" cy="-18" rx="6" ry="5" fill="url(#helmetGrad)"/>
+    <rect x="-5" y="-20" width="10" height="4" rx="1.5" fill="url(#goggleGrad)" filter="url(#glow)"/>
   </g>
 
-  <!-- Frame 22: Face plant (board detached) -->
+  <!-- Frame 22: Face plant -->
   <g transform="translate(288, 224)">
-    <ellipse cx="0" cy="20" rx="18" ry="5" fill="rgba(0,0,0,0.3)"/>
+    <ellipse cx="0" cy="18" rx="16" ry="4" fill="rgba(0,0,0,0.3)"/>
     <!-- Board flying off -->
-    <g transform="translate(14, -12) rotate(35)">
-      <rect x="-14" y="0" width="28" height="4" rx="2" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <g transform="translate(12, -14) rotate(40)">
+      <rect x="-12" y="0" width="24" height="3" rx="1.5" fill="url(#boardGrad)" filter="url(#glow)"/>
     </g>
-    <!-- Body face down -->
-    <ellipse cx="0" cy="12" rx="12" ry="8" fill="url(#jacketGrad)"/>
-    <rect x="-12" y="10" width="24" height="4" fill="url(#jacketTeal)"/>
+    <!-- Body face down - thin -->
+    <ellipse cx="0" cy="10" rx="8" ry="5" fill="url(#jacketMain)"/>
+    <ellipse cx="-2" cy="10" rx="4" ry="5" fill="url(#jacketYellow)"/>
     <!-- Arms splayed -->
-    <path d="M-10,10 L-22,6" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="-23" cy="5" r="3" fill="#2244aa"/>
-    <path d="M10,10 L22,6" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="23" cy="5" r="3" fill="#2244aa"/>
+    <path d="M-6,8 L-18,4" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="-19" cy="3" r="2.5" fill="#2244aa"/>
+    <path d="M6,8 L18,4" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="19" cy="3" r="2.5" fill="#2244aa"/>
     <!-- Legs up -->
-    <path d="M-4,14 L-6,24" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <path d="M4,14 L6,24" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
+    <path d="M-3,12 L-4,22" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <path d="M3,12 L4,22" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
     <!-- Head down -->
-    <ellipse cx="0" cy="4" rx="9" ry="7" fill="url(#helmetGrad)"/>
-    <rect x="-8" y="2" width="16" height="5" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+    <ellipse cx="0" cy="2" rx="6" ry="5" fill="url(#helmetGrad)"/>
+    <rect x="-5" y="0" width="10" height="4" rx="1.5" fill="url(#goggleGrad)" filter="url(#glow)"/>
   </g>
 
-  <!-- Frame 23: Dazed/Recovery with stars -->
+  <!-- Frame 23: Dazed -->
   <g transform="translate(352, 224)">
-    <ellipse cx="0" cy="26" rx="16" ry="4" fill="rgba(0,0,0,0.3)"/>
-    <!-- Stars circling head -->
-    <text x="-14" y="-20" font-size="8" fill="#ffff00">★</text>
-    <text x="10" y="-22" font-size="6" fill="#ffff00">★</text>
-    <text x="-2" y="-26" font-size="7" fill="#ffff00">★</text>
-    <!-- Sitting position -->
-    <path d="M-8,14 L-10,24" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <path d="M8,14 L10,24" stroke="url(#pantsGrad)" stroke-width="7" stroke-linecap="round"/>
-    <rect x="-12" y="0" width="24" height="16" rx="4" fill="url(#jacketGrad)"/>
-    <rect x="-12" y="6" width="24" height="4" fill="url(#jacketTeal)"/>
+    <ellipse cx="0" cy="26" rx="14" ry="3" fill="rgba(0,0,0,0.25)"/>
+    <!-- Stars -->
+    <text x="-12" y="-20" font-size="7" fill="#ffff00">★</text>
+    <text x="8" y="-22" font-size="5" fill="#ffff00">★</text>
+    <text x="-2" y="-26" font-size="6" fill="#ffff00">★</text>
+    <!-- Sitting -->
+    <path d="M-6,12 L-8,24" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <path d="M6,12 L8,24" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <rect x="-7" y="-2" width="14" height="16" rx="2" fill="url(#jacketMain)"/>
+    <rect x="-7" y="-2" width="6" height="16" rx="1" fill="url(#jacketYellow)"/>
+    <rect x="4" y="2" width="3" height="8" fill="url(#jacketTeal)"/>
     <!-- Arms resting -->
-    <path d="M-12,8 L-18,16" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="-19" cy="17" r="3" fill="#2244aa"/>
-    <path d="M12,8 L18,16" stroke="url(#jacketGrad)" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="19" cy="17" r="3" fill="#2244aa"/>
-    <ellipse cx="0" cy="-8" rx="9" ry="8" fill="url(#helmetGrad)"/>
-    <rect x="-8" y="-10" width="16" height="5" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
-    <!-- Dizzy swirls on goggles -->
-    <text x="-5" y="-6" font-size="5" fill="#000">@</text>
-    <text x="2" y="-6" font-size="5" fill="#000">@</text>
+    <path d="M-7,6 L-14,14" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="-15" cy="15" r="2.5" fill="#2244aa"/>
+    <path d="M7,6 L14,14" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="15" cy="15" r="2.5" fill="#2244aa"/>
+    <ellipse cx="0" cy="-8" rx="6" ry="5" fill="url(#helmetGrad)"/>
+    <rect x="-5" y="-10" width="10" height="4" rx="1.5" fill="url(#goggleGrad)" filter="url(#glow)"/>
+    <!-- Dizzy eyes -->
+    <text x="-4" y="-6" font-size="4" fill="#000">@</text>
+    <text x="1" y="-6" font-size="4" fill="#000">@</text>
   </g>
 </svg>
