@@ -2955,6 +2955,9 @@ function init() {
     setResolution(displaySettings.currentResolution);
     fitCanvasToViewport();
 
+    // Make sure start screen fills viewport on initial load
+    resizeStartScreenCanvases();
+
     setupInput();
     loadHighScore();
     updateSettingsUI();
@@ -3404,31 +3407,16 @@ function resizeStartScreenCanvases() {
     const startScreen = document.getElementById('startScreen');
     if (!startScreen) return;
 
-    const isFullscreen = document.fullscreenElement || displaySettings.fullscreen;
-
-    // Directly set start screen styles via JavaScript for fullscreen
-    if (isFullscreen) {
-        startScreen.style.position = 'fixed';
-        startScreen.style.width = '100vw';
-        startScreen.style.height = '100vh';
-        startScreen.style.top = '0';
-        startScreen.style.left = '0';
-        startScreen.style.transform = 'none';
-        startScreen.style.borderRadius = '0';
-        startScreen.style.border = 'none';
-        startScreen.style.boxShadow = 'none';
-    } else {
-        // Reset to CSS defaults
-        startScreen.style.position = '';
-        startScreen.style.width = '';
-        startScreen.style.height = '';
-        startScreen.style.top = '';
-        startScreen.style.left = '';
-        startScreen.style.transform = '';
-        startScreen.style.borderRadius = '';
-        startScreen.style.border = '';
-        startScreen.style.boxShadow = '';
-    }
+    // Start screen ALWAYS fills the viewport (both fullscreen and windowed mode)
+    startScreen.style.position = 'fixed';
+    startScreen.style.width = '100vw';
+    startScreen.style.height = '100vh';
+    startScreen.style.top = '0';
+    startScreen.style.left = '0';
+    startScreen.style.transform = 'none';
+    startScreen.style.borderRadius = '0';
+    startScreen.style.border = 'none';
+    startScreen.style.boxShadow = 'none';
 
     // Wait a frame for layout to update, then resize canvases
     requestAnimationFrame(() => {
@@ -3440,18 +3428,21 @@ function resizeStartScreenCanvases() {
             snowCanvas.height = startScreen.offsetHeight;
         }
 
-        // Blizzard canvas scales with logo area
-        if (blizzardCanvas && isFullscreen) {
-            blizzardCanvas.width = 800;
-            blizzardCanvas.height = 500;
-        } else if (blizzardCanvas) {
-            blizzardCanvas.width = 520;
-            blizzardCanvas.height = 360;
+        // Blizzard canvas scales with viewport size
+        if (blizzardCanvas) {
+            // Scale blizzard canvas based on viewport width
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+            blizzardCanvas.width = Math.min(800, viewportWidth * 0.6);
+            blizzardCanvas.height = Math.min(500, viewportHeight * 0.45);
         }
     });
 }
 
-window.addEventListener('resize', fitCanvasToViewport);
+window.addEventListener('resize', () => {
+    fitCanvasToViewport();
+    resizeStartScreenCanvases();
+});
 
 // Start the game when the page loads
 window.addEventListener('load', init);
