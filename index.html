@@ -98,6 +98,60 @@
                 inset 0 0 40px rgba(0, 0, 0, 0.5);
             z-index: 100;
             overflow: hidden;
+            transition: width 0.3s ease, height 0.3s ease, border-radius 0.3s ease;
+        }
+
+        /* Fullscreen mode - start screen fills the viewport */
+        body.fullscreen-mode #startScreen {
+            width: 100vw !important;
+            height: 100vh !important;
+            border-radius: 0;
+            border: none;
+        }
+
+        body.fullscreen-mode #startScreen .content-overlay {
+            padding: 50px 40px 60px;
+        }
+
+        body.fullscreen-mode .title-section {
+            margin-top: 20px;
+        }
+
+        body.fullscreen-mode #game-logo-img {
+            max-width: 600px;
+            width: 60%;
+        }
+
+        body.fullscreen-mode .tagline {
+            font-size: 12px;
+            padding: 15px 30px;
+        }
+
+        body.fullscreen-mode .menu-btn {
+            font-size: 16px;
+            padding: 20px 50px;
+        }
+
+        body.fullscreen-mode .btn-primary {
+            font-size: 20px;
+        }
+
+        body.fullscreen-mode .btn-secondary {
+            font-size: 14px;
+            padding: 18px 30px;
+        }
+
+        body.fullscreen-mode .press-space {
+            font-size: 12px;
+        }
+
+        body.fullscreen-mode .high-score-display {
+            font-size: 14px;
+        }
+
+        body.fullscreen-mode .corner-btn {
+            font-size: 24px;
+            padding: 12px 14px;
         }
 
         #startScreen .content-overlay {
@@ -155,6 +209,12 @@
             height: 360px;
             pointer-events: none;
             z-index: 4;
+            transition: width 0.3s ease, height 0.3s ease;
+        }
+
+        body.fullscreen-mode #blizzardCanvas {
+            width: 800px;
+            height: 500px;
         }
 
         /* Wordmark logo image */
@@ -755,6 +815,47 @@
             width: 90%;
             max-height: 80vh;
             overflow-y: auto;
+        }
+
+        /* Settings menu scales up in fullscreen */
+        body.fullscreen-mode #settingsMenu .settings-overlay {
+            max-width: 600px;
+            padding: 40px 60px;
+        }
+
+        body.fullscreen-mode #settingsMenu h2 {
+            font-size: 32px;
+            margin-bottom: 30px;
+        }
+
+        body.fullscreen-mode #settingsMenu h3 {
+            font-size: 14px;
+            margin: 25px 0 15px 0;
+        }
+
+        body.fullscreen-mode .setting-row {
+            margin: 15px 0;
+            padding: 12px 0;
+        }
+
+        body.fullscreen-mode .setting-row label {
+            font-size: 13px;
+        }
+
+        body.fullscreen-mode .setting-row select,
+        body.fullscreen-mode .setting-row button {
+            font-size: 12px;
+            padding: 10px 18px;
+        }
+
+        body.fullscreen-mode .setting-row input[type="checkbox"] {
+            width: 26px;
+            height: 26px;
+        }
+
+        body.fullscreen-mode .settings-buttons button {
+            font-size: 14px;
+            padding: 16px 32px;
         }
 
         #settingsMenu h2 {

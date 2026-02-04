@@ -180,6 +180,7 @@ const TERRAIN = {
     chunkHeight: 600,
     laneCount: 7,
     laneWidth: 68,
+    slopeWidth: 480,            // Current slope width (updated by resolution system)
     baseSlopeWidth: 480,        // Base slope width (updated dynamically)
     baseDensity: 0.08,          // Fewer obstacles
     maxDensity: 0.18,           // Less cluttered
@@ -2726,6 +2727,13 @@ function startGame() {
     // Hide the HTML start screen
     hideStartScreen();
 
+    // Ensure terrain dimensions are correct for current resolution
+    TERRAIN.slopeWidth = getTerrainSlopeWidth();
+    TERRAIN.laneWidth = getTerrainLaneWidth();
+
+    // Invalidate gradient cache to regenerate for current resolution
+    gradientCache.invalidate();
+
     // Reset game state
     gameState.screen = 'playing';
     gameState.animationTime = 0;
@@ -3327,6 +3335,13 @@ document.addEventListener('fullscreenchange', () => {
     const wasFullscreen = displaySettings.fullscreen;
     displaySettings.fullscreen = !!document.fullscreenElement;
 
+    // Toggle fullscreen-mode class on body for CSS styling
+    if (displaySettings.fullscreen) {
+        document.body.classList.add('fullscreen-mode');
+    } else {
+        document.body.classList.remove('fullscreen-mode');
+    }
+
     if (displaySettings.fullscreen && !wasFullscreen) {
         // Entering fullscreen - save current resolution
         preFullscreenResolution = displaySettings.currentResolution;
@@ -3335,16 +3350,43 @@ document.addEventListener('fullscreenchange', () => {
             const bestRes = autoDetectResolution();
             setResolution(bestRes);
         }
+        // Resize start screen canvases for fullscreen
+        resizeStartScreenCanvases();
     } else if (!displaySettings.fullscreen && wasFullscreen) {
         // Exiting fullscreen - restore original resolution
         if (preFullscreenResolution) {
             setResolution(preFullscreenResolution);
             preFullscreenResolution = null;
         }
+        // Resize start screen canvases back to normal
+        resizeStartScreenCanvases();
     }
 
     setTimeout(fitCanvasToViewport, 100);
 });
+
+// Resize start screen particle canvases when entering/exiting fullscreen
+function resizeStartScreenCanvases() {
+    const startScreen = document.getElementById('startScreen');
+    if (!startScreen) return;
+
+    const snowCanvas = document.getElementById('snowCanvas');
+    const blizzardCanvas = document.getElementById('blizzardCanvas');
+
+    if (snowCanvas) {
+        snowCanvas.width = startScreen.offsetWidth;
+        snowCanvas.height = startScreen.offsetHeight;
+    }
+
+    // Blizzard canvas scales with logo area
+    if (blizzardCanvas && displaySettings.fullscreen) {
+        blizzardCanvas.width = 800;
+        blizzardCanvas.height = 500;
+    } else if (blizzardCanvas) {
+        blizzardCanvas.width = 520;
+        blizzardCanvas.height = 360;
+    }
+}
 
 window.addEventListener('resize', fitCanvasToViewport);
 
