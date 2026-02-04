@@ -78,7 +78,8 @@ const displaySettings = {
     currentResolution: '480x640',
     autoDetect: true,
     screenShakeEnabled: true,
-    hapticsEnabled: true
+    hapticsEnabled: true,
+    fillScreen: true  // When true, canvas will fill the entire screen in fullscreen mode
 };
 
 // Available resolutions with aspect ratio info
@@ -191,6 +192,18 @@ const TERRAIN = {
 // Dynamic terrain properties that adapt to resolution
 function getTerrainSlopeWidth() {
     const res = RESOLUTIONS[displaySettings.currentResolution];
+
+    // For dynamic fill-screen mode, use current canvas dimensions
+    if (displaySettings.fillScreen && displaySettings.fullscreen) {
+        const isLandscape = CANVAS_WIDTH > CANVAS_HEIGHT;
+        if (isLandscape) {
+            // For landscape, slope fills center portion of screen
+            return Math.min(CANVAS_HEIGHT * 0.9, 720);
+        }
+        // For portrait, slope fills width
+        return Math.min(CANVAS_WIDTH, 720);
+    }
+
     if (!res) return TERRAIN.baseSlopeWidth;
 
     if (res.orientation === 'landscape') {
@@ -2967,6 +2980,10 @@ function updateSettingsUI() {
     const hapticsToggle = document.getElementById('hapticsToggle');
     if (hapticsToggle) hapticsToggle.checked = displaySettings.hapticsEnabled;
 
+    // Fill screen toggle
+    const fillScreenToggle = document.getElementById('fillScreenToggle');
+    if (fillScreenToggle) fillScreenToggle.checked = displaySettings.fillScreen;
+
     // Gamepad status
     const gamepadStatus = document.getElementById('gamepadStatus');
     if (gamepadStatus) {
@@ -3023,6 +3040,51 @@ function fitCanvasToViewport() {
     const maxWidth = window.innerWidth - marginX;
     const maxHeight = window.innerHeight - marginY;
 
+    // In fill screen mode, adapt canvas resolution to match screen dimensions
+    if (displaySettings.fillScreen && isFullscreen) {
+        // Calculate internal resolution to match screen aspect ratio
+        // Use a reasonable base height and scale width to match aspect ratio
+        const screenAspect = maxWidth / maxHeight;
+        let internalHeight = 1080; // Base internal resolution height
+        let internalWidth = Math.round(internalHeight * screenAspect);
+
+        // Cap resolution to avoid performance issues
+        const maxInternalWidth = 1920;
+        const maxInternalHeight = 1080;
+        if (internalWidth > maxInternalWidth) {
+            internalWidth = maxInternalWidth;
+            internalHeight = Math.round(internalWidth / screenAspect);
+        }
+        if (internalHeight > maxInternalHeight) {
+            internalHeight = maxInternalHeight;
+            internalWidth = Math.round(internalHeight * screenAspect);
+        }
+
+        // Update internal canvas resolution
+        if (canvas.width !== internalWidth || canvas.height !== internalHeight) {
+            canvas.width = internalWidth;
+            canvas.height = internalHeight;
+            CANVAS_WIDTH = internalWidth;
+            CANVAS_HEIGHT = internalHeight;
+
+            // Update terrain dimensions for new resolution
+            TERRAIN.slopeWidth = getTerrainSlopeWidth();
+            TERRAIN.laneWidth = getTerrainLaneWidth();
+
+            // Invalidate gradient cache
+            gradientCache.invalidate();
+
+            console.log(`Canvas adapted to screen: ${internalWidth}x${internalHeight}`);
+        }
+
+        // Scale canvas CSS to fill the entire viewport
+        canvas.style.width = maxWidth + 'px';
+        canvas.style.height = maxHeight + 'px';
+        canvas.style.margin = 'auto';
+        canvas.style.display = 'block';
+        return;
+    }
+
     const canvasRatio = canvas.width / canvas.height;
     const viewportRatio = maxWidth / maxHeight;
 
@@ -3040,8 +3102,17 @@ function fitCanvasToViewport() {
 
 function toggleFullscreen() {
     if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen().catch(err => {});
-        displaySettings.fullscreen = true;
+        document.documentElement.requestFullscreen().then(() => {
+            displaySettings.fullscreen = true;
+            // Auto-detect best resolution for fullscreen based on screen dimensions
+            if (displaySettings.autoDetect) {
+                const bestRes = autoDetectResolution();
+                setResolution(bestRes);
+            }
+            fitCanvasToViewport();
+        }).catch(err => {
+            console.warn('Fullscreen request failed:', err);
+        });
     } else {
         document.exitFullscreen();
         displaySettings.fullscreen = false;
@@ -3177,6 +3248,10 @@ function loadSettings() {
         if (savedScreenShake !== null) {
             displaySettings.screenShakeEnabled = savedScreenShake !== 'false';
         }
+        const savedFillScreen = localStorage.getItem('shredordead_fillscreen');
+        if (savedFillScreen !== null) {
+            displaySettings.fillScreen = savedFillScreen !== 'false';
+        }
     } catch (e) {}
 
     if (displaySettings.autoDetect) {
@@ -3189,6 +3264,7 @@ function saveSettings() {
         localStorage.setItem('shredordead_resolution', displaySettings.currentResolution);
         localStorage.setItem('shredordead_autodetect', displaySettings.autoDetect.toString());
         localStorage.setItem('shredordead_screenshake', displaySettings.screenShakeEnabled.toString());
+        localStorage.setItem('shredordead_fillscreen', displaySettings.fillScreen.toString());
     } catch (e) {}
 }
 
@@ -3220,21 +3296,53 @@ function toggleHapticsSetting(enabled) {
     saveSettings();
 }
 
+function toggleFillScreen(enabled) {
+    displaySettings.fillScreen = enabled;
+    saveSettings();
+    // If currently in fullscreen, reapply to use new setting
+    if (displaySettings.fullscreen) {
+        fitCanvasToViewport();
+    }
+}
+
 function resetAllSettings() {
     displaySettings.autoDetect = true;
     displaySettings.screenShakeEnabled = true;
+    displaySettings.fillScreen = true;
     try {
         localStorage.removeItem('shredordead_resolution');
         localStorage.removeItem('shredordead_autodetect');
         localStorage.removeItem('shredordead_screenshake');
+        localStorage.removeItem('shredordead_fillscreen');
     } catch (e) {}
     setResolution(autoDetectResolution());
     updateSettingsUI();
 }
 
+// Store pre-fullscreen resolution to restore when exiting
+let preFullscreenResolution = null;
+
 // Event listeners for resolution system
 document.addEventListener('fullscreenchange', () => {
+    const wasFullscreen = displaySettings.fullscreen;
     displaySettings.fullscreen = !!document.fullscreenElement;
+
+    if (displaySettings.fullscreen && !wasFullscreen) {
+        // Entering fullscreen - save current resolution
+        preFullscreenResolution = displaySettings.currentResolution;
+        // Auto-detect best resolution for this screen
+        if (displaySettings.autoDetect) {
+            const bestRes = autoDetectResolution();
+            setResolution(bestRes);
+        }
+    } else if (!displaySettings.fullscreen && wasFullscreen) {
+        // Exiting fullscreen - restore original resolution
+        if (preFullscreenResolution) {
+            setResolution(preFullscreenResolution);
+            preFullscreenResolution = null;
+        }
+    }
+
     setTimeout(fitCanvasToViewport, 100);
 });
 
