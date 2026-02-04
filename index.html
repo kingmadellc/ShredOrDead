@@ -1,0 +1,1188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shred or Dead</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        /* ============================================
+           CSS Custom Properties
+           ============================================ */
+        :root {
+            --cyan: #00ffff;
+            --magenta: #ff00ff;
+            --hot-pink: #ff1493;
+            --purple-dark: #1a0a2e;
+            --purple-mid: #2d1b4e;
+            --coral: #ff6b6b;
+            --white: #ffffff;
+            --font-pixel: 'Press Start 2P', monospace;
+        }
+
+        /* ============================================
+           Base Styles
+           ============================================ */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #0a0a1a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: var(--font-pixel);
+            overflow: hidden;
+        }
+
+        body.menu-active #gameCanvas {
+            opacity: 0.3;
+        }
+
+        #game-container {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #gameCanvas {
+            border: 4px solid var(--cyan);
+            box-shadow:
+                0 0 20px var(--cyan),
+                0 0 40px var(--magenta),
+                inset 0 0 20px rgba(0, 255, 255, 0.1);
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+            transition: opacity 0.3s ease;
+        }
+
+        #controls-hint {
+            color: var(--cyan);
+            font-size: 10px;
+            margin-top: 15px;
+            text-align: center;
+            text-shadow: 0 0 10px var(--cyan);
+            opacity: 0.7;
+        }
+
+        body.menu-active #controls-hint {
+            display: none;
+        }
+
+        /* ============================================
+           Start Screen Modal
+           ============================================ */
+        #startScreen {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 480px;
+            height: 640px;
+            background-color: var(--purple-dark);
+            background-image: url('assets/snowfree-keyart.png');
+            background-size: cover;
+            background-position: center;
+            border: 4px solid var(--cyan);
+            border-radius: 12px;
+            box-shadow:
+                0 0 30px rgba(0, 255, 255, 0.6),
+                0 0 60px rgba(255, 0, 255, 0.4),
+                inset 0 0 40px rgba(0, 0, 0, 0.5);
+            z-index: 100;
+            overflow: hidden;
+        }
+
+        #startScreen .content-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(180deg,
+                rgba(26, 10, 46, 0.7) 0%,
+                rgba(26, 10, 46, 0.3) 25%,
+                rgba(26, 10, 46, 0.2) 50%,
+                rgba(26, 10, 46, 0.6) 70%,
+                rgba(26, 10, 46, 0.95) 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            padding: 30px 20px 40px;
+        }
+
+        /* Snow Canvas - background ambient snow */
+        #snowCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        /* ============================================
+           Title Section with Wordmark Logo
+           ============================================ */
+        .title-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: visible;
+            margin-bottom: -60px;
+            z-index: 2;
+        }
+
+        /* Blizzard particle canvas - positioned around logo */
+        #blizzardCanvas {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -45%);
+            width: 550px;
+            height: 400px;
+            pointer-events: none;
+            z-index: 4;
+        }
+
+        /* Wordmark logo image */
+        #game-logo-img {
+            width: 95%;
+            max-width: 420px;
+            height: auto;
+            image-rendering: -webkit-optimize-contrast;
+            image-rendering: crisp-edges;
+            filter: drop-shadow(0 0 20px rgba(0, 255, 255, 0.9))
+                    drop-shadow(0 0 40px rgba(255, 0, 255, 0.7))
+                    drop-shadow(0 0 70px rgba(0, 255, 255, 0.5))
+                    drop-shadow(0 0 100px rgba(255, 0, 255, 0.3));
+            animation: logo-neon-glow 1.5s ease-in-out infinite,
+                       logo-flicker 0.1s steps(2) infinite,
+                       logo-pulse 3s ease-in-out infinite;
+            position: relative;
+            z-index: 3;
+        }
+
+        /* Screen reader fallback */
+        .visually-hidden {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
+        /* Neon glow breathing animation - cyan/magenta */
+        @keyframes logo-neon-glow {
+            0%, 100% {
+                filter: drop-shadow(0 0 15px rgba(0, 255, 255, 0.9))
+                        drop-shadow(0 0 35px rgba(255, 0, 255, 0.7))
+                        drop-shadow(0 0 60px rgba(0, 255, 255, 0.4))
+                        drop-shadow(0 0 90px rgba(255, 0, 255, 0.25));
+            }
+            25% {
+                filter: drop-shadow(0 0 25px rgba(0, 255, 255, 1))
+                        drop-shadow(0 0 50px rgba(255, 0, 255, 0.85))
+                        drop-shadow(0 0 80px rgba(0, 255, 255, 0.6))
+                        drop-shadow(0 0 120px rgba(255, 0, 255, 0.4));
+            }
+            50% {
+                filter: drop-shadow(0 0 30px rgba(255, 0, 255, 1))
+                        drop-shadow(0 0 60px rgba(0, 255, 255, 0.9))
+                        drop-shadow(0 0 100px rgba(255, 0, 255, 0.7))
+                        drop-shadow(0 0 150px rgba(0, 255, 255, 0.5));
+            }
+            75% {
+                filter: drop-shadow(0 0 22px rgba(0, 255, 255, 1))
+                        drop-shadow(0 0 45px rgba(255, 0, 255, 0.8))
+                        drop-shadow(0 0 75px rgba(0, 255, 255, 0.55))
+                        drop-shadow(0 0 110px rgba(255, 0, 255, 0.35));
+            }
+        }
+
+        /* Subtle flicker for neon realism */
+        @keyframes logo-flicker {
+            0%, 100% { opacity: 1; }
+            25% { opacity: 0.95; }
+            50% { opacity: 0.98; }
+            75% { opacity: 0.92; }
+        }
+
+        /* Slow pulse/scale animation */
+        @keyframes logo-pulse {
+            0%, 100% {
+                transform: scale(1) translateY(0);
+            }
+            50% {
+                transform: scale(1.015) translateY(-2px);
+            }
+        }
+
+        /* Frost shimmer effect above logo */
+        .title-section::before {
+            content: '';
+            position: absolute;
+            top: 30%;
+            left: 5%;
+            right: 5%;
+            height: 100px;
+            background: linear-gradient(180deg,
+                transparent 0%,
+                rgba(0, 255, 255, 0.06) 20%,
+                rgba(255, 255, 255, 0.1) 40%,
+                rgba(255, 0, 255, 0.08) 60%,
+                rgba(0, 255, 255, 0.05) 80%,
+                transparent 100%);
+            animation: frost-shimmer 2s ease-in-out infinite;
+            pointer-events: none;
+            z-index: 1;
+            filter: blur(8px);
+        }
+
+        @keyframes frost-shimmer {
+            0%, 100% {
+                transform: scaleY(1) translateY(0);
+                opacity: 0.5;
+            }
+            30% {
+                transform: scaleY(1.2) translateY(-8px);
+                opacity: 0.8;
+            }
+            60% {
+                transform: scaleY(0.9) translateY(4px);
+                opacity: 0.6;
+            }
+        }
+
+        /* Ambient glow beneath logo - icy */
+        .title-section::after {
+            content: '';
+            position: absolute;
+            bottom: 20px;
+            left: 10%;
+            right: 10%;
+            height: 60px;
+            background: radial-gradient(ellipse at center,
+                rgba(0, 255, 255, 0.5) 0%,
+                rgba(255, 0, 255, 0.3) 30%,
+                rgba(0, 255, 255, 0.2) 50%,
+                rgba(255, 0, 255, 0.1) 70%,
+                transparent 90%);
+            animation: underglow-pulse 2s ease-in-out infinite;
+            pointer-events: none;
+            z-index: 0;
+            filter: blur(15px);
+        }
+
+        @keyframes underglow-pulse {
+            0%, 100% {
+                opacity: 0.6;
+                transform: scaleX(1) scaleY(1);
+            }
+            50% {
+                opacity: 0.9;
+                transform: scaleX(1.1) scaleY(1.15);
+            }
+        }
+
+        /* Hide old text logo elements */
+        .game-logo {
+            display: none;
+        }
+                    0 0 100px rgba(255, 0, 255, 0.6);
+                transform: scale(1.03);
+            }
+        }
+
+        .tagline {
+            font-size: 9px;
+            color: var(--white);
+            letter-spacing: 2px;
+            text-shadow:
+                0 0 10px rgba(255, 255, 255, 0.8),
+                0 0 20px rgba(0, 255, 255, 0.5),
+                0 0 30px rgba(255, 0, 255, 0.3);
+            opacity: 1;
+            position: relative;
+            z-index: 5;
+            margin-top: 15px;
+        }
+
+        /* ============================================
+           Menu Buttons
+           ============================================ */
+        .menu-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            z-index: 2;
+            width: 100%;
+            max-width: 350px;
+        }
+
+        .menu-btn {
+            font-family: var(--font-pixel);
+            font-size: 12px;
+            padding: 16px 32px;
+            border-radius: 8px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            transition: all 0.2s ease;
+            outline: none;
+            width: 100%;
+        }
+
+        .menu-btn:focus {
+            outline: 3px solid var(--white);
+            outline-offset: 3px;
+        }
+
+        /* Primary Button - Cyan */
+        .btn-primary {
+            background: linear-gradient(180deg, var(--cyan) 0%, #00cccc 100%);
+            color: var(--purple-dark);
+            border: 3px solid rgba(0, 255, 255, 0.8);
+            box-shadow:
+                0 0 20px rgba(0, 255, 255, 0.5),
+                0 4px 15px rgba(0, 0, 0, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.3);
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(180deg, #33ffff 0%, var(--cyan) 100%);
+            transform: translateY(-3px);
+            box-shadow:
+                0 0 30px rgba(0, 255, 255, 0.7),
+                0 0 50px rgba(0, 255, 255, 0.4),
+                0 6px 20px rgba(0, 0, 0, 0.4);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+
+        /* Secondary Buttons Row */
+        .button-row {
+            display: flex;
+            gap: 15px;
+            width: 100%;
+        }
+
+        .btn-secondary {
+            background: linear-gradient(180deg, rgba(255, 0, 255, 0.2) 0%, rgba(255, 0, 255, 0.1) 100%);
+            color: var(--white);
+            border: 2px solid rgba(255, 0, 255, 0.6);
+            box-shadow:
+                0 0 15px rgba(255, 0, 255, 0.3),
+                0 3px 10px rgba(0, 0, 0, 0.3);
+            font-size: 10px;
+            padding: 14px 20px;
+            flex: 1;
+        }
+
+        .btn-secondary:hover {
+            background: linear-gradient(180deg, rgba(255, 0, 255, 0.4) 0%, rgba(255, 0, 255, 0.2) 100%);
+            border-color: var(--magenta);
+            transform: translateY(-2px);
+            box-shadow:
+                0 0 25px rgba(255, 0, 255, 0.5),
+                0 5px 15px rgba(0, 0, 0, 0.4);
+        }
+
+        /* High Score Display */
+        .high-score-display {
+            font-size: 10px;
+            color: var(--cyan);
+            text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+            margin-top: 10px;
+        }
+
+        .high-score-display span {
+            color: var(--white);
+        }
+
+        /* Press Space Hint */
+        .press-space {
+            font-size: 10px;
+            color: var(--white);
+            opacity: 0.8;
+            animation: blink 1s steps(1) infinite;
+            margin-top: 5px;
+        }
+
+        @keyframes blink {
+            0%, 49% { opacity: 0.8; }
+            50%, 100% { opacity: 0; }
+        }
+
+        /* ============================================
+           Submenus (How To Play, High Scores)
+           ============================================ */
+        .submenu {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(26, 10, 46, 0.98);
+            z-index: 10;
+            padding: 30px 25px;
+            overflow-y: auto;
+        }
+
+        .submenu.active {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .submenu h2 {
+            font-size: 18px;
+            color: var(--cyan);
+            text-align: center;
+            margin-bottom: 25px;
+            text-shadow: 0 0 20px var(--cyan);
+        }
+
+        .submenu-content {
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .submenu-section {
+            margin-bottom: 25px;
+        }
+
+        .submenu-section h3 {
+            font-size: 11px;
+            color: var(--magenta);
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px rgba(255, 0, 255, 0.5);
+        }
+
+        .submenu-section p,
+        .submenu-section li {
+            font-size: 9px;
+            color: var(--white);
+            line-height: 1.8;
+            opacity: 0.9;
+        }
+
+        .submenu-section ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .submenu-section li {
+            margin-bottom: 8px;
+            padding-left: 15px;
+            position: relative;
+        }
+
+        .submenu-section li::before {
+            content: ">";
+            position: absolute;
+            left: 0;
+            color: var(--cyan);
+        }
+
+        .control-key {
+            display: inline-block;
+            background: rgba(0, 255, 255, 0.2);
+            border: 1px solid var(--cyan);
+            padding: 3px 8px;
+            border-radius: 4px;
+            margin-right: 8px;
+            font-size: 8px;
+        }
+
+        /* High Scores List */
+        .scores-list {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .score-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background: rgba(0, 255, 255, 0.1);
+            border: 2px solid rgba(0, 255, 255, 0.3);
+            border-radius: 8px;
+        }
+
+        .score-label {
+            font-size: 10px;
+            color: var(--magenta);
+        }
+
+        .score-value {
+            font-size: 14px;
+            color: var(--cyan);
+            text-shadow: 0 0 10px var(--cyan);
+        }
+
+        /* Back Button */
+        .btn-back {
+            margin-top: auto;
+            padding-top: 20px;
+        }
+
+        .btn-back button {
+            font-family: var(--font-pixel);
+            font-size: 10px;
+            padding: 12px 24px;
+            background: transparent;
+            color: var(--white);
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            width: 100%;
+        }
+
+        .btn-back button:hover {
+            border-color: var(--cyan);
+            color: var(--cyan);
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.3);
+        }
+
+        /* ============================================
+           Responsive Adjustments
+           ============================================ */
+        @media (max-width: 520px) {
+            #startScreen {
+                width: 95vw;
+                height: auto;
+                min-height: 90vh;
+            }
+
+            .logo-snow, .logo-free {
+                font-size: 28px;
+            }
+
+            .tagline {
+                font-size: 7px;
+            }
+
+            .menu-btn {
+                font-size: 10px;
+                padding: 14px 24px;
+            }
+
+            .btn-secondary {
+                font-size: 8px;
+                padding: 12px 15px;
+            }
+        }
+    </style>
+</head>
+<body class="menu-active">
+    <div id="game-container">
+        <canvas id="gameCanvas" width="480" height="640"></canvas>
+        <p id="controls-hint">ARROW KEYS to carve | SPACE to start</p>
+
+        <!-- Start Screen Modal -->
+        <div id="startScreen">
+            <canvas id="snowCanvas"></canvas>
+            <div class="content-overlay">
+                <!-- Title Section with Wordmark Logo -->
+                <div class="title-section">
+                    <canvas id="blizzardCanvas" aria-hidden="true"></canvas>
+                    <img src="assets/shredordead-wordmark.png" alt="SHRED OR DEAD" id="game-logo-img">
+                    <h1 class="visually-hidden">SHRED OR DEAD</h1>
+                    <p class="tagline">SHRED THE GNAR OR GET WRECKED</p>
+                </div>
+
+                <!-- Spacer for vertical centering -->
+                <div style="flex: 1;"></div>
+
+                <!-- Menu Buttons -->
+                <div class="menu-section">
+                    <button class="menu-btn btn-primary" id="startBtn" onclick="startGame()">
+                        START GAME
+                    </button>
+                    <div class="button-row">
+                        <button class="menu-btn btn-secondary" onclick="showHighScores()">
+                            HIGH SCORES
+                        </button>
+                        <button class="menu-btn btn-secondary" onclick="showHowToPlay()">
+                            HOW TO PLAY
+                        </button>
+                    </div>
+                    <div class="high-score-display" id="menuHighScore" style="display: none;">
+                        BEST: <span id="menuHighScoreValue">0</span>
+                    </div>
+                    <p class="press-space">PRESS SPACE TO START</p>
+                </div>
+            </div>
+
+            <!-- How To Play Submenu -->
+            <div class="submenu" id="howToPlayMenu">
+                <h2>HOW TO PLAY</h2>
+                <div class="submenu-content">
+                    <div class="submenu-section">
+                        <h3>OBJECTIVE</h3>
+                        <p>Race down the mountain, dodge obstacles, and escape the mysterious fog chasing you!</p>
+                    </div>
+                    <div class="submenu-section">
+                        <h3>CONTROLS</h3>
+                        <ul>
+                            <li><span class="control-key">LEFT / RIGHT</span> Carve and steer</li>
+                            <li><span class="control-key">DOWN</span> Tuck for speed</li>
+                            <li><span class="control-key">SPACE</span> Jump / Start game</li>
+                        </ul>
+                    </div>
+                    <div class="submenu-section">
+                        <h3>TRICKS & SCORING</h3>
+                        <ul>
+                            <li>Hit jumps to catch air</li>
+                            <li>Grind rails for bonus points</li>
+                            <li>Chain tricks for combo multipliers</li>
+                            <li>Close calls with obstacles = extra points!</li>
+                        </ul>
+                    </div>
+                    <div class="submenu-section">
+                        <h3>HAZARDS</h3>
+                        <ul>
+                            <li>Trees and rocks will wreck you</li>
+                            <li>The fog is always chasing - don't slow down!</li>
+                            <li>Something lurks in the fog...</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="btn-back">
+                    <button onclick="hideHowToPlay()">BACK</button>
+                </div>
+            </div>
+
+            <!-- High Scores Submenu -->
+            <div class="submenu" id="highScoresMenu">
+                <h2>HIGH SCORES</h2>
+                <div class="submenu-content">
+                    <div class="scores-list">
+                        <div class="score-item">
+                            <span class="score-label">BEST SCORE</span>
+                            <span class="score-value" id="hsScore">0</span>
+                        </div>
+                        <div class="score-item">
+                            <span class="score-label">BEST DISTANCE</span>
+                            <span class="score-value" id="hsDistance">0m</span>
+                        </div>
+                        <div class="score-item">
+                            <span class="score-label">MAX COMBO</span>
+                            <span class="score-value" id="hsCombo">0x</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="btn-back">
+                    <button onclick="hideHighScores()">BACK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Snow Particle System -->
+    <script>
+        // Snow particle system for start screen
+        (function() {
+            const snowCanvas = document.getElementById('snowCanvas');
+            const ctx = snowCanvas.getContext('2d');
+            let particles = [];
+            const MAX_PARTICLES = 50;
+            let animationId = null;
+
+            function resizeCanvas() {
+                const container = document.getElementById('startScreen');
+                snowCanvas.width = container.offsetWidth;
+                snowCanvas.height = container.offsetHeight;
+            }
+
+            function createSnowflake() {
+                return {
+                    x: Math.random() * snowCanvas.width,
+                    y: -10,
+                    size: Math.random() * 4 + 2,
+                    speed: Math.random() * 1.5 + 0.5,
+                    drift: (Math.random() - 0.5) * 0.8,
+                    wobble: Math.random() * Math.PI * 2,
+                    wobbleSpeed: Math.random() * 0.02 + 0.01,
+                    opacity: Math.random() * 0.5 + 0.3
+                };
+            }
+
+            function updateParticles() {
+                // Add new particles
+                while (particles.length < MAX_PARTICLES) {
+                    particles.push(createSnowflake());
+                }
+
+                // Update existing particles
+                particles.forEach((p, i) => {
+                    p.y += p.speed;
+                    p.wobble += p.wobbleSpeed;
+                    p.x += p.drift + Math.sin(p.wobble) * 0.3;
+
+                    // Remove particles that fall off screen
+                    if (p.y > snowCanvas.height + 10) {
+                        particles[i] = createSnowflake();
+                    }
+                });
+            }
+
+            function drawParticles() {
+                ctx.clearRect(0, 0, snowCanvas.width, snowCanvas.height);
+
+                particles.forEach(p => {
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(255, 255, 255, ${p.opacity})`;
+                    ctx.fill();
+
+                    // Add slight glow to larger particles
+                    if (p.size > 4) {
+                        ctx.beginPath();
+                        ctx.arc(p.x, p.y, p.size * 1.5, 0, Math.PI * 2);
+                        ctx.fillStyle = `rgba(200, 240, 255, ${p.opacity * 0.3})`;
+                        ctx.fill();
+                    }
+                });
+            }
+
+            function animate() {
+                const startScreen = document.getElementById('startScreen');
+                if (startScreen.style.display !== 'none') {
+                    updateParticles();
+                    drawParticles();
+                }
+                animationId = requestAnimationFrame(animate);
+            }
+
+            // Initialize
+            window.addEventListener('load', () => {
+                resizeCanvas();
+                animate();
+            });
+
+            window.addEventListener('resize', resizeCanvas);
+        })();
+
+        // ============================================
+        // BLIZZARD PARTICLE SYSTEM
+        // Snowflakes swirl around the logo perimeter
+        // Cast in neon cyan/magenta light
+        // ============================================
+        (function() {
+            const canvas = document.getElementById('blizzardCanvas');
+            if (!canvas) return;
+
+            const ctx = canvas.getContext('2d');
+            const particles = [];
+            const maxParticles = 60;
+
+            // Set canvas size
+            function resizeCanvas() {
+                canvas.width = 550;
+                canvas.height = 400;
+            }
+            resizeCanvas();
+
+            // Logo dimensions - centered
+            const centerX = canvas.width / 2;
+            const centerY = 160;
+            const logoWidth = 380;
+            const logoHeight = 80;
+
+            // Random helpers
+            function rand(min, max) {
+                return Math.random() * (max - min) + min;
+            }
+            function randInt(min, max) {
+                return Math.floor(rand(min, max + 1));
+            }
+
+            // Neon snow colors - icy blues, whites, and magenta/cyan highlights
+            const snowColors = [
+                // Pure white/ice
+                { h: [180, 200], s: [5, 20], l: [92, 99] },
+                // Cyan-tinted ice
+                { h: [175, 195], s: [60, 90], l: [80, 95] },
+                // Magenta-tinted
+                { h: [280, 310], s: [50, 80], l: [80, 92] },
+                // Electric cyan
+                { h: [180, 190], s: [90, 100], l: [60, 80] },
+                // Hot magenta
+                { h: [290, 320], s: [85, 100], l: [65, 85] },
+                // Pale blue
+                { h: [200, 220], s: [40, 70], l: [85, 95] },
+                // Pure white
+                { h: [0, 360], s: [0, 10], l: [95, 100] },
+            ];
+
+            // Logo bounds
+            const logoLeft = centerX - logoWidth / 2;
+            const logoRight = centerX + logoWidth / 2;
+            const logoTop = centerY - logoHeight / 2;
+            const logoBottom = centerY + logoHeight / 2;
+
+            // Get spawn point on logo perimeter
+            function getPerimeterSpawn() {
+                const edgeRoll = Math.random();
+                let edge;
+                if (edgeRoll < 0.30) edge = 'top';
+                else if (edgeRoll < 0.50) edge = 'right';
+                else if (edgeRoll < 0.75) edge = 'bottom';
+                else edge = 'left';
+
+                let x, y, normalAngle;
+                const edgeOffset = 6;
+
+                switch (edge) {
+                    case 'top':
+                        x = logoLeft + Math.random() * logoWidth;
+                        y = logoTop - edgeOffset;
+                        normalAngle = -Math.PI/2 + rand(-0.3, 0.3);
+                        break;
+                    case 'right':
+                        x = logoRight + edgeOffset;
+                        y = logoTop + Math.random() * logoHeight;
+                        normalAngle = rand(-0.4, 0.4);
+                        break;
+                    case 'bottom':
+                        x = logoLeft + Math.random() * logoWidth;
+                        y = logoBottom + edgeOffset;
+                        normalAngle = Math.PI/2 + rand(-0.3, 0.3);
+                        break;
+                    case 'left':
+                        x = logoLeft - edgeOffset;
+                        y = logoTop + Math.random() * logoHeight;
+                        normalAngle = Math.PI + rand(-0.4, 0.4);
+                        break;
+                }
+
+                return { x, y, angle: normalAngle, edge };
+            }
+
+            // Create a new snowflake
+            function createSnowflake() {
+                const spawn = getPerimeterSpawn();
+
+                // Pick random color - weighted towards neon
+                const colorIdx = Math.random() > 0.4
+                    ? randInt(1, 4)  // More neon colors
+                    : randInt(0, snowColors.length - 1);
+                const color = snowColors[colorIdx];
+
+                // Size variety
+                const sizeCategory = Math.random();
+                let initialSize;
+                if (sizeCategory > 0.92) {
+                    initialSize = rand(8, 14); // Large flakes
+                } else if (sizeCategory > 0.7) {
+                    initialSize = rand(5, 8);  // Medium
+                } else if (sizeCategory > 0.35) {
+                    initialSize = rand(3, 5);  // Small
+                } else {
+                    initialSize = rand(1.5, 3); // Tiny ice crystals
+                }
+
+                // Speed - larger = slower
+                const baseSpeed = rand(1.2, 3.5);
+                const speed = baseSpeed * (initialSize > 8 ? 0.5 : initialSize > 5 ? 0.7 : 1.0);
+
+                // Velocity outward
+                const spreadAngle = spawn.angle + rand(-0.6, 0.6);
+                const vx = Math.cos(spreadAngle) * speed;
+                const vy = Math.sin(spreadAngle) * speed;
+
+                return {
+                    x: spawn.x,
+                    y: spawn.y,
+                    spawnX: spawn.x,
+                    spawnY: spawn.y,
+                    vx: vx * rand(0.8, 1.2),
+                    vy: vy * rand(0.8, 1.2),
+
+                    initialSize: initialSize,
+                    size: initialSize,
+
+                    // Rotation for snowflake appearance
+                    rotation: rand(-Math.PI, Math.PI),
+                    rotationSpeed: rand(-0.1, 0.1) * (initialSize > 6 ? 0.4 : 1),
+
+                    // Life
+                    life: 1,
+
+                    // Color
+                    hue: rand(color.h[0], color.h[1]),
+                    sat: rand(color.s[0], color.s[1]),
+                    light: rand(color.l[0], color.l[1]),
+
+                    // Motion
+                    wobble: rand(0, Math.PI * 2),
+                    wobbleSpeed: rand(0.04, 0.12),
+                    wobbleAmp: rand(0.2, 0.8),
+
+                    // Sparkle
+                    sparkle: rand(0, Math.PI * 2),
+                    sparkleSpeed: rand(0.15, 0.4),
+
+                    // Trail
+                    trail: [],
+                    trailLength: initialSize > 6 ? 6 : initialSize > 3 ? 4 : 2,
+
+                    // Physics
+                    drag: rand(0.985, 0.995),
+                    gravity: rand(-0.008, 0.015),
+                };
+            }
+
+            // Spawn particles
+            let spawnAcc = 0;
+            function spawnParticles(dt) {
+                let rate = 18;
+                if (Math.random() > 0.94) rate *= 4; // Burst!
+                else if (Math.random() > 0.85) rate *= 2;
+
+                spawnAcc += rate * dt;
+                while (spawnAcc >= 1 && particles.length < maxParticles) {
+                    particles.push(createSnowflake());
+                    spawnAcc -= 1;
+                }
+            }
+
+            // Update particles
+            function updateParticles(dt) {
+                for (let i = particles.length - 1; i >= 0; i--) {
+                    const p = particles[i];
+
+                    // Store trail
+                    if (p.trail.length >= p.trailLength) p.trail.shift();
+                    p.trail.push({ x: p.x, y: p.y, size: p.size });
+
+                    // Wobble/swirl motion
+                    p.wobble += p.wobbleSpeed;
+                    const wobble = Math.sin(p.wobble) * p.wobbleAmp;
+
+                    // Update position
+                    p.x += p.vx + wobble;
+                    p.y += p.vy;
+
+                    // Apply drag and gravity
+                    p.vx *= p.drag;
+                    p.vy *= p.drag;
+                    p.vy += p.gravity;
+
+                    // Tiny drift
+                    p.vx += rand(-0.02, 0.02);
+                    p.vy += rand(-0.01, 0.01);
+
+                    // Rotation
+                    p.rotation += p.rotationSpeed;
+
+                    // Sparkle
+                    p.sparkle += p.sparkleSpeed;
+
+                    // Distance from spawn
+                    const dx = p.x - p.spawnX;
+                    const dy = p.y - p.spawnY;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    // Fade out based on distance
+                    const maxDistance = 120 + p.initialSize * 8;
+                    const distanceRatio = Math.min(1, distance / maxDistance);
+                    p.size = p.initialSize * (1 - distanceRatio * 0.8);
+                    p.life = Math.max(0, 1 - distanceRatio);
+
+                    // Remove dead particles
+                    if (p.life <= 0.02 || p.size < 0.5 || distance > maxDistance * 1.2) {
+                        particles.splice(i, 1);
+                    }
+                }
+            }
+
+            // Draw snowflake
+            function drawSnowflake(p) {
+                const sparkleMod = 0.7 + Math.sin(p.sparkle) * 0.3;
+                const alpha = p.life * sparkleMod;
+                if (alpha < 0.03) return;
+
+                ctx.save();
+                ctx.translate(p.x, p.y);
+                ctx.rotate(p.rotation);
+
+                // Draw trail
+                for (let i = 0; i < p.trail.length; i++) {
+                    const t = p.trail[i];
+                    const trailRatio = i / p.trail.length;
+                    const trailAlpha = trailRatio * alpha * 0.2;
+                    const trailSize = t.size * trailRatio * 0.3;
+
+                    if (trailAlpha < 0.02 || trailSize < 0.3) continue;
+
+                    const rx = t.x - p.x;
+                    const ry = t.y - p.y;
+
+                    ctx.beginPath();
+                    ctx.arc(rx, ry, trailSize, 0, Math.PI * 2);
+                    ctx.fillStyle = `hsla(${p.hue}, ${p.sat * 0.5}%, ${p.light}%, ${trailAlpha})`;
+                    ctx.fill();
+                }
+
+                // Create gradient for snowflake
+                const gradSize = p.size * 2.5;
+                const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, gradSize);
+
+                // Neon ice glow
+                grad.addColorStop(0, `hsla(0, 0%, 100%, ${alpha})`);
+                grad.addColorStop(0.15, `hsla(${p.hue}, ${p.sat}%, ${Math.min(100, p.light + 10)}%, ${alpha * 0.95})`);
+                grad.addColorStop(0.4, `hsla(${p.hue}, ${p.sat * 0.8}%, ${p.light}%, ${alpha * 0.7})`);
+                grad.addColorStop(0.7, `hsla(${p.hue}, ${p.sat * 0.5}%, ${p.light * 0.8}%, ${alpha * 0.3})`);
+                grad.addColorStop(1, `hsla(${p.hue}, 30%, 80%, 0)`);
+
+                // Draw snowflake shape - 6-pointed star
+                const points = 6;
+                const outerRadius = p.size;
+                const innerRadius = p.size * 0.4;
+
+                ctx.beginPath();
+                for (let i = 0; i < points * 2; i++) {
+                    const radius = i % 2 === 0 ? outerRadius : innerRadius;
+                    const angle = (i * Math.PI) / points - Math.PI / 2;
+                    const px = Math.cos(angle) * radius;
+                    const py = Math.sin(angle) * radius;
+                    if (i === 0) ctx.moveTo(px, py);
+                    else ctx.lineTo(px, py);
+                }
+                ctx.closePath();
+                ctx.fillStyle = grad;
+                ctx.fill();
+
+                // Bright core for larger flakes
+                if (p.size > 4 && alpha > 0.4) {
+                    ctx.beginPath();
+                    const coreSize = p.size * 0.25 * sparkleMod;
+                    ctx.arc(0, 0, coreSize, 0, Math.PI * 2);
+                    ctx.fillStyle = `hsla(0, 0%, 100%, ${alpha * 0.9})`;
+                    ctx.fill();
+                }
+
+                ctx.restore();
+            }
+
+            // Render loop
+            let lastTime = performance.now();
+
+            function animate(currentTime) {
+                const startScreen = document.getElementById('startScreen');
+                if (startScreen && startScreen.style.display !== 'none') {
+                    const dt = Math.min((currentTime - lastTime) / 1000, 0.1);
+                    lastTime = currentTime;
+
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                    spawnParticles(dt);
+                    updateParticles(dt);
+
+                    // Draw all snowflakes
+                    for (const p of particles) {
+                        drawSnowflake(p);
+                    }
+                }
+
+                requestAnimationFrame(animate);
+            }
+
+            // Start animation
+            window.addEventListener('load', () => {
+                resizeCanvas();
+                requestAnimationFrame(animate);
+            });
+
+            window.addEventListener('resize', resizeCanvas);
+        })();
+
+        // Menu functions
+        function showStartScreen() {
+            document.getElementById('startScreen').style.display = 'block';
+            document.body.classList.add('menu-active');
+            updateMenuHighScore();
+        }
+
+        function hideStartScreen() {
+            document.getElementById('startScreen').style.display = 'none';
+            document.body.classList.remove('menu-active');
+        }
+
+        function showHowToPlay() {
+            document.getElementById('howToPlayMenu').classList.add('active');
+        }
+
+        function hideHowToPlay() {
+            document.getElementById('howToPlayMenu').classList.remove('active');
+        }
+
+        function showHighScores() {
+            updateHighScoreDisplay();
+            document.getElementById('highScoresMenu').classList.add('active');
+        }
+
+        function hideHighScores() {
+            document.getElementById('highScoresMenu').classList.remove('active');
+        }
+
+        function updateMenuHighScore() {
+            const saved = localStorage.getItem('shredordead_highscore');
+            const highScore = saved ? parseInt(saved, 10) : 0;
+            const display = document.getElementById('menuHighScore');
+            const value = document.getElementById('menuHighScoreValue');
+
+            if (highScore > 0) {
+                display.style.display = 'block';
+                value.textContent = highScore.toLocaleString();
+            } else {
+                display.style.display = 'none';
+            }
+        }
+
+        function updateHighScoreDisplay() {
+            const saved = localStorage.getItem('shredordead_highscore');
+            const highScore = saved ? parseInt(saved, 10) : 0;
+
+            // For now, we only track high score - distance and combo would need separate storage
+            document.getElementById('hsScore').textContent = highScore.toLocaleString();
+
+            // These would be populated if we tracked them separately
+            const savedDistance = localStorage.getItem('shredordead_bestdistance');
+            const savedCombo = localStorage.getItem('shredordead_maxcombo');
+
+            document.getElementById('hsDistance').textContent = savedDistance ? savedDistance + 'm' : '0m';
+            document.getElementById('hsCombo').textContent = savedCombo ? savedCombo + 'x' : '0x';
+        }
+
+        // Initialize menu high score on load
+        window.addEventListener('load', updateMenuHighScore);
+    </script>
+
+    <script src="game.js"></script>
+</body>
+</html>

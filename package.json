@@ -1,0 +1,11 @@
+{
+  "name": "shred-or-dead",
+  "version": "1.0.0",
+  "description": "Shred or Dead - A retro snowboarding game inspired by SkiFree",
+  "scripts": {
+    "start": "npx serve -p 3001"
+  },
+  "devDependencies": {
+    "serve": "^14.2.0"
+  }
+}
