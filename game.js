@@ -3112,11 +3112,15 @@ function toggleFullscreen() {
     if (!document.fullscreenElement) {
         document.documentElement.requestFullscreen().then(() => {
             displaySettings.fullscreen = true;
+            // Add fullscreen-mode class for CSS styling
+            document.body.classList.add('fullscreen-mode');
             // Auto-detect best resolution for fullscreen based on screen dimensions
             if (displaySettings.autoDetect) {
                 const bestRes = autoDetectResolution();
                 setResolution(bestRes);
             }
+            // Resize start screen canvases
+            resizeStartScreenCanvases();
             fitCanvasToViewport();
         }).catch(err => {
             console.warn('Fullscreen request failed:', err);
@@ -3124,6 +3128,10 @@ function toggleFullscreen() {
     } else {
         document.exitFullscreen();
         displaySettings.fullscreen = false;
+        // Remove fullscreen-mode class
+        document.body.classList.remove('fullscreen-mode');
+        // Resize start screen canvases back
+        resizeStartScreenCanvases();
     }
 }
 
