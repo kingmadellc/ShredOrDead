@@ -34,21 +34,21 @@ const COLORS = {
 };
 
 const PHYSICS = {
-    gravity: 1400,              // Snappier jumps
-    groundFriction: 0.995,      // MUCH less drag - was 0.98
+    gravity: 1400,
+    groundFriction: 0.992,      // Was 0.995 - slightly more drag
     airFriction: 0.998,
-    turnSpeed: 450,             // 2.25x faster turning
-    maxTurnAngle: 65,           // Wider carves
+    turnSpeed: 480,             // Was 450 - faster turning for carving
+    maxTurnAngle: 65,
     carveSpeedBoost: 1.12,
-    downhillAccel: 450,         // 2.25x faster acceleration
-    maxSpeed: 850,              // Higher top speed
+    downhillAccel: 320,         // Was 450 - slower acceleration
+    maxSpeed: 700,              // Was 850 - lower top speed
     minSpeed: 120,
-    crashSpeedPenalty: 0.4,     // Less punishing
-    crashDuration: 0.8,         // Shorter crash
-    stunDuration: 0.25,         // Shorter stun
+    crashSpeedPenalty: 0.4,
+    crashDuration: 0.8,
+    stunDuration: 0.25,
     invincibilityDuration: 1.5,
-    jumpLaunchPower: 500,       // Higher jumps
-    airControlFactor: 0.7       // Much more air control
+    jumpLaunchPower: 500,
+    airControlFactor: 0.7
 };
 
 const TERRAIN = {
@@ -59,8 +59,8 @@ const TERRAIN = {
     baseDensity: 0.08,          // Fewer obstacles
     maxDensity: 0.18,           // Less cluttered
     densityRampDistance: 4000,
-    jumpChance: 0.20,           // 3.3x MORE JUMPS!
-    railChance: 0.14,           // 3.5x MORE RAILS!
+    jumpChance: 0.20,           // Keep jumps plentiful
+    railChance: 0.08,           // Was 0.14 - fewer rails
     clearPathWidth: 2
 };
 
@@ -583,9 +583,9 @@ function updateGroundPhysics(player, dt) {
     player.speed = Math.min(player.speed, PHYSICS.maxSpeed);
     player.speed *= PHYSICS.groundFriction;
 
-    // Lateral movement from turning - much more responsive!
+    // Lateral movement from turning - full force for snappy carving
     const lateralForce = Math.sin(player.angle * Math.PI / 180) * player.speed;
-    player.lateralSpeed = lateralForce * 0.85;
+    player.lateralSpeed = lateralForce * 1.0;
 
     // Apply movement
     player.y += player.speed * dt;
