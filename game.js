@@ -7,42 +7,8 @@
 // CONSTANTS
 // ===================
 
-// Base resolution (portrait orientation for snowboarding)
-const BASE_WIDTH = 480;
-const BASE_HEIGHT = 640;
-
-// ============================================
-// RESOLUTION SCALING SYSTEM (ported from DEADLINE)
-// ============================================
-const displaySettings = {
-    baseWidth: BASE_WIDTH,
-    baseHeight: BASE_HEIGHT,
-    scale: 1,
-    fullscreen: false,
-    currentResolution: '480x640',
-    autoDetect: true,
-    screenShakeEnabled: true,
-    hapticsEnabled: true
-};
-
-// Available resolutions with aspect ratio info (portrait orientation - 3:4)
-const RESOLUTIONS = {
-    // Portrait resolutions (3:4)
-    '480x640': { width: 480, height: 640, scale: 1, aspectRatio: '3:4' },
-    '600x800': { width: 600, height: 800, scale: 1.25, aspectRatio: '3:4' },
-    '720x960': { width: 720, height: 960, scale: 1.5, aspectRatio: '3:4' },
-    '768x1024': { width: 768, height: 1024, scale: 1.6, aspectRatio: '3:4' },
-    '900x1200': { width: 900, height: 1200, scale: 1.875, aspectRatio: '3:4' },
-    // Mobile portrait (9:16)
-    '405x720': { width: 405, height: 720, scale: 1.125, aspectRatio: '9:16' },
-    '608x1080': { width: 608, height: 1080, scale: 1.6875, aspectRatio: '9:16' },
-    // Steam Deck portrait (10:16)
-    '500x800': { width: 500, height: 800, scale: 1.25, aspectRatio: '10:16' }
-};
-
-// Dynamic canvas dimensions (will be updated by resolution system)
-let CANVAS_WIDTH = BASE_WIDTH;
-let CANVAS_HEIGHT = BASE_HEIGHT;
+const CANVAS_WIDTH = 480;
+const CANVAS_HEIGHT = 640;
 
 const COLORS = {
     // Neon palette
@@ -69,19 +35,19 @@ const COLORS = {
 
 const PHYSICS = {
     gravity: 1400,
-    groundFriction: 0.992,      // Was 0.995 - slightly more drag
-    airFriction: 0.998,
-    turnSpeed: 480,             // Was 450 - faster turning for carving
+    groundFriction: 0.985,      // More drag for controlled feel
+    airFriction: 0.995,
+    turnSpeed: 500,             // Fast turning for responsive carving
     maxTurnAngle: 65,
-    carveSpeedBoost: 1.12,
-    downhillAccel: 320,         // Was 450 - slower acceleration
-    maxSpeed: 700,              // Was 850 - lower top speed
-    minSpeed: 120,
-    crashSpeedPenalty: 0.4,
+    carveSpeedBoost: 1.08,      // Less speed boost from carving
+    downhillAccel: 180,         // Much slower acceleration
+    maxSpeed: 500,              // Much lower top speed
+    minSpeed: 100,
+    crashSpeedPenalty: 0.5,
     crashDuration: 0.8,
     stunDuration: 0.25,
     invincibilityDuration: 1.5,
-    jumpLaunchPower: 500,
+    jumpLaunchPower: 400,       // Slightly lower jumps
     airControlFactor: 0.7
 };
 
@@ -129,7 +95,7 @@ const CHASE = {
     // Crash/slow triggers
     crashThreshold: 3,          // 3 crashes = instant beast
     crashWindow: 10,            // Within 10 seconds
-    slowSpeedThreshold: 180,    // Below this = danger
+    slowSpeedThreshold: 120,    // Below this = danger
     slowSpeedDuration: 2.0      // 2 seconds slow = beast
 };
 
@@ -149,7 +115,7 @@ let gameState = {
         y: 0,
         visualX: 0,
         visualY: 0,
-        speed: 200,
+        speed: 150,
         lateralSpeed: 0,
         angle: 0,
         airborne: false,
@@ -228,300 +194,6 @@ const input = {
     space: false,
     _lastSpace: false
 };
-
-// ===================
-// GAMEPAD / CONTROLLER SUPPORT
-// ===================
-
-const gamepadState = {
-    connected: false,
-    gamepadIndex: null,
-    deadzone: 0.15,
-    // Track button states for edge detection
-    buttons: {
-        a: false,
-        b: false,
-        start: false,
-        select: false
-    },
-    _lastButtons: {
-        a: false,
-        b: false,
-        start: false,
-        select: false
-    }
-};
-
-function updateGamepad() {
-    const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
-    let gamepad = null;
-
-    // Find first connected gamepad
-    for (let i = 0; i < gamepads.length; i++) {
-        if (gamepads[i] && gamepads[i].connected) {
-            gamepad = gamepads[i];
-            gamepadState.gamepadIndex = i;
-            gamepadState.connected = true;
-            break;
-        }
-    }
-
-    if (!gamepad) {
-        gamepadState.connected = false;
-        return;
-    }
-
-    // Store previous button states for edge detection
-    gamepadState._lastButtons.a = gamepadState.buttons.a;
-    gamepadState._lastButtons.b = gamepadState.buttons.b;
-    gamepadState._lastButtons.start = gamepadState.buttons.start;
-    gamepadState._lastButtons.select = gamepadState.buttons.select;
-
-    // Read left stick X axis for steering
-    const leftStickX = gamepad.axes[0] || 0;
-
-    // Apply deadzone
-    if (Math.abs(leftStickX) > gamepadState.deadzone) {
-        // Normalize input after deadzone
-        const normalizedX = (Math.abs(leftStickX) - gamepadState.deadzone) / (1 - gamepadState.deadzone);
-        const signedX = normalizedX * Math.sign(leftStickX);
-
-        input.left = signedX < -0.1;
-        input.right = signedX > 0.1;
-    } else {
-        // Only reset if keyboard isn't providing input
-        if (!isKeyboardActive()) {
-            input.left = false;
-            input.right = false;
-        }
-    }
-
-    // D-pad support (buttons 12-15 on standard gamepad)
-    const dpadLeft = gamepad.buttons[14] && gamepad.buttons[14].pressed;
-    const dpadRight = gamepad.buttons[15] && gamepad.buttons[15].pressed;
-    const dpadDown = gamepad.buttons[13] && gamepad.buttons[13].pressed;
-
-    if (dpadLeft) input.left = true;
-    if (dpadRight) input.right = true;
-    if (dpadDown) input.down = true;
-
-    // Left/Right triggers or bumpers for tuck (speed boost)
-    // RT = button 7, LT = button 6, RB = button 5, LB = button 4
-    const rightTrigger = gamepad.buttons[7] && gamepad.buttons[7].value > 0.1;
-    const leftTrigger = gamepad.buttons[6] && gamepad.buttons[6].value > 0.1;
-    const rightBumper = gamepad.buttons[5] && gamepad.buttons[5].pressed;
-    const leftBumper = gamepad.buttons[4] && gamepad.buttons[4].pressed;
-
-    if (rightTrigger || leftTrigger || rightBumper || leftBumper) {
-        input.down = true;
-    }
-
-    // A button (button 0) = Start game / Confirm
-    // B button (button 1) = Alternative action
-    gamepadState.buttons.a = gamepad.buttons[0] && gamepad.buttons[0].pressed;
-    gamepadState.buttons.b = gamepad.buttons[1] && gamepad.buttons[1].pressed;
-
-    // Start button (button 9) / Select button (button 8)
-    gamepadState.buttons.start = gamepad.buttons[9] && gamepad.buttons[9].pressed;
-    gamepadState.buttons.select = gamepad.buttons[8] && gamepad.buttons[8].pressed;
-
-    // Map A button or Start to space for menu navigation
-    if (gamepadState.buttons.a || gamepadState.buttons.start) {
-        input.space = true;
-    }
-}
-
-// Track if keyboard is currently providing directional input
-let keyboardActiveLeft = false;
-let keyboardActiveRight = false;
-let keyboardActiveDown = false;
-
-function isKeyboardActive() {
-    return keyboardActiveLeft || keyboardActiveRight;
-}
-
-// ===================
-// HAPTICS / VIBRATION SYSTEM
-// ===================
-
-const haptics = {
-    // Vibration patterns for different game events
-    patterns: {
-        // Crashes and impacts
-        crash: { duration: 200, weakMagnitude: 0.8, strongMagnitude: 1.0 },
-        crashHard: { duration: 300, weakMagnitude: 1.0, strongMagnitude: 1.0 },
-
-        // Landings
-        landSoft: { duration: 50, weakMagnitude: 0.2, strongMagnitude: 0.3 },
-        landMedium: { duration: 80, weakMagnitude: 0.4, strongMagnitude: 0.5 },
-        landHard: { duration: 120, weakMagnitude: 0.6, strongMagnitude: 0.7 },
-
-        // Tricks
-        trickSmall: { duration: 100, weakMagnitude: 0.3, strongMagnitude: 0.2 },
-        trickMedium: { duration: 150, weakMagnitude: 0.5, strongMagnitude: 0.4 },
-        trickBig: { duration: 200, weakMagnitude: 0.7, strongMagnitude: 0.6 },
-        trickEpic: { duration: 300, weakMagnitude: 1.0, strongMagnitude: 0.8 },
-
-        // Grinding - continuous low rumble
-        grindStart: { duration: 80, weakMagnitude: 0.3, strongMagnitude: 0.1 },
-        grindPulse: { duration: 40, weakMagnitude: 0.2, strongMagnitude: 0.1 },
-        grindEnd: { duration: 100, weakMagnitude: 0.4, strongMagnitude: 0.3 },
-
-        // Jump launch
-        jumpLaunch: { duration: 60, weakMagnitude: 0.4, strongMagnitude: 0.3 },
-        jumpLaunchBig: { duration: 100, weakMagnitude: 0.6, strongMagnitude: 0.5 },
-
-        // Chase/Danger
-        beastSpawn: { duration: 500, weakMagnitude: 0.6, strongMagnitude: 0.8 },
-        beastLunge: { duration: 150, weakMagnitude: 0.7, strongMagnitude: 0.9 },
-        beastClose: { duration: 100, weakMagnitude: 0.5, strongMagnitude: 0.6 },
-        fogClose: { duration: 80, weakMagnitude: 0.3, strongMagnitude: 0.2 },
-
-        // Speed/Carving feedback
-        carveLeft: { duration: 30, weakMagnitude: 0.15, strongMagnitude: 0.0 },
-        carveRight: { duration: 30, weakMagnitude: 0.0, strongMagnitude: 0.15 },
-        speedBoost: { duration: 50, weakMagnitude: 0.2, strongMagnitude: 0.1 },
-        highSpeed: { duration: 40, weakMagnitude: 0.1, strongMagnitude: 0.15 },
-
-        // Game state
-        gameOver: { duration: 400, weakMagnitude: 0.8, strongMagnitude: 1.0 },
-        gameStart: { duration: 150, weakMagnitude: 0.4, strongMagnitude: 0.3 }
-    },
-
-    // Cooldowns to prevent haptic spam
-    cooldowns: {},
-
-    // Active vibration state for continuous effects
-    activeVibration: null,
-    grindVibrationTimer: 0
-};
-
-function triggerHaptic(patternName, cooldownMs = 0) {
-    if (!displaySettings.hapticsEnabled) return;
-    if (!gamepadState.connected) return;
-
-    const pattern = haptics.patterns[patternName];
-    if (!pattern) return;
-
-    // Check cooldown
-    const now = performance.now();
-    if (cooldownMs > 0 && haptics.cooldowns[patternName]) {
-        if (now - haptics.cooldowns[patternName] < cooldownMs) {
-            return;
-        }
-    }
-    haptics.cooldowns[patternName] = now;
-
-    // Get the gamepad
-    const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
-    const gamepad = gamepads[gamepadState.gamepadIndex];
-
-    if (!gamepad || !gamepad.vibrationActuator) return;
-
-    // Trigger vibration
-    try {
-        gamepad.vibrationActuator.playEffect('dual-rumble', {
-            startDelay: 0,
-            duration: pattern.duration,
-            weakMagnitude: pattern.weakMagnitude,
-            strongMagnitude: pattern.strongMagnitude
-        });
-    } catch (e) {
-        // Vibration not supported or failed - silently ignore
-    }
-}
-
-function triggerHapticCustom(duration, weakMagnitude, strongMagnitude) {
-    if (!displaySettings.hapticsEnabled) return;
-    if (!gamepadState.connected) return;
-
-    const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
-    const gamepad = gamepads[gamepadState.gamepadIndex];
-
-    if (!gamepad || !gamepad.vibrationActuator) return;
-
-    try {
-        gamepad.vibrationActuator.playEffect('dual-rumble', {
-            startDelay: 0,
-            duration: duration,
-            weakMagnitude: clamp(weakMagnitude, 0, 1),
-            strongMagnitude: clamp(strongMagnitude, 0, 1)
-        });
-    } catch (e) {
-        // Vibration not supported
-    }
-}
-
-function stopHaptic() {
-    if (!gamepadState.connected) return;
-
-    const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
-    const gamepad = gamepads[gamepadState.gamepadIndex];
-
-    if (!gamepad || !gamepad.vibrationActuator) return;
-
-    try {
-        gamepad.vibrationActuator.reset();
-    } catch (e) {
-        // Vibration not supported
-    }
-}
-
-// Update continuous haptic effects (grinding, high speed, etc.)
-function updateHaptics(dt) {
-    if (!displaySettings.hapticsEnabled) return;
-    if (!gamepadState.connected) return;
-
-    const player = gameState.player;
-
-    // Grinding haptic - continuous subtle pulses
-    if (player.grinding) {
-        haptics.grindVibrationTimer -= dt;
-        if (haptics.grindVibrationTimer <= 0) {
-            triggerHaptic('grindPulse');
-            haptics.grindVibrationTimer = 0.08; // Pulse every 80ms
-        }
-    }
-
-    // High speed haptic - subtle rumble when going fast
-    if (player.speed > 550 && !player.crashed && !player.airborne) {
-        const speedRatio = (player.speed - 550) / (PHYSICS.maxSpeed - 550);
-        // Occasional pulse based on speed
-        if (Math.random() < speedRatio * 0.15) {
-            triggerHaptic('highSpeed', 100);
-        }
-    }
-
-    // Carving feedback - asymmetric rumble for directional feel
-    if (!player.crashed && !player.airborne && !player.grinding) {
-        const carving = Math.abs(player.angle) > 25;
-        if (carving && player.speed > 300) {
-            if (player.angle < -25) {
-                triggerHaptic('carveLeft', 150);
-            } else if (player.angle > 25) {
-                triggerHaptic('carveRight', 150);
-            }
-        }
-    }
-
-    // Danger/chase haptics - pulse when fog is close
-    if (gameState.dangerLevel > 0.5) {
-        const dangerPulseChance = (gameState.dangerLevel - 0.5) * 0.1;
-        if (Math.random() < dangerPulseChance) {
-            triggerHaptic('fogClose', 500);
-        }
-    }
-
-    // Beast proximity haptic
-    if (gameState.chase.beastActive) {
-        const beastDist = gameState.player.y - gameState.chase.beastY;
-        if (beastDist < 150 && beastDist > 40) {
-            if (Math.random() < 0.05) {
-                triggerHaptic('beastClose', 300);
-            }
-        }
-    }
-}
 
 function setupInput() {
     document.addEventListener('keydown', (e) => {
@@ -901,9 +573,9 @@ function updateGroundPhysics(player, dt) {
     const carving = Math.abs(player.angle) > 20;
     const speedMod = carving ? PHYSICS.carveSpeedBoost : 1.0;
 
-    // Tuck for extra speed - bigger boost!
+    // Tuck for extra speed
     if (input.down) {
-        player.speed += PHYSICS.downhillAccel * 1.8 * dt;
+        player.speed += PHYSICS.downhillAccel * 1.5 * dt;
     } else {
         player.speed += PHYSICS.downhillAccel * speedMod * dt;
     }
@@ -1330,9 +1002,6 @@ function updateBeast(dt) {
 // ===================
 
 function triggerScreenShake(intensity, decay) {
-    // Respect screen shake setting
-    if (!displaySettings.screenShakeEnabled) return;
-
     gameState.screenShake.intensity = intensity;
     gameState.screenShake.decay = decay;
 }
@@ -2395,7 +2064,7 @@ function startGame() {
         y: 0,
         visualX: 0,
         visualY: 0,
-        speed: 200,
+        speed: 150,
         lateralSpeed: 0,
         angle: 0,
         airborne: false,
@@ -2521,284 +2190,6 @@ function loadHighScore() {
     }
 }
 
-// ============================================
-// RESOLUTION & SETTINGS SYSTEM (ported from DEADLINE)
-// ============================================
-
-function setResolution(resKey) {
-    const res = RESOLUTIONS[resKey];
-    if (!res) return;
-
-    displaySettings.currentResolution = resKey;
-    displaySettings.scale = res.scale;
-
-    // Update canvas size
-    if (canvas) {
-        canvas.width = res.width;
-        canvas.height = res.height;
-    }
-
-    // Update global dimensions
-    CANVAS_WIDTH = res.width;
-    CANVAS_HEIGHT = res.height;
-
-    // Update terrain slope width to match canvas
-    TERRAIN.slopeWidth = res.width;
-
-    // Save preference
-    try {
-        localStorage.setItem('shredordead_resolution', resKey);
-    } catch (e) {}
-
-    // Re-fit canvas to viewport
-    fitCanvasToViewport();
-
-    // Update settings UI
-    updateSettingsUI();
-}
-
-function fitCanvasToViewport() {
-    if (!canvas) return;
-
-    // In fullscreen mode, use maximum available space
-    const isFullscreen = document.fullscreenElement || displaySettings.fullscreen;
-    const marginX = isFullscreen ? 0 : 20;
-    const marginY = isFullscreen ? 0 : 40;
-
-    const maxWidth = window.innerWidth - marginX;
-    const maxHeight = window.innerHeight - marginY;
-
-    const canvasRatio = canvas.width / canvas.height;
-    const viewportRatio = maxWidth / maxHeight;
-
-    if (canvasRatio > viewportRatio) {
-        // Canvas is wider than viewport - constrain by width
-        canvas.style.width = maxWidth + 'px';
-        canvas.style.height = Math.floor(maxWidth / canvasRatio) + 'px';
-    } else {
-        // Canvas is taller than viewport - constrain by height
-        canvas.style.height = maxHeight + 'px';
-        canvas.style.width = Math.floor(maxHeight * canvasRatio) + 'px';
-    }
-
-    // Center the canvas
-    canvas.style.margin = 'auto';
-    canvas.style.display = 'block';
-}
-
-function toggleFullscreen() {
-    if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen().catch(err => {
-            console.log('Fullscreen request failed:', err);
-        });
-        displaySettings.fullscreen = true;
-    } else {
-        document.exitFullscreen();
-        displaySettings.fullscreen = false;
-    }
-}
-
-function autoDetectResolution() {
-    const screenWidth = window.innerWidth;
-    const screenHeight = window.innerHeight;
-    const aspectRatio = screenWidth / screenHeight;
-    const dpr = window.devicePixelRatio || 1;
-    const ua = navigator.userAgent || '';
-
-    const isIOS = /iPhone|iPad|iPod/i.test(ua);
-    const isAndroid = /Android/i.test(ua);
-    const isMobile = isIOS || isAndroid || ('ontouchstart' in window && screenWidth < 900);
-
-    // Mobile devices
-    if (isIOS || isMobile) {
-        if (Math.min(screenWidth, screenHeight) >= 900 || dpr > 2) return '600x800';
-        return '480x640';
-    }
-
-    // Steam Deck or similar
-    if (/Steam Deck/i.test(ua) || (aspectRatio >= 1.55 && aspectRatio < 1.7)) {
-        return '500x800';
-    }
-
-    // Large screens - use higher resolution
-    if (screenHeight >= 1080) {
-        return '720x960';
-    }
-
-    if (screenHeight >= 800) {
-        return '600x800';
-    }
-
-    // Default to base resolution
-    return '480x640';
-}
-
-function getDeviceProfile() {
-    const ua = navigator.userAgent || '';
-    const screenWidth = window.innerWidth;
-    const screenHeight = window.innerHeight;
-
-    if (/iPhone|iPad|iPod/i.test(ua)) return 'iOS Device';
-    if (/Android/i.test(ua)) return 'Android';
-    if (/Steam Deck/i.test(ua)) return 'Steam Deck';
-    if (/ROG Ally|ASUS/i.test(ua)) return 'ROG Ally';
-    if ('ontouchstart' in window && screenWidth < 900) return 'Mobile';
-    return 'Desktop';
-}
-
-function loadSettings() {
-    try {
-        // Load resolution
-        const savedRes = localStorage.getItem('shredordead_resolution');
-        if (savedRes && RESOLUTIONS[savedRes]) {
-            displaySettings.currentResolution = savedRes;
-        }
-
-        // Load auto-detect preference
-        const savedAutoDetect = localStorage.getItem('shredordead_autodetect');
-        if (savedAutoDetect !== null) {
-            displaySettings.autoDetect = savedAutoDetect === 'true';
-        }
-
-        // Load screen shake preference
-        const savedScreenShake = localStorage.getItem('shredordead_screenshake');
-        if (savedScreenShake !== null) {
-            displaySettings.screenShakeEnabled = savedScreenShake !== 'false';
-        }
-    } catch (e) {}
-
-    // Auto-detect if enabled and no saved resolution
-    if (displaySettings.autoDetect) {
-        const detected = autoDetectResolution();
-        displaySettings.currentResolution = detected;
-    }
-
-    return displaySettings.currentResolution;
-}
-
-function saveSettings() {
-    try {
-        localStorage.setItem('shredordead_resolution', displaySettings.currentResolution);
-        localStorage.setItem('shredordead_autodetect', displaySettings.autoDetect.toString());
-        localStorage.setItem('shredordead_screenshake', displaySettings.screenShakeEnabled.toString());
-    } catch (e) {}
-}
-
-// ============================================
-// SETTINGS MENU FUNCTIONS
-// ============================================
-
-function showSettingsMenu() {
-    const menu = document.getElementById('settingsMenu');
-    if (menu) {
-        menu.classList.add('active');
-        updateSettingsUI();
-    }
-}
-
-function hideSettingsMenu() {
-    const menu = document.getElementById('settingsMenu');
-    if (menu) {
-        menu.classList.remove('active');
-    }
-}
-
-function updateSettingsUI() {
-    // Update device profile label
-    const deviceLabel = document.getElementById('deviceProfileLabel');
-    if (deviceLabel) {
-        deviceLabel.textContent = getDeviceProfile();
-    }
-
-    // Update resolution select
-    const resSelect = document.getElementById('resolutionSelect');
-    if (resSelect) {
-        resSelect.value = displaySettings.currentResolution;
-    }
-
-    // Update auto-detect checkbox
-    const autoDetectToggle = document.getElementById('autoDetectToggle');
-    if (autoDetectToggle) {
-        autoDetectToggle.checked = displaySettings.autoDetect;
-    }
-
-    // Update screen shake checkbox
-    const screenShakeToggle = document.getElementById('screenShakeToggle');
-    if (screenShakeToggle) {
-        screenShakeToggle.checked = displaySettings.screenShakeEnabled;
-    }
-}
-
-function changeResolution(resKey) {
-    if (RESOLUTIONS[resKey]) {
-        displaySettings.autoDetect = false;
-        setResolution(resKey);
-        saveSettings();
-    }
-}
-
-function toggleAutoDetect(enabled) {
-    displaySettings.autoDetect = enabled;
-    if (enabled) {
-        const detected = autoDetectResolution();
-        setResolution(detected);
-    }
-    saveSettings();
-    updateSettingsUI();
-}
-
-function toggleScreenShakeSetting(enabled) {
-    displaySettings.screenShakeEnabled = enabled;
-    saveSettings();
-}
-
-function resetAllSettings() {
-    // Reset to defaults
-    displaySettings.autoDetect = true;
-    displaySettings.screenShakeEnabled = true;
-
-    // Clear localStorage
-    try {
-        localStorage.removeItem('shredordead_resolution');
-        localStorage.removeItem('shredordead_autodetect');
-        localStorage.removeItem('shredordead_screenshake');
-    } catch (e) {}
-
-    // Re-detect and apply
-    const detected = autoDetectResolution();
-    setResolution(detected);
-    updateSettingsUI();
-}
-
-// Handle fullscreen change events
-document.addEventListener('fullscreenchange', () => {
-    displaySettings.fullscreen = !!document.fullscreenElement;
-
-    // When entering fullscreen, auto-detect best resolution for the screen
-    if (document.fullscreenElement && displaySettings.autoDetect) {
-        const bestRes = autoDetectResolution();
-        if (bestRes && bestRes !== displaySettings.currentResolution) {
-            setResolution(bestRes);
-        }
-    }
-
-    // Re-fit canvas to use full screen space
-    setTimeout(fitCanvasToViewport, 100);
-});
-
-// Re-fit canvas on window resize
-window.addEventListener('resize', () => {
-    fitCanvasToViewport();
-
-    // Auto-detect on resize if enabled
-    if (displaySettings.autoDetect) {
-        const detected = autoDetectResolution();
-        if (detected !== displaySettings.currentResolution) {
-            setResolution(detected);
-        }
-    }
-});
-
 // ===================
 // MAIN LOOP
 // ===================
@@ -2848,18 +2239,11 @@ function init() {
     canvas = document.getElementById('gameCanvas');
     ctx = canvas.getContext('2d');
 
-    // Initialize resolution system - load saved settings or auto-detect
-    const initialRes = loadSettings();
-    setResolution(initialRes);
-
-    // Initial fit to viewport
-    fitCanvasToViewport();
+    canvas.width = CANVAS_WIDTH;
+    canvas.height = CANVAS_HEIGHT;
 
     setupInput();
     loadHighScore();
-
-    // Initialize settings UI
-    updateSettingsUI();
 
     requestAnimationFrame(gameLoop);
 }
