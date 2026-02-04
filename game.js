@@ -198,27 +198,37 @@ function getTerrainSlopeWidth() {
     if (displaySettings.fillScreen && displaySettings.fullscreen) {
         const isLandscape = CANVAS_WIDTH > CANVAS_HEIGHT;
         if (isLandscape) {
-            // For landscape, slope fills center portion of screen
-            return Math.min(CANVAS_HEIGHT * 0.9, 720);
+            // For landscape/widescreen, slope fills the ENTIRE screen width
+            // This gives the player full horizontal freedom to carve
+            return CANVAS_WIDTH;
         }
         // For portrait, slope fills width
-        return Math.min(CANVAS_WIDTH, 720);
+        return CANVAS_WIDTH;
     }
 
     if (!res) return TERRAIN.baseSlopeWidth;
 
     if (res.orientation === 'landscape') {
-        // For landscape, slope fills center portion of screen
-        // Scale with height to maintain playable area ratio
-        return Math.min(res.height * 0.9, 720);
+        // For landscape, slope fills the entire screen width
+        return res.width;
     }
     // For portrait, slope fills width
-    return Math.min(res.width, 720);
+    return res.width;
 }
 
 function getTerrainLaneWidth() {
     const slopeWidth = getTerrainSlopeWidth();
-    return Math.floor(slopeWidth / TERRAIN.laneCount);
+    // Keep lane width consistent (~68px), but increase lane count for wider screens
+    const baseLaneWidth = 68;
+    return baseLaneWidth;
+}
+
+// Dynamically calculate lane count based on slope width
+function getTerrainLaneCount() {
+    const slopeWidth = getTerrainSlopeWidth();
+    const baseLaneWidth = 68;
+    // Calculate how many lanes fit, minimum 7 for portrait, scales up for widescreen
+    return Math.max(7, Math.floor(slopeWidth / baseLaneWidth));
 }
 
 // Jump variety system
@@ -738,7 +748,7 @@ function generateTerrainChunk(chunkIndex) {
     const baseSeed = gameState.terrain.seed + chunkIndex * 1000;
 
     const gridRows = Math.floor(TERRAIN.chunkHeight / 80);
-    const gridCols = TERRAIN.laneCount;
+    const gridCols = getTerrainLaneCount(); // Dynamic lane count for widescreen support
 
     // Track cells used by clusters to avoid overlaps
     const usedCells = new Set();
@@ -1664,25 +1674,30 @@ function drawBackground() {
 }
 
 function drawTerrain() {
-    // Draw slope edge markers
-    ctx.strokeStyle = COLORS.cyan;
-    ctx.lineWidth = 2;
-    ctx.setLineDash([10, 10]);
+    // Only draw slope edge markers if slope doesn't fill the screen
+    // In fullscreen widescreen mode, the entire screen is playable
+    const slopeWidth = TERRAIN.slopeWidth;
+    const leftEdge = CANVAS_WIDTH / 2 - slopeWidth / 2;
+    const rightEdge = CANVAS_WIDTH / 2 + slopeWidth / 2;
 
-    const leftEdge = CANVAS_WIDTH / 2 - TERRAIN.slopeWidth / 2;
-    const rightEdge = CANVAS_WIDTH / 2 + TERRAIN.slopeWidth / 2;
+    // Only draw edge markers if there's a visible margin (not full-width)
+    if (leftEdge > 5) {
+        ctx.strokeStyle = COLORS.cyan;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([10, 10]);
 
-    ctx.beginPath();
-    ctx.moveTo(leftEdge, 0);
-    ctx.lineTo(leftEdge, CANVAS_HEIGHT);
-    ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(leftEdge, 0);
+        ctx.lineTo(leftEdge, CANVAS_HEIGHT);
+        ctx.stroke();
 
-    ctx.beginPath();
-    ctx.moveTo(rightEdge, 0);
-    ctx.lineTo(rightEdge, CANVAS_HEIGHT);
-    ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(rightEdge, 0);
+        ctx.lineTo(rightEdge, CANVAS_HEIGHT);
+        ctx.stroke();
 
-    ctx.setLineDash([]);
+        ctx.setLineDash([]);
+    }
 }
 
 function drawObstacles() {
