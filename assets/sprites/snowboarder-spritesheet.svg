@@ -1,0 +1,408 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="384" height="256" viewBox="0 0 384 256">
+  <!-- Snowboarder Sprite Sheet: 6 columns x 4 rows = 24 frames, 64x64 per frame -->
+  <!-- Row 1: Idle/Carve Left (frames 0-5) -->
+  <!-- Row 2: Carve Right (frames 6-11) -->
+  <!-- Row 3: Airborne/Jump (frames 12-17) -->
+  <!-- Row 4: Crash/Wipeout (frames 18-23) -->
+
+  <defs>
+    <!-- Board gradient -->
+    <linearGradient id="boardGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#ff1493"/>
+      <stop offset="100%" style="stop-color:#ff00ff"/>
+    </linearGradient>
+    <!-- Jacket gradient -->
+    <linearGradient id="jacketGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#00ffff"/>
+      <stop offset="100%" style="stop-color:#00bfff"/>
+    </linearGradient>
+    <!-- Goggle gradient -->
+    <linearGradient id="goggleGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#ff00ff"/>
+      <stop offset="100%" style="stop-color:#00ffff"/>
+    </linearGradient>
+    <!-- Glow filter -->
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="1.5" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- ROW 1: IDLE / CARVE LEFT (slight lean variations) -->
+  <!-- Frame 0: Neutral idle -->
+  <g transform="translate(32, 32)">
+    <!-- Shadow -->
+    <ellipse cx="0" cy="26" rx="18" ry="4" fill="rgba(0,0,0,0.3)"/>
+    <!-- Board -->
+    <rect x="-20" y="18" width="40" height="6" rx="3" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <rect x="-8" y="19" width="4" height="4" fill="#111"/>
+    <rect x="4" y="19" width="4" height="4" fill="#111"/>
+    <!-- Body/Jacket -->
+    <ellipse cx="0" cy="6" rx="10" ry="14" fill="url(#jacketGrad)" filter="url(#glow)"/>
+    <rect x="-10" y="2" width="20" height="3" fill="#ff00ff"/>
+    <!-- Arms -->
+    <line x1="-10" y1="0" x2="-16" y2="8" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <line x1="10" y1="0" x2="16" y2="8" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <!-- Head -->
+    <circle cx="0" cy="-12" r="8" fill="#ffcc99"/>
+    <!-- Helmet -->
+    <path d="M-9,-12 A9,9 0 0,1 9,-12" fill="#222"/>
+    <!-- Goggles -->
+    <rect x="-8" y="-14" width="16" height="6" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+    <ellipse cx="-3" cy="-12" rx="2" ry="1" fill="rgba(255,255,255,0.4)"/>
+  </g>
+
+  <!-- Frame 1: Slight left lean -->
+  <g transform="translate(96, 32) rotate(-5)">
+    <ellipse cx="0" cy="26" rx="18" ry="4" fill="rgba(0,0,0,0.3)"/>
+    <rect x="-20" y="18" width="40" height="6" rx="3" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <rect x="-8" y="19" width="4" height="4" fill="#111"/>
+    <rect x="4" y="19" width="4" height="4" fill="#111"/>
+    <ellipse cx="0" cy="6" rx="10" ry="14" fill="url(#jacketGrad)" filter="url(#glow)"/>
+    <rect x="-10" y="2" width="20" height="3" fill="#ff00ff"/>
+    <line x1="-10" y1="0" x2="-18" y2="6" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <line x1="10" y1="0" x2="14" y2="10" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="0" cy="-12" r="8" fill="#ffcc99"/>
+    <path d="M-9,-12 A9,9 0 0,1 9,-12" fill="#222"/>
+    <rect x="-8" y="-14" width="16" height="6" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+  </g>
+
+  <!-- Frame 2: Medium left lean -->
+  <g transform="translate(160, 32) rotate(-12)">
+    <ellipse cx="0" cy="26" rx="18" ry="4" fill="rgba(0,0,0,0.3)"/>
+    <rect x="-20" y="18" width="40" height="6" rx="3" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <rect x="-8" y="19" width="4" height="4" fill="#111"/>
+    <rect x="4" y="19" width="4" height="4" fill="#111"/>
+    <ellipse cx="0" cy="6" rx="10" ry="14" fill="url(#jacketGrad)" filter="url(#glow)"/>
+    <rect x="-10" y="2" width="20" height="3" fill="#ff00ff"/>
+    <line x1="-10" y1="0" x2="-20" y2="4" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <line x1="10" y1="0" x2="12" y2="12" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="0" cy="-12" r="8" fill="#ffcc99"/>
+    <path d="M-9,-12 A9,9 0 0,1 9,-12" fill="#222"/>
+    <rect x="-8" y="-14" width="16" height="6" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+  </g>
+
+  <!-- Frame 3: Hard left lean -->
+  <g transform="translate(224, 32) rotate(-20)">
+    <ellipse cx="0" cy="26" rx="18" ry="4" fill="rgba(0,0,0,0.3)"/>
+    <rect x="-20" y="18" width="40" height="6" rx="3" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <rect x="-8" y="19" width="4" height="4" fill="#111"/>
+    <rect x="4" y="19" width="4" height="4" fill="#111"/>
+    <ellipse cx="0" cy="6" rx="10" ry="14" fill="url(#jacketGrad)" filter="url(#glow)"/>
+    <rect x="-10" y="2" width="20" height="3" fill="#ff00ff"/>
+    <line x1="-10" y1="0" x2="-22" y2="2" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <line x1="10" y1="0" x2="10" y2="14" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="0" cy="-12" r="8" fill="#ffcc99"/>
+    <path d="M-9,-12 A9,9 0 0,1 9,-12" fill="#222"/>
+    <rect x="-8" y="-14" width="16" height="6" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+  </g>
+
+  <!-- Frame 4: Max left carve -->
+  <g transform="translate(288, 32) rotate(-28)">
+    <ellipse cx="0" cy="26" rx="18" ry="4" fill="rgba(0,0,0,0.3)"/>
+    <rect x="-20" y="18" width="40" height="6" rx="3" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <rect x="-8" y="19" width="4" height="4" fill="#111"/>
+    <rect x="4" y="19" width="4" height="4" fill="#111"/>
+    <ellipse cx="0" cy="6" rx="10" ry="14" fill="url(#jacketGrad)" filter="url(#glow)"/>
+    <rect x="-10" y="2" width="20" height="3" fill="#ff00ff"/>
+    <line x1="-10" y1="0" x2="-24" y2="0" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <line x1="10" y1="0" x2="8" y2="16" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="0" cy="-12" r="8" fill="#ffcc99"/>
+    <path d="M-9,-12 A9,9 0 0,1 9,-12" fill="#222"/>
+    <rect x="-8" y="-14" width="16" height="6" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+  </g>
+
+  <!-- Frame 5: Extreme left carve with spray -->
+  <g transform="translate(352, 32) rotate(-35)">
+    <ellipse cx="0" cy="26" rx="18" ry="4" fill="rgba(0,0,0,0.3)"/>
+    <!-- Snow spray particles -->
+    <circle cx="22" cy="20" r="2" fill="rgba(255,255,255,0.8)"/>
+    <circle cx="26" cy="16" r="1.5" fill="rgba(255,255,255,0.6)"/>
+    <circle cx="24" cy="12" r="1" fill="rgba(255,255,255,0.4)"/>
+    <rect x="-20" y="18" width="40" height="6" rx="3" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <rect x="-8" y="19" width="4" height="4" fill="#111"/>
+    <rect x="4" y="19" width="4" height="4" fill="#111"/>
+    <ellipse cx="0" cy="6" rx="10" ry="14" fill="url(#jacketGrad)" filter="url(#glow)"/>
+    <rect x="-10" y="2" width="20" height="3" fill="#ff00ff"/>
+    <line x1="-10" y1="0" x2="-26" y2="-2" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <line x1="10" y1="0" x2="6" y2="18" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="0" cy="-12" r="8" fill="#ffcc99"/>
+    <path d="M-9,-12 A9,9 0 0,1 9,-12" fill="#222"/>
+    <rect x="-8" y="-14" width="16" height="6" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+  </g>
+
+  <!-- ROW 2: CARVE RIGHT (mirrored lean variations) -->
+  <!-- Frame 6: Slight right lean -->
+  <g transform="translate(32, 96) rotate(5)">
+    <ellipse cx="0" cy="26" rx="18" ry="4" fill="rgba(0,0,0,0.3)"/>
+    <rect x="-20" y="18" width="40" height="6" rx="3" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <rect x="-8" y="19" width="4" height="4" fill="#111"/>
+    <rect x="4" y="19" width="4" height="4" fill="#111"/>
+    <ellipse cx="0" cy="6" rx="10" ry="14" fill="url(#jacketGrad)" filter="url(#glow)"/>
+    <rect x="-10" y="2" width="20" height="3" fill="#ff00ff"/>
+    <line x1="-10" y1="0" x2="-14" y2="10" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <line x1="10" y1="0" x2="18" y2="6" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="0" cy="-12" r="8" fill="#ffcc99"/>
+    <path d="M-9,-12 A9,9 0 0,1 9,-12" fill="#222"/>
+    <rect x="-8" y="-14" width="16" height="6" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+  </g>
+
+  <!-- Frame 7: Medium right lean -->
+  <g transform="translate(96, 96) rotate(12)">
+    <ellipse cx="0" cy="26" rx="18" ry="4" fill="rgba(0,0,0,0.3)"/>
+    <rect x="-20" y="18" width="40" height="6" rx="3" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <rect x="-8" y="19" width="4" height="4" fill="#111"/>
+    <rect x="4" y="19" width="4" height="4" fill="#111"/>
+    <ellipse cx="0" cy="6" rx="10" ry="14" fill="url(#jacketGrad)" filter="url(#glow)"/>
+    <rect x="-10" y="2" width="20" height="3" fill="#ff00ff"/>
+    <line x1="-10" y1="0" x2="-12" y2="12" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <line x1="10" y1="0" x2="20" y2="4" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="0" cy="-12" r="8" fill="#ffcc99"/>
+    <path d="M-9,-12 A9,9 0 0,1 9,-12" fill="#222"/>
+    <rect x="-8" y="-14" width="16" height="6" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+  </g>
+
+  <!-- Frame 8: Hard right lean -->
+  <g transform="translate(160, 96) rotate(20)">
+    <ellipse cx="0" cy="26" rx="18" ry="4" fill="rgba(0,0,0,0.3)"/>
+    <rect x="-20" y="18" width="40" height="6" rx="3" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <rect x="-8" y="19" width="4" height="4" fill="#111"/>
+    <rect x="4" y="19" width="4" height="4" fill="#111"/>
+    <ellipse cx="0" cy="6" rx="10" ry="14" fill="url(#jacketGrad)" filter="url(#glow)"/>
+    <rect x="-10" y="2" width="20" height="3" fill="#ff00ff"/>
+    <line x1="-10" y1="0" x2="-10" y2="14" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <line x1="10" y1="0" x2="22" y2="2" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="0" cy="-12" r="8" fill="#ffcc99"/>
+    <path d="M-9,-12 A9,9 0 0,1 9,-12" fill="#222"/>
+    <rect x="-8" y="-14" width="16" height="6" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+  </g>
+
+  <!-- Frame 9: Max right carve -->
+  <g transform="translate(224, 96) rotate(28)">
+    <ellipse cx="0" cy="26" rx="18" ry="4" fill="rgba(0,0,0,0.3)"/>
+    <rect x="-20" y="18" width="40" height="6" rx="3" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <rect x="-8" y="19" width="4" height="4" fill="#111"/>
+    <rect x="4" y="19" width="4" height="4" fill="#111"/>
+    <ellipse cx="0" cy="6" rx="10" ry="14" fill="url(#jacketGrad)" filter="url(#glow)"/>
+    <rect x="-10" y="2" width="20" height="3" fill="#ff00ff"/>
+    <line x1="-10" y1="0" x2="-8" y2="16" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <line x1="10" y1="0" x2="24" y2="0" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="0" cy="-12" r="8" fill="#ffcc99"/>
+    <path d="M-9,-12 A9,9 0 0,1 9,-12" fill="#222"/>
+    <rect x="-8" y="-14" width="16" height="6" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+  </g>
+
+  <!-- Frame 10: Extreme right with spray -->
+  <g transform="translate(288, 96) rotate(35)">
+    <ellipse cx="0" cy="26" rx="18" ry="4" fill="rgba(0,0,0,0.3)"/>
+    <circle cx="-22" cy="20" r="2" fill="rgba(255,255,255,0.8)"/>
+    <circle cx="-26" cy="16" r="1.5" fill="rgba(255,255,255,0.6)"/>
+    <circle cx="-24" cy="12" r="1" fill="rgba(255,255,255,0.4)"/>
+    <rect x="-20" y="18" width="40" height="6" rx="3" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <rect x="-8" y="19" width="4" height="4" fill="#111"/>
+    <rect x="4" y="19" width="4" height="4" fill="#111"/>
+    <ellipse cx="0" cy="6" rx="10" ry="14" fill="url(#jacketGrad)" filter="url(#glow)"/>
+    <rect x="-10" y="2" width="20" height="3" fill="#ff00ff"/>
+    <line x1="-10" y1="0" x2="-6" y2="18" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <line x1="10" y1="0" x2="26" y2="-2" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="0" cy="-12" r="8" fill="#ffcc99"/>
+    <path d="M-9,-12 A9,9 0 0,1 9,-12" fill="#222"/>
+    <rect x="-8" y="-14" width="16" height="6" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+  </g>
+
+  <!-- Frame 11: Tucking pose -->
+  <g transform="translate(352, 96)">
+    <ellipse cx="0" cy="26" rx="18" ry="4" fill="rgba(0,0,0,0.3)"/>
+    <rect x="-20" y="18" width="40" height="6" rx="3" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <rect x="-8" y="19" width="4" height="4" fill="#111"/>
+    <rect x="4" y="19" width="4" height="4" fill="#111"/>
+    <!-- Crouched body -->
+    <ellipse cx="0" cy="8" rx="12" ry="10" fill="url(#jacketGrad)" filter="url(#glow)"/>
+    <rect x="-12" y="5" width="24" height="3" fill="#ff00ff"/>
+    <!-- Arms tucked forward -->
+    <line x1="-8" y1="4" x2="-4" y2="14" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <line x1="8" y1="4" x2="4" y2="14" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="0" cy="-6" r="8" fill="#ffcc99"/>
+    <path d="M-9,-6 A9,9 0 0,1 9,-6" fill="#222"/>
+    <rect x="-8" y="-8" width="16" height="6" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+  </g>
+
+  <!-- ROW 3: AIRBORNE / JUMP (arms up, tricks) -->
+  <!-- Frame 12: Launch -->
+  <g transform="translate(32, 160)">
+    <ellipse cx="0" cy="30" rx="14" ry="3" fill="rgba(0,0,0,0.15)"/>
+    <rect x="-20" y="18" width="40" height="6" rx="3" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <rect x="-8" y="19" width="4" height="4" fill="#111"/>
+    <rect x="4" y="19" width="4" height="4" fill="#111"/>
+    <ellipse cx="0" cy="6" rx="10" ry="14" fill="url(#jacketGrad)" filter="url(#glow)"/>
+    <rect x="-10" y="2" width="20" height="3" fill="#ff00ff"/>
+    <!-- Arms up -->
+    <line x1="-10" y1="0" x2="-18" y2="-10" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <line x1="10" y1="0" x2="18" y2="-10" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="0" cy="-12" r="8" fill="#ffcc99"/>
+    <path d="M-9,-12 A9,9 0 0,1 9,-12" fill="#222"/>
+    <rect x="-8" y="-14" width="16" height="6" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+  </g>
+
+  <!-- Frame 13: Peak height arms wave 1 -->
+  <g transform="translate(96, 160)">
+    <ellipse cx="0" cy="34" rx="12" ry="2" fill="rgba(0,0,0,0.1)"/>
+    <rect x="-20" y="18" width="40" height="6" rx="3" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <rect x="-8" y="19" width="4" height="4" fill="#111"/>
+    <rect x="4" y="19" width="4" height="4" fill="#111"/>
+    <ellipse cx="0" cy="6" rx="10" ry="14" fill="url(#jacketGrad)" filter="url(#glow)"/>
+    <rect x="-10" y="2" width="20" height="3" fill="#ff00ff"/>
+    <line x1="-10" y1="0" x2="-20" y2="-6" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <line x1="10" y1="0" x2="16" y2="-14" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="0" cy="-12" r="8" fill="#ffcc99"/>
+    <path d="M-9,-12 A9,9 0 0,1 9,-12" fill="#222"/>
+    <rect x="-8" y="-14" width="16" height="6" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+  </g>
+
+  <!-- Frame 14: Arms wave 2 -->
+  <g transform="translate(160, 160)">
+    <ellipse cx="0" cy="34" rx="12" ry="2" fill="rgba(0,0,0,0.1)"/>
+    <rect x="-20" y="18" width="40" height="6" rx="3" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <rect x="-8" y="19" width="4" height="4" fill="#111"/>
+    <rect x="4" y="19" width="4" height="4" fill="#111"/>
+    <ellipse cx="0" cy="6" rx="10" ry="14" fill="url(#jacketGrad)" filter="url(#glow)"/>
+    <rect x="-10" y="2" width="20" height="3" fill="#ff00ff"/>
+    <line x1="-10" y1="0" x2="-16" y2="-14" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <line x1="10" y1="0" x2="20" y2="-6" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="0" cy="-12" r="8" fill="#ffcc99"/>
+    <path d="M-9,-12 A9,9 0 0,1 9,-12" fill="#222"/>
+    <rect x="-8" y="-14" width="16" height="6" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+  </g>
+
+  <!-- Frame 15: 180 spin (side view) -->
+  <g transform="translate(224, 160)">
+    <ellipse cx="0" cy="34" rx="12" ry="2" fill="rgba(0,0,0,0.1)"/>
+    <!-- Board sideways -->
+    <ellipse cx="0" cy="20" rx="6" ry="20" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <ellipse cx="0" cy="6" rx="6" ry="14" fill="url(#jacketGrad)" filter="url(#glow)"/>
+    <rect x="-6" y="2" width="12" height="3" fill="#ff00ff"/>
+    <line x1="-4" y1="0" x2="-8" y2="-10" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <line x1="4" y1="0" x2="8" y2="-10" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="0" cy="-12" r="8" fill="#ffcc99"/>
+    <path d="M-9,-12 A9,9 0 0,1 9,-12" fill="#222"/>
+    <rect x="-8" y="-14" width="16" height="6" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+  </g>
+
+  <!-- Frame 16: Board grab -->
+  <g transform="translate(288, 160)">
+    <ellipse cx="0" cy="34" rx="12" ry="2" fill="rgba(0,0,0,0.1)"/>
+    <rect x="-20" y="18" width="40" height="6" rx="3" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <rect x="-8" y="19" width="4" height="4" fill="#111"/>
+    <rect x="4" y="19" width="4" height="4" fill="#111"/>
+    <ellipse cx="0" cy="6" rx="10" ry="14" fill="url(#jacketGrad)" filter="url(#glow)"/>
+    <rect x="-10" y="2" width="20" height="3" fill="#ff00ff"/>
+    <!-- Grabbing board -->
+    <line x1="-10" y1="0" x2="-14" y2="18" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <line x1="10" y1="0" x2="18" y2="-8" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="0" cy="-12" r="8" fill="#ffcc99"/>
+    <path d="M-9,-12 A9,9 0 0,1 9,-12" fill="#222"/>
+    <rect x="-8" y="-14" width="16" height="6" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+  </g>
+
+  <!-- Frame 17: Landing prep -->
+  <g transform="translate(352, 160)">
+    <ellipse cx="0" cy="28" rx="16" ry="3" fill="rgba(0,0,0,0.2)"/>
+    <rect x="-20" y="18" width="40" height="6" rx="3" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <rect x="-8" y="19" width="4" height="4" fill="#111"/>
+    <rect x="4" y="19" width="4" height="4" fill="#111"/>
+    <ellipse cx="0" cy="6" rx="10" ry="14" fill="url(#jacketGrad)" filter="url(#glow)"/>
+    <rect x="-10" y="2" width="20" height="3" fill="#ff00ff"/>
+    <line x1="-10" y1="0" x2="-16" y2="4" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <line x1="10" y1="0" x2="16" y2="4" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="0" cy="-12" r="8" fill="#ffcc99"/>
+    <path d="M-9,-12 A9,9 0 0,1 9,-12" fill="#222"/>
+    <rect x="-8" y="-14" width="16" height="6" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+  </g>
+
+  <!-- ROW 4: CRASH / WIPEOUT -->
+  <!-- Frame 18: Initial tumble -->
+  <g transform="translate(32, 224) rotate(15)">
+    <ellipse cx="5" cy="26" rx="18" ry="4" fill="rgba(0,0,0,0.3)"/>
+    <rect x="-20" y="18" width="40" height="6" rx="3" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <ellipse cx="0" cy="6" rx="10" ry="14" fill="url(#jacketGrad)" filter="url(#glow)"/>
+    <line x1="-10" y1="0" x2="-18" y2="-8" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <line x1="10" y1="0" x2="20" y2="6" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="0" cy="-12" r="8" fill="#ffcc99"/>
+    <path d="M-9,-12 A9,9 0 0,1 9,-12" fill="#222"/>
+    <rect x="-8" y="-14" width="16" height="6" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+  </g>
+
+  <!-- Frame 19: Mid tumble -->
+  <g transform="translate(96, 224) rotate(45)">
+    <rect x="-20" y="18" width="40" height="6" rx="3" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <ellipse cx="0" cy="6" rx="10" ry="14" fill="url(#jacketGrad)" filter="url(#glow)"/>
+    <line x1="-10" y1="0" x2="-22" y2="0" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <line x1="10" y1="0" x2="22" y2="8" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="0" cy="-12" r="8" fill="#ffcc99"/>
+    <path d="M-9,-12 A9,9 0 0,1 9,-12" fill="#222"/>
+    <rect x="-8" y="-14" width="16" height="6" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+  </g>
+
+  <!-- Frame 20: Upside down -->
+  <g transform="translate(160, 224) rotate(90)">
+    <rect x="-20" y="18" width="40" height="6" rx="3" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <ellipse cx="0" cy="6" rx="10" ry="14" fill="url(#jacketGrad)" filter="url(#glow)"/>
+    <line x1="-10" y1="0" x2="-18" y2="10" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <line x1="10" y1="0" x2="18" y2="10" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="0" cy="-12" r="8" fill="#ffcc99"/>
+    <path d="M-9,-12 A9,9 0 0,1 9,-12" fill="#222"/>
+    <rect x="-8" y="-14" width="16" height="6" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+  </g>
+
+  <!-- Frame 21: Coming down -->
+  <g transform="translate(224, 224) rotate(135)">
+    <rect x="-20" y="18" width="40" height="6" rx="3" fill="url(#boardGrad)" filter="url(#glow)"/>
+    <ellipse cx="0" cy="6" rx="10" ry="14" fill="url(#jacketGrad)" filter="url(#glow)"/>
+    <line x1="-10" y1="0" x2="-20" y2="-4" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <line x1="10" y1="0" x2="16" y2="12" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="0" cy="-12" r="8" fill="#ffcc99"/>
+    <path d="M-9,-12 A9,9 0 0,1 9,-12" fill="#222"/>
+    <rect x="-8" y="-14" width="16" height="6" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+  </g>
+
+  <!-- Frame 22: Face plant -->
+  <g transform="translate(288, 224)">
+    <ellipse cx="0" cy="22" rx="20" ry="6" fill="rgba(0,0,0,0.3)"/>
+    <!-- Board flying off -->
+    <g transform="translate(15, -10) rotate(30)">
+      <rect x="-15" y="0" width="30" height="5" rx="2" fill="url(#boardGrad)" filter="url(#glow)"/>
+    </g>
+    <!-- Body down -->
+    <ellipse cx="0" cy="14" rx="14" ry="8" fill="url(#jacketGrad)" filter="url(#glow)"/>
+    <rect x="-14" y="12" width="28" height="3" fill="#ff00ff"/>
+    <line x1="-12" y1="10" x2="-20" y2="6" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <line x1="12" y1="10" x2="20" y2="6" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="0" cy="4" r="8" fill="#ffcc99"/>
+    <path d="M-8,6 A8,8 0 0,0 8,6" fill="#222"/>
+    <rect x="-8" y="2" width="16" height="6" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+  </g>
+
+  <!-- Frame 23: Dazed/Recovery -->
+  <g transform="translate(352, 224)">
+    <ellipse cx="0" cy="26" rx="18" ry="4" fill="rgba(0,0,0,0.3)"/>
+    <!-- Stars circling head -->
+    <text x="-12" y="-20" font-size="8" fill="#ffff00">★</text>
+    <text x="8" y="-22" font-size="6" fill="#ffff00">★</text>
+    <text x="0" y="-26" font-size="7" fill="#ffff00">★</text>
+    <!-- Sitting -->
+    <ellipse cx="0" cy="12" rx="12" ry="10" fill="url(#jacketGrad)" filter="url(#glow)"/>
+    <rect x="-12" y="10" width="24" height="3" fill="#ff00ff"/>
+    <line x1="-10" y1="8" x2="-16" y2="18" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <line x1="10" y1="8" x2="16" y2="18" stroke="#00ffff" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="0" cy="-4" r="8" fill="#ffcc99"/>
+    <path d="M-9,-4 A9,9 0 0,1 9,-4" fill="#222"/>
+    <rect x="-8" y="-6" width="16" height="6" rx="2" fill="url(#goggleGrad)" filter="url(#glow)"/>
+    <!-- Dizzy eyes -->
+    <text x="-5" y="-3" font-size="4" fill="#000">x</text>
+    <text x="2" y="-3" font-size="4" fill="#000">x</text>
+  </g>
+</svg>
