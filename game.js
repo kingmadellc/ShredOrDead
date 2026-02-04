@@ -7,42 +7,8 @@
 // CONSTANTS
 // ===================
 
-// Base resolution (portrait orientation for snowboarding)
-const BASE_WIDTH = 480;
-const BASE_HEIGHT = 640;
-
-// ============================================
-// RESOLUTION SCALING SYSTEM (ported from DEADLINE)
-// ============================================
-const displaySettings = {
-    baseWidth: BASE_WIDTH,
-    baseHeight: BASE_HEIGHT,
-    scale: 1,
-    fullscreen: false,
-    currentResolution: '480x640',
-    autoDetect: true,
-    screenShakeEnabled: true,
-    hapticsEnabled: true
-};
-
-// Available resolutions with aspect ratio info (portrait orientation - 3:4)
-const RESOLUTIONS = {
-    // Portrait resolutions (3:4)
-    '480x640': { width: 480, height: 640, scale: 1, aspectRatio: '3:4' },
-    '600x800': { width: 600, height: 800, scale: 1.25, aspectRatio: '3:4' },
-    '720x960': { width: 720, height: 960, scale: 1.5, aspectRatio: '3:4' },
-    '768x1024': { width: 768, height: 1024, scale: 1.6, aspectRatio: '3:4' },
-    '900x1200': { width: 900, height: 1200, scale: 1.875, aspectRatio: '3:4' },
-    // Mobile portrait (9:16)
-    '405x720': { width: 405, height: 720, scale: 1.125, aspectRatio: '9:16' },
-    '608x1080': { width: 608, height: 1080, scale: 1.6875, aspectRatio: '9:16' },
-    // Steam Deck portrait (10:16)
-    '500x800': { width: 500, height: 800, scale: 1.25, aspectRatio: '10:16' }
-};
-
-// Dynamic canvas dimensions (will be updated by resolution system)
-let CANVAS_WIDTH = BASE_WIDTH;
-let CANVAS_HEIGHT = BASE_HEIGHT;
+const CANVAS_WIDTH = 480;
+const CANVAS_HEIGHT = 640;
 
 const COLORS = {
     // Neon palette
@@ -68,21 +34,21 @@ const COLORS = {
 };
 
 const PHYSICS = {
-    gravity: 1400,
-    groundFriction: 0.985,      // More drag for controlled feel
+    gravity: 1200,
+    groundFriction: 0.992,      // Less drag
     airFriction: 0.995,
-    turnSpeed: 500,             // Fast turning for responsive carving
+    turnSpeed: 520,             // Fast turning for responsive carving
     maxTurnAngle: 65,
-    carveSpeedBoost: 1.08,      // Less speed boost from carving
-    downhillAccel: 180,         // Much slower acceleration
-    maxSpeed: 500,              // Much lower top speed
+    carveSpeedBoost: 1.10,
+    downhillAccel: 280,         // Faster acceleration
+    maxSpeed: 650,              // Higher top speed
     minSpeed: 100,
     crashSpeedPenalty: 0.5,
     crashDuration: 0.8,
     stunDuration: 0.25,
     invincibilityDuration: 1.5,
-    jumpLaunchPower: 400,       // Slightly lower jumps
-    airControlFactor: 0.7
+    jumpLaunchPower: 550,       // Much higher jumps
+    airControlFactor: 0.6
 };
 
 const TERRAIN = {
@@ -115,6 +81,19 @@ const TRICKS = {
     longGrind: { name: 'Rail Slide', minLen: 120, maxLen: 250, points: 150 },
     epicGrind: { name: 'EPIC GRIND', minLen: 250, maxLen: 9999, points: 400 }
 };
+
+// Automatic trick animations when airborne
+const AUTO_TRICKS = [
+    { name: '360 Spin', type: 'spin', rotSpeed: 720, points: 200 },
+    { name: 'Backflip', type: 'flip', flipSpeed: 500, points: 250 },
+    { name: 'Method Grab', type: 'grab', grabStyle: 'method', points: 150 },
+    { name: 'Indy Grab', type: 'grab', grabStyle: 'indy', points: 150 },
+    { name: 'Tail Grab', type: 'grab', grabStyle: 'tail', points: 125 },
+    { name: '540 Spin', type: 'spin', rotSpeed: 900, points: 350 },
+    { name: 'Front Flip', type: 'flip', flipSpeed: -500, points: 250 },
+    { name: 'Stalefish', type: 'grab', grabStyle: 'stale', points: 175 },
+    { name: 'Cork 720', type: 'combo', rotSpeed: 600, flipSpeed: 300, points: 500 }
+];
 
 const CHASE = {
     fogStartOffset: -300,       // Starts closer
@@ -163,7 +142,12 @@ let gameState = {
         crashTimer: 0,
         stunned: 0,
         invincible: 0,
-        trickRotation: 0
+        trickRotation: 0,
+        // Auto trick state
+        autoTrick: null,
+        autoTrickProgress: 0,
+        flipRotation: 0,
+        grabPhase: 0
     },
 
     camera: {
@@ -229,227 +213,20 @@ const input = {
     _lastSpace: false
 };
 
-// Track if keyboard is currently providing directional input
-let keyboardActiveLeft = false;
-let keyboardActiveRight = false;
-let keyboardActiveDown = false;
-
-function isKeyboardActive() {
-    return keyboardActiveLeft || keyboardActiveRight;
-}
-
-// ===================
-// GAMEPAD / CONTROLLER SUPPORT
-// ===================
-
-const gamepadState = {
-    connected: false,
-    gamepadIndex: null,
-    deadzone: 0.15,
-    buttons: { a: false, b: false, start: false, select: false },
-    _lastButtons: { a: false, b: false, start: false, select: false }
-};
-
-function updateGamepad() {
-    const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
-    let gamepad = null;
-
-    for (let i = 0; i < gamepads.length; i++) {
-        if (gamepads[i] && gamepads[i].connected) {
-            gamepad = gamepads[i];
-            gamepadState.gamepadIndex = i;
-            gamepadState.connected = true;
-            break;
-        }
-    }
-
-    if (!gamepad) {
-        gamepadState.connected = false;
-        return;
-    }
-
-    gamepadState._lastButtons.a = gamepadState.buttons.a;
-    gamepadState._lastButtons.b = gamepadState.buttons.b;
-    gamepadState._lastButtons.start = gamepadState.buttons.start;
-    gamepadState._lastButtons.select = gamepadState.buttons.select;
-
-    // Left stick X axis for steering
-    const leftStickX = gamepad.axes[0] || 0;
-
-    if (Math.abs(leftStickX) > gamepadState.deadzone) {
-        const normalizedX = (Math.abs(leftStickX) - gamepadState.deadzone) / (1 - gamepadState.deadzone);
-        const signedX = normalizedX * Math.sign(leftStickX);
-        if (!isKeyboardActive()) {
-            input.left = signedX < -0.1;
-            input.right = signedX > 0.1;
-        }
-    } else if (!isKeyboardActive()) {
-        input.left = false;
-        input.right = false;
-    }
-
-    // D-pad support (buttons 12-15 on standard gamepad)
-    const dpadLeft = gamepad.buttons[14] && gamepad.buttons[14].pressed;
-    const dpadRight = gamepad.buttons[15] && gamepad.buttons[15].pressed;
-    const dpadDown = gamepad.buttons[13] && gamepad.buttons[13].pressed;
-
-    if (dpadLeft) input.left = true;
-    if (dpadRight) input.right = true;
-    if (dpadDown) input.down = true;
-
-    // Triggers/bumpers for tuck (speed boost)
-    const rightTrigger = gamepad.buttons[7] && gamepad.buttons[7].value > 0.1;
-    const leftTrigger = gamepad.buttons[6] && gamepad.buttons[6].value > 0.1;
-    const rightBumper = gamepad.buttons[5] && gamepad.buttons[5].pressed;
-    const leftBumper = gamepad.buttons[4] && gamepad.buttons[4].pressed;
-
-    if ((rightTrigger || leftTrigger || rightBumper || leftBumper) && !keyboardActiveDown) {
-        input.down = true;
-    }
-
-    // A button / Start for menu navigation
-    gamepadState.buttons.a = gamepad.buttons[0] && gamepad.buttons[0].pressed;
-    gamepadState.buttons.b = gamepad.buttons[1] && gamepad.buttons[1].pressed;
-    gamepadState.buttons.start = gamepad.buttons[9] && gamepad.buttons[9].pressed;
-    gamepadState.buttons.select = gamepad.buttons[8] && gamepad.buttons[8].pressed;
-
-    if (gamepadState.buttons.a || gamepadState.buttons.start) {
-        input.space = true;
-    }
-}
-
-// ===================
-// HAPTICS / VIBRATION SYSTEM
-// ===================
-
-const haptics = {
-    patterns: {
-        // Crashes - strong feedback
-        crash: { duration: 200, weakMagnitude: 0.8, strongMagnitude: 1.0 },
-        crashHard: { duration: 300, weakMagnitude: 1.0, strongMagnitude: 1.0 },
-        // Landings - impact based on air time
-        landSoft: { duration: 50, weakMagnitude: 0.2, strongMagnitude: 0.3 },
-        landMedium: { duration: 80, weakMagnitude: 0.4, strongMagnitude: 0.5 },
-        landHard: { duration: 120, weakMagnitude: 0.6, strongMagnitude: 0.7 },
-        // Tricks - celebratory pulses
-        trickSmall: { duration: 100, weakMagnitude: 0.3, strongMagnitude: 0.2 },
-        trickMedium: { duration: 150, weakMagnitude: 0.5, strongMagnitude: 0.4 },
-        trickBig: { duration: 200, weakMagnitude: 0.7, strongMagnitude: 0.6 },
-        trickEpic: { duration: 300, weakMagnitude: 1.0, strongMagnitude: 0.8 },
-        // Grinding - continuous rumble
-        grindStart: { duration: 80, weakMagnitude: 0.3, strongMagnitude: 0.1 },
-        grindPulse: { duration: 40, weakMagnitude: 0.2, strongMagnitude: 0.1 },
-        grindEnd: { duration: 100, weakMagnitude: 0.4, strongMagnitude: 0.3 },
-        // Jump launch
-        jumpLaunch: { duration: 60, weakMagnitude: 0.4, strongMagnitude: 0.3 },
-        jumpLaunchBig: { duration: 100, weakMagnitude: 0.6, strongMagnitude: 0.5 },
-        // Chase/danger events
-        beastSpawn: { duration: 500, weakMagnitude: 0.6, strongMagnitude: 0.8 },
-        beastLunge: { duration: 150, weakMagnitude: 0.7, strongMagnitude: 0.9 },
-        beastClose: { duration: 100, weakMagnitude: 0.5, strongMagnitude: 0.6 },
-        fogClose: { duration: 80, weakMagnitude: 0.3, strongMagnitude: 0.2 },
-        // Carving - asymmetric for directional feel
-        carveLeft: { duration: 30, weakMagnitude: 0.15, strongMagnitude: 0.0 },
-        carveRight: { duration: 30, weakMagnitude: 0.0, strongMagnitude: 0.15 },
-        highSpeed: { duration: 40, weakMagnitude: 0.1, strongMagnitude: 0.15 },
-        // Game state
-        gameOver: { duration: 400, weakMagnitude: 0.8, strongMagnitude: 1.0 },
-        gameStart: { duration: 150, weakMagnitude: 0.4, strongMagnitude: 0.3 }
-    },
-    cooldowns: {},
-    grindVibrationTimer: 0
-};
-
-function triggerHaptic(patternName, cooldownMs = 0) {
-    if (!displaySettings.hapticsEnabled || !gamepadState.connected) return;
-
-    const pattern = haptics.patterns[patternName];
-    if (!pattern) return;
-
-    const now = performance.now();
-    if (cooldownMs > 0 && haptics.cooldowns[patternName]) {
-        if (now - haptics.cooldowns[patternName] < cooldownMs) return;
-    }
-    haptics.cooldowns[patternName] = now;
-
-    const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
-    const gamepad = gamepads[gamepadState.gamepadIndex];
-
-    if (!gamepad || !gamepad.vibrationActuator) return;
-
-    try {
-        gamepad.vibrationActuator.playEffect('dual-rumble', {
-            startDelay: 0,
-            duration: pattern.duration,
-            weakMagnitude: pattern.weakMagnitude,
-            strongMagnitude: pattern.strongMagnitude
-        });
-    } catch (e) { /* Vibration not supported */ }
-}
-
-function updateHaptics(dt) {
-    if (!displaySettings.hapticsEnabled || !gamepadState.connected) return;
-
-    const player = gameState.player;
-
-    // Grinding haptic - continuous subtle pulses
-    if (player.grinding) {
-        haptics.grindVibrationTimer -= dt;
-        if (haptics.grindVibrationTimer <= 0) {
-            triggerHaptic('grindPulse');
-            haptics.grindVibrationTimer = 0.08;
-        }
-    }
-
-    // High speed haptic - subtle rumble when going fast
-    if (player.speed > 400 && !player.crashed && !player.airborne) {
-        const speedRatio = (player.speed - 400) / (PHYSICS.maxSpeed - 400);
-        if (Math.random() < speedRatio * 0.15) {
-            triggerHaptic('highSpeed', 100);
-        }
-    }
-
-    // Carving feedback - asymmetric rumble for directional feel
-    if (!player.crashed && !player.airborne && !player.grinding) {
-        const carving = Math.abs(player.angle) > 25;
-        if (carving && player.speed > 250) {
-            if (player.angle < -25) triggerHaptic('carveLeft', 150);
-            else if (player.angle > 25) triggerHaptic('carveRight', 150);
-        }
-    }
-
-    // Danger/chase haptics - pulse when fog is close
-    if (gameState.dangerLevel > 0.5) {
-        const dangerPulseChance = (gameState.dangerLevel - 0.5) * 0.1;
-        if (Math.random() < dangerPulseChance) triggerHaptic('fogClose', 500);
-    }
-
-    // Beast proximity haptic
-    if (gameState.chase.beastActive) {
-        const beastDist = gameState.player.y - gameState.chase.beastY;
-        if (beastDist < 150 && beastDist > 40 && Math.random() < 0.05) {
-            triggerHaptic('beastClose', 300);
-        }
-    }
-}
-
 function setupInput() {
     document.addEventListener('keydown', (e) => {
         switch (e.code) {
             case 'ArrowLeft':
             case 'KeyA':
                 input.left = true;
-                keyboardActiveLeft = true;
                 break;
             case 'ArrowRight':
             case 'KeyD':
                 input.right = true;
-                keyboardActiveRight = true;
                 break;
             case 'ArrowDown':
             case 'KeyS':
                 input.down = true;
-                keyboardActiveDown = true;
                 break;
             case 'Space':
                 input.space = true;
@@ -462,37 +239,18 @@ function setupInput() {
             case 'ArrowLeft':
             case 'KeyA':
                 input.left = false;
-                keyboardActiveLeft = false;
                 break;
             case 'ArrowRight':
             case 'KeyD':
                 input.right = false;
-                keyboardActiveRight = false;
                 break;
             case 'ArrowDown':
             case 'KeyS':
                 input.down = false;
-                keyboardActiveDown = false;
                 break;
             case 'Space':
                 input.space = false;
                 break;
-        }
-    });
-
-    // Gamepad connection events
-    window.addEventListener('gamepadconnected', (e) => {
-        console.log('Gamepad connected:', e.gamepad.id);
-        gamepadState.connected = true;
-        gamepadState.gamepadIndex = e.gamepad.index;
-        triggerHaptic('gameStart');
-    });
-
-    window.addEventListener('gamepaddisconnected', (e) => {
-        console.log('Gamepad disconnected:', e.gamepad.id);
-        if (gamepadState.gamepadIndex === e.gamepad.index) {
-            gamepadState.connected = false;
-            gamepadState.gamepadIndex = null;
         }
     });
 }
@@ -663,12 +421,82 @@ function generateTerrainChunk(chunkIndex) {
     const gridRows = Math.floor(TERRAIN.chunkHeight / 80);
     const gridCols = TERRAIN.laneCount;
 
+    // Track cells used by clusters to avoid overlaps
+    const usedCells = new Set();
+
+    // 25% chance to spawn a tree cluster per chunk (harder to navigate around)
+    if (seededRandom(baseSeed + 777) < 0.25) {
+        const clusterSeed = baseSeed + 778;
+        const clusterRow = 1 + Math.floor(seededRandom(clusterSeed) * (gridRows - 3));
+        const clusterCol = 1 + Math.floor(seededRandom(clusterSeed + 1) * (gridCols - 2));
+        const clusterSize = 4 + Math.floor(seededRandom(clusterSeed + 2) * 4); // 4-7 trees
+
+        // Generate cluster pattern (tight group of trees)
+        for (let i = 0; i < clusterSize; i++) {
+            const offsetX = (seededRandom(clusterSeed + 10 + i) - 0.5) * 2.5; // -1.25 to 1.25 lanes
+            const offsetY = (seededRandom(clusterSeed + 20 + i) - 0.5) * 2; // -1 to 1 rows
+            const treeCol = clusterCol + offsetX;
+            const treeRow = clusterRow + offsetY;
+
+            // Bounds check
+            if (treeCol < 0.5 || treeCol > gridCols - 0.5) continue;
+            if (treeRow < 0 || treeRow >= gridRows) continue;
+
+            const cellKey = `${Math.floor(treeRow)},${Math.floor(treeCol)}`;
+            usedCells.add(cellKey);
+
+            chunk.obstacles.push({
+                x: (treeCol - gridCols / 2) * TERRAIN.laneWidth,
+                y: chunk.y + treeRow * 80 + seededRandom(clusterSeed + 30 + i) * 20,
+                type: 'tree',
+                width: 26, // Slightly larger cluster trees
+                height: 44,
+                isCluster: true
+            });
+        }
+    }
+
+    // Second cluster chance (20%) for even more challenging terrain
+    if (seededRandom(baseSeed + 888) < 0.20) {
+        const clusterSeed = baseSeed + 889;
+        const clusterRow = Math.floor(gridRows / 2) + Math.floor(seededRandom(clusterSeed) * (gridRows / 2 - 1));
+        const clusterCol = Math.floor(seededRandom(clusterSeed + 1) * (gridCols - 1));
+        const clusterSize = 3 + Math.floor(seededRandom(clusterSeed + 2) * 3); // 3-5 trees
+
+        for (let i = 0; i < clusterSize; i++) {
+            const offsetX = (seededRandom(clusterSeed + 50 + i) - 0.5) * 2;
+            const offsetY = (seededRandom(clusterSeed + 60 + i) - 0.5) * 1.5;
+            const treeCol = clusterCol + offsetX;
+            const treeRow = clusterRow + offsetY;
+
+            if (treeCol < 0.5 || treeCol > gridCols - 0.5) continue;
+            if (treeRow < 0 || treeRow >= gridRows) continue;
+
+            const cellKey = `${Math.floor(treeRow)},${Math.floor(treeCol)}`;
+            if (usedCells.has(cellKey)) continue;
+            usedCells.add(cellKey);
+
+            chunk.obstacles.push({
+                x: (treeCol - gridCols / 2) * TERRAIN.laneWidth,
+                y: chunk.y + treeRow * 80 + seededRandom(clusterSeed + 70 + i) * 20,
+                type: 'tree',
+                width: 24,
+                height: 40,
+                isCluster: true
+            });
+        }
+    }
+
     for (let row = 0; row < gridRows; row++) {
         const rowSeed = baseSeed + row * 100;
         const clearLane = Math.floor(seededRandom(rowSeed) * gridCols);
 
         for (let col = 0; col < gridCols; col++) {
             if (Math.abs(col - clearLane) < TERRAIN.clearPathWidth) continue;
+
+            // Skip cells used by clusters
+            const cellKey = `${row},${col}`;
+            if (usedCells.has(cellKey)) continue;
 
             const cellSeed = rowSeed + col;
             const rng = seededRandom(cellSeed);
@@ -902,9 +730,28 @@ function updateAirbornePhysics(player, dt) {
     player.lateralSpeed += inputDir * 150 * PHYSICS.airControlFactor * dt;
     player.lateralSpeed *= PHYSICS.airFriction;
 
-    // Trick rotation
-    if (inputDir !== 0) {
+    // Manual trick rotation (if no auto trick or player overriding)
+    if (inputDir !== 0 && !player.autoTrick) {
         player.trickRotation += inputDir * 400 * dt;
+    }
+
+    // Auto trick animation
+    if (player.autoTrick) {
+        const trick = player.autoTrick;
+        player.autoTrickProgress += dt * 1.5; // Complete trick over ~0.67 seconds
+
+        if (trick.type === 'spin' || trick.type === 'combo') {
+            // Spin tricks - rotate around Y axis (shown as 2D rotation)
+            player.trickRotation += trick.rotSpeed * dt;
+        }
+        if (trick.type === 'flip' || trick.type === 'combo') {
+            // Flip tricks - rotate around X axis (forward/back flip)
+            player.flipRotation += (trick.flipSpeed || 0) * dt;
+        }
+        if (trick.type === 'grab') {
+            // Grab tricks - oscillate grab phase
+            player.grabPhase = Math.sin(player.autoTrickProgress * Math.PI);
+        }
     }
 
     // Gravity
@@ -970,11 +817,15 @@ function triggerJump(player, jump) {
     player.trickRotation = 0;
     player.airTime = 0;
 
-    // Haptic feedback based on jump power
-    if (jump.launchPower >= 1.4) {
-        triggerHaptic('jumpLaunchBig');
+    // Auto-select a random trick for bigger jumps
+    if (jump.launchPower >= 1.0) {
+        const trickIndex = Math.floor(Math.random() * AUTO_TRICKS.length);
+        player.autoTrick = AUTO_TRICKS[trickIndex];
+        player.autoTrickProgress = 0;
+        player.flipRotation = 0;
+        player.grabPhase = 0;
     } else {
-        triggerHaptic('jumpLaunch');
+        player.autoTrick = null;
     }
 }
 
@@ -983,23 +834,35 @@ function landFromJump(player) {
     player.altitude = 0;
     player.verticalVelocity = 0;
 
-    // Detect trick
-    const absRot = Math.abs(player.trickRotation);
+    // Check for completed auto trick first
     let trickLanded = null;
+    let trickName = null;
+    let trickPoints = 0;
 
-    for (const [id, trick] of Object.entries(TRICKS)) {
-        if (trick.minRot && absRot >= trick.minRot && absRot <= trick.maxRot) {
-            trickLanded = trick;
-            break;
+    if (player.autoTrick && player.autoTrickProgress >= 0.8) {
+        // Auto trick completed successfully!
+        trickName = player.autoTrick.name;
+        trickPoints = player.autoTrick.points;
+        trickLanded = true;
+    } else {
+        // Fall back to manual spin detection
+        const absRot = Math.abs(player.trickRotation);
+        for (const [id, trick] of Object.entries(TRICKS)) {
+            if (trick.minRot && absRot >= trick.minRot && absRot <= trick.maxRot) {
+                trickName = trick.name;
+                trickPoints = trick.points;
+                trickLanded = true;
+                break;
+            }
         }
     }
 
     if (trickLanded) {
-        const points = Math.floor(trickLanded.points * gameState.trickMultiplier);
+        const points = Math.floor(trickPoints * gameState.trickMultiplier);
         gameState.score += points;
 
         gameState.celebrations.push({
-            text: trickLanded.name,
+            text: trickName,
             subtext: `+${points}`,
             color: getNeonColor(),
             timer: 1.5,
@@ -1009,36 +872,17 @@ function landFromJump(player) {
         gameState.trickMultiplier = Math.min(gameState.trickMultiplier + 0.5, 5);
         gameState.trickComboTimer = 2.0;
         gameState.maxCombo = Math.max(gameState.maxCombo, gameState.trickMultiplier);
-
-        // Haptic feedback based on trick difficulty
-        if (trickLanded.points >= 500) {
-            triggerHaptic('trickEpic');
-        } else if (trickLanded.points >= 250) {
-            triggerHaptic('trickBig');
-        } else if (trickLanded.points >= 100) {
-            triggerHaptic('trickMedium');
-        } else {
-            triggerHaptic('trickSmall');
-        }
     } else if (player.airTime > 0.4) {
         const airPoints = Math.floor(player.airTime * 25);
         gameState.score += airPoints;
-
-        // Landing haptic based on air time
-        if (player.airTime > 1.0) {
-            triggerHaptic('landHard');
-        } else if (player.airTime > 0.6) {
-            triggerHaptic('landMedium');
-        } else {
-            triggerHaptic('landSoft');
-        }
-    } else {
-        // Short jump landing
-        triggerHaptic('landSoft');
     }
 
     player.trickRotation = 0;
     player.airTime = 0;
+    player.autoTrick = null;
+    player.autoTrickProgress = 0;
+    player.flipRotation = 0;
+    player.grabPhase = 0;
 
     spawnLandingParticles(player.x, player.y);
 }
@@ -1049,10 +893,6 @@ function startGrinding(player, rail) {
     player.grindProgress = 0;
     player.x = rail.x;
     player.y = rail.y;
-
-    // Haptic feedback for grind start
-    triggerHaptic('grindStart');
-    haptics.grindVibrationTimer = 0.08;
 }
 
 function endGrind(player) {
@@ -1082,27 +922,10 @@ function endGrind(player) {
 
     player.grinding = false;
     player.currentRail = null;
-
-    // Haptic feedback based on grind length
-    if (trick.points >= 400) {
-        triggerHaptic('trickEpic');
-    } else if (trick.points >= 150) {
-        triggerHaptic('trickBig');
-    } else {
-        triggerHaptic('grindEnd');
-    }
 }
 
 function triggerCrash(player) {
     if (player.invincible > 0) return;
-
-    // Haptic feedback - stronger for higher speed crashes
-    const speedRatio = player.speed / PHYSICS.maxSpeed;
-    if (speedRatio > 0.6) {
-        triggerHaptic('crashHard');
-    } else {
-        triggerHaptic('crash');
-    }
 
     player.crashed = true;
     player.crashTimer = PHYSICS.crashDuration;
@@ -1253,9 +1076,6 @@ function spawnBeast(customMessage = null) {
     });
 
     triggerScreenShake(18, 0.7);
-
-    // Strong haptic feedback for beast spawn
-    triggerHaptic('beastSpawn');
 }
 
 function updateBeast(dt) {
@@ -1291,8 +1111,6 @@ function updateBeast(dt) {
                 chase.lungeTargetY = player.y + player.speed * predictTime * 0.5;
                 chase.lungeProgress = 0;
                 triggerScreenShake(10, 0.8);
-                // Haptic feedback for beast lunge
-                triggerHaptic('beastLunge');
             }
             break;
 
@@ -1783,6 +1601,11 @@ function drawPlayer() {
     // Apply rotation for tricks
     if (player.airborne) {
         ctx.rotate(player.trickRotation * Math.PI / 180);
+        // Apply flip rotation (scale Y to simulate forward/backward flip)
+        if (player.flipRotation !== 0) {
+            const flipScale = Math.cos(player.flipRotation * Math.PI / 180);
+            ctx.scale(1, flipScale);
+        }
     } else {
         ctx.rotate(player.angle * Math.PI / 180 * 0.3);
     }
@@ -1803,8 +1626,12 @@ function drawPlayer() {
     ctx.ellipse(0, 15 + shadowOffset, 18 - shadowOffset * 0.05, 6, 0, 0, Math.PI * 2);
     ctx.fill();
 
+    // Determine grab offset for board (moves toward body during grabs)
+    const grabOffset = player.grabPhase * 6;
+    const boardY = 8 - grabOffset;
+
     // Snowboard with gradient and edge highlights
-    const boardGrad = ctx.createLinearGradient(-20, 8, 20, 14);
+    const boardGrad = ctx.createLinearGradient(-20, boardY, 20, boardY + 6);
     boardGrad.addColorStop(0, COLORS.hotPink);
     boardGrad.addColorStop(0.5, '#ff69b4');
     boardGrad.addColorStop(1, COLORS.magenta);
@@ -1812,21 +1639,21 @@ function drawPlayer() {
     ctx.shadowColor = COLORS.hotPink;
     ctx.shadowBlur = 10;
     ctx.beginPath();
-    ctx.roundRect(-22, 8, 44, 6, 3);
+    ctx.roundRect(-22, boardY, 44, 6, 3);
     ctx.fill();
 
     // Board edge highlight
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(-20, 9);
-    ctx.lineTo(20, 9);
+    ctx.moveTo(-20, boardY + 1);
+    ctx.lineTo(20, boardY + 1);
     ctx.stroke();
 
     // Bindings
     ctx.fillStyle = '#333';
-    ctx.fillRect(-10, 7, 6, 8);
-    ctx.fillRect(4, 7, 6, 8);
+    ctx.fillRect(-10, boardY - 1, 6, 8);
+    ctx.fillRect(4, boardY - 1, 6, 8);
     ctx.shadowBlur = 0;
 
     // Body/jacket with gradient and stripe
@@ -1845,18 +1672,53 @@ function drawPlayer() {
     ctx.fillStyle = COLORS.magenta;
     ctx.fillRect(-12, -8, 24, 4);
 
-    // Arms (wave when airborne)
-    const armAngle = player.airborne ? Math.sin(gameState.animationTime * 8) * 0.4 : 0;
+    // Arms - different poses for different tricks
+    let leftArmX = -18, leftArmY = -12;
+    let rightArmX = 18, rightArmY = -12;
+
+    if (player.autoTrick && player.airborne) {
+        const trick = player.autoTrick;
+        const progress = player.autoTrickProgress;
+
+        if (trick.grabStyle === 'method') {
+            // Method grab - one arm up, one reaching for board
+            leftArmX = -15; leftArmY = -25; // Up in air
+            rightArmX = 8; rightArmY = boardY - 5; // Grabbing board
+        } else if (trick.grabStyle === 'indy') {
+            // Indy grab - reach between legs for board
+            rightArmX = 5; rightArmY = boardY;
+            leftArmX = -20; leftArmY = -8;
+        } else if (trick.grabStyle === 'tail') {
+            // Tail grab - reach back for tail
+            rightArmX = 20; rightArmY = boardY + 2;
+            leftArmX = -15; leftArmY = -20;
+        } else if (trick.grabStyle === 'stale') {
+            // Stalefish - reach behind for backside rail
+            leftArmX = -5; leftArmY = boardY;
+            rightArmX = 20; rightArmY = -15;
+        } else {
+            // Spin tricks - arms out for style
+            const wave = Math.sin(progress * Math.PI * 2) * 8;
+            leftArmX = -22; leftArmY = -15 + wave;
+            rightArmX = 22; rightArmY = -15 - wave;
+        }
+    } else if (player.airborne) {
+        // Default airborne arm wave
+        const armAngle = Math.sin(gameState.animationTime * 8) * 0.4;
+        leftArmY = -12 + Math.sin(armAngle) * 8;
+        rightArmY = -12 - Math.sin(armAngle) * 8;
+    }
+
     ctx.strokeStyle = jacketGrad;
     ctx.lineWidth = 5;
     ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(-10, -5);
-    ctx.lineTo(-18, -12 + Math.sin(armAngle) * 8);
+    ctx.lineTo(leftArmX, leftArmY);
     ctx.stroke();
     ctx.beginPath();
     ctx.moveTo(10, -5);
-    ctx.lineTo(18, -12 - Math.sin(armAngle) * 8);
+    ctx.lineTo(rightArmX, rightArmY);
     ctx.stroke();
     ctx.shadowBlur = 0;
 
@@ -2420,7 +2282,11 @@ function startGame() {
         crashTimer: 0,
         stunned: 0,
         invincible: 0,
-        trickRotation: 0
+        trickRotation: 0,
+        autoTrick: null,
+        autoTrickProgress: 0,
+        flipRotation: 0,
+        grabPhase: 0
     };
 
     gameState.camera = {
@@ -2475,9 +2341,6 @@ function startGame() {
 function triggerGameOver(cause) {
     gameState.screen = 'gameOver';
     gameState.deathCause = cause;
-
-    // Haptic feedback for game over
-    triggerHaptic('gameOver');
 
     // Update high score
     if (gameState.score > gameState.highScore) {
@@ -2542,9 +2405,6 @@ function loadHighScore() {
 function update(dt) {
     gameState.animationTime += dt;
 
-    // Poll gamepad input
-    updateGamepad();
-
     // Handle input for screen transitions
     if (input.space && !input._lastSpace) {
         if (gameState.screen === 'title') {
@@ -2568,7 +2428,6 @@ function update(dt) {
     updateCelebrations(dt);
     updateCombo(dt);
     updateScreenShake(dt);
-    updateHaptics(dt);
 }
 
 function gameLoop(timestamp) {
@@ -2584,70 +2443,6 @@ function gameLoop(timestamp) {
     requestAnimationFrame(gameLoop);
 }
 
-// ===================
-// SETTINGS FUNCTIONS
-// ===================
-
-function toggleScreenShakeSetting(enabled) {
-    displaySettings.screenShakeEnabled = enabled;
-    saveGameSettings();
-}
-
-function toggleHapticsSetting(enabled) {
-    displaySettings.hapticsEnabled = enabled;
-    saveGameSettings();
-    // Give feedback when enabling haptics
-    if (enabled) {
-        triggerHaptic('gameStart');
-    }
-}
-
-function saveGameSettings() {
-    try {
-        localStorage.setItem('shredordead_screenshake', displaySettings.screenShakeEnabled.toString());
-        localStorage.setItem('shredordead_haptics', displaySettings.hapticsEnabled.toString());
-    } catch (e) {
-        // LocalStorage not available
-    }
-}
-
-function loadGameSettings() {
-    try {
-        const savedScreenShake = localStorage.getItem('shredordead_screenshake');
-        if (savedScreenShake !== null) {
-            displaySettings.screenShakeEnabled = savedScreenShake === 'true';
-        }
-
-        const savedHaptics = localStorage.getItem('shredordead_haptics');
-        if (savedHaptics !== null) {
-            displaySettings.hapticsEnabled = savedHaptics === 'true';
-        }
-    } catch (e) {
-        // LocalStorage not available
-    }
-}
-
-function updateSettingsUI() {
-    // Update screen shake checkbox
-    const screenShakeToggle = document.getElementById('screenShakeToggle');
-    if (screenShakeToggle) {
-        screenShakeToggle.checked = displaySettings.screenShakeEnabled;
-    }
-
-    // Update haptics checkbox
-    const hapticsToggle = document.getElementById('hapticsToggle');
-    if (hapticsToggle) {
-        hapticsToggle.checked = displaySettings.hapticsEnabled;
-    }
-
-    // Update gamepad status indicator
-    const gamepadStatus = document.getElementById('gamepadStatus');
-    if (gamepadStatus) {
-        gamepadStatus.textContent = gamepadState.connected ? 'Connected' : 'Not Connected';
-        gamepadStatus.style.color = gamepadState.connected ? '#00ffff' : '#ff6b6b';
-    }
-}
-
 function init() {
     canvas = document.getElementById('gameCanvas');
     ctx = canvas.getContext('2d');
@@ -2657,220 +2452,9 @@ function init() {
 
     setupInput();
     loadHighScore();
-    loadGameSettings();
-    updateSettingsUI();
 
     requestAnimationFrame(gameLoop);
 }
 
 // Start the game when the page loads
 window.addEventListener('load', init);
-
-// ============================================
-// RESOLUTION & SETTINGS SYSTEM (ported from DEADLINE)
-// ============================================
-
-function setResolution(resKey) {
-    const res = RESOLUTIONS[resKey];
-    if (!res) return;
-
-    displaySettings.currentResolution = resKey;
-    displaySettings.scale = res.scale;
-
-    if (canvas) {
-        canvas.width = res.width;
-        canvas.height = res.height;
-    }
-
-    CANVAS_WIDTH = res.width;
-    CANVAS_HEIGHT = res.height;
-    TERRAIN.slopeWidth = res.width;
-
-    try { localStorage.setItem('shredordead_resolution', resKey); } catch (e) {}
-
-    fitCanvasToViewport();
-    updateSettingsUI();
-}
-
-function fitCanvasToViewport() {
-    if (!canvas) return;
-
-    const isFullscreen = document.fullscreenElement || displaySettings.fullscreen;
-    const marginX = isFullscreen ? 0 : 20;
-    const marginY = isFullscreen ? 0 : 40;
-
-    const maxWidth = window.innerWidth - marginX;
-    const maxHeight = window.innerHeight - marginY;
-
-    const canvasRatio = canvas.width / canvas.height;
-    const viewportRatio = maxWidth / maxHeight;
-
-    if (canvasRatio > viewportRatio) {
-        canvas.style.width = maxWidth + 'px';
-        canvas.style.height = Math.floor(maxWidth / canvasRatio) + 'px';
-    } else {
-        canvas.style.height = maxHeight + 'px';
-        canvas.style.width = Math.floor(maxHeight * canvasRatio) + 'px';
-    }
-
-    canvas.style.margin = 'auto';
-    canvas.style.display = 'block';
-}
-
-function toggleFullscreen() {
-    if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen().catch(err => {
-            console.log('Fullscreen request failed:', err);
-        });
-        displaySettings.fullscreen = true;
-    } else {
-        document.exitFullscreen();
-        displaySettings.fullscreen = false;
-    }
-}
-
-function autoDetectResolution() {
-    const screenWidth = window.innerWidth;
-    const screenHeight = window.innerHeight;
-    const dpr = window.devicePixelRatio || 1;
-    const ua = navigator.userAgent || '';
-
-    const isIOS = /iPhone|iPad|iPod/i.test(ua);
-    const isAndroid = /Android/i.test(ua);
-    const isMobile = isIOS || isAndroid || ('ontouchstart' in window && screenWidth < 900);
-
-    if (isIOS || isMobile) {
-        if (Math.min(screenWidth, screenHeight) >= 900 || dpr > 2) return '600x800';
-        return '480x640';
-    }
-
-    if (screenHeight >= 1080) return '720x960';
-    if (screenHeight >= 800) return '600x800';
-    return '480x640';
-}
-
-function getDeviceProfile() {
-    const ua = navigator.userAgent || '';
-    const screenWidth = window.innerWidth;
-
-    if (/iPhone|iPad|iPod/i.test(ua)) return 'iOS Device';
-    if (/Android/i.test(ua)) return 'Android';
-    if (/Steam Deck/i.test(ua)) return 'Steam Deck';
-    if ('ontouchstart' in window && screenWidth < 900) return 'Mobile';
-    return 'Desktop';
-}
-
-function loadSettings() {
-    try {
-        const savedRes = localStorage.getItem('shredordead_resolution');
-        if (savedRes && RESOLUTIONS[savedRes]) {
-            displaySettings.currentResolution = savedRes;
-        }
-        const savedAutoDetect = localStorage.getItem('shredordead_autodetect');
-        if (savedAutoDetect !== null) {
-            displaySettings.autoDetect = savedAutoDetect === 'true';
-        }
-        const savedScreenShake = localStorage.getItem('shredordead_screenshake');
-        if (savedScreenShake !== null) {
-            displaySettings.screenShakeEnabled = savedScreenShake !== 'false';
-        }
-    } catch (e) {}
-
-    if (displaySettings.autoDetect) {
-        displaySettings.currentResolution = autoDetectResolution();
-    }
-    return displaySettings.currentResolution;
-}
-
-function saveSettings() {
-    try {
-        localStorage.setItem('shredordead_resolution', displaySettings.currentResolution);
-        localStorage.setItem('shredordead_autodetect', displaySettings.autoDetect.toString());
-        localStorage.setItem('shredordead_screenshake', displaySettings.screenShakeEnabled.toString());
-    } catch (e) {}
-}
-
-function showSettingsMenu() {
-    const menu = document.getElementById('settingsMenu');
-    if (menu) {
-        menu.classList.add('active');
-        updateSettingsUI();
-    }
-}
-
-function hideSettingsMenu() {
-    const menu = document.getElementById('settingsMenu');
-    if (menu) {
-        menu.classList.remove('active');
-    }
-}
-
-function updateSettingsUI() {
-    const deviceLabel = document.getElementById('deviceProfileLabel');
-    if (deviceLabel) deviceLabel.textContent = getDeviceProfile();
-
-    const resSelect = document.getElementById('resolutionSelect');
-    if (resSelect) resSelect.value = displaySettings.currentResolution;
-
-    const autoDetectToggle = document.getElementById('autoDetectToggle');
-    if (autoDetectToggle) autoDetectToggle.checked = displaySettings.autoDetect;
-
-    const screenShakeToggle = document.getElementById('screenShakeToggle');
-    if (screenShakeToggle) screenShakeToggle.checked = displaySettings.screenShakeEnabled;
-}
-
-function changeResolution(resKey) {
-    if (RESOLUTIONS[resKey]) {
-        displaySettings.autoDetect = false;
-        setResolution(resKey);
-        saveSettings();
-    }
-}
-
-function toggleAutoDetect(enabled) {
-    displaySettings.autoDetect = enabled;
-    if (enabled) {
-        setResolution(autoDetectResolution());
-    }
-    saveSettings();
-    updateSettingsUI();
-}
-
-function toggleScreenShakeSetting(enabled) {
-    displaySettings.screenShakeEnabled = enabled;
-    saveSettings();
-}
-
-function resetAllSettings() {
-    displaySettings.autoDetect = true;
-    displaySettings.screenShakeEnabled = true;
-
-    try {
-        localStorage.removeItem('shredordead_resolution');
-        localStorage.removeItem('shredordead_autodetect');
-        localStorage.removeItem('shredordead_screenshake');
-    } catch (e) {}
-
-    setResolution(autoDetectResolution());
-    updateSettingsUI();
-}
-
-document.addEventListener('fullscreenchange', () => {
-    displaySettings.fullscreen = !!document.fullscreenElement;
-    setTimeout(fitCanvasToViewport, 100);
-});
-
-window.addEventListener('resize', () => {
-    fitCanvasToViewport();
-});
-
-// Initialize settings on load
-window.addEventListener('load', () => {
-    setTimeout(() => {
-        loadSettings();
-        if (canvas) {
-            setResolution(displaySettings.currentResolution);
-        }
-        updateSettingsUI();
-    }, 100);
-});
