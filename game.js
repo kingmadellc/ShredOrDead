@@ -3373,27 +3373,52 @@ document.addEventListener('fullscreenchange', () => {
     setTimeout(fitCanvasToViewport, 100);
 });
 
-// Resize start screen particle canvases when entering/exiting fullscreen
+// Resize start screen and particle canvases when entering/exiting fullscreen
 function resizeStartScreenCanvases() {
     const startScreen = document.getElementById('startScreen');
     if (!startScreen) return;
 
-    const snowCanvas = document.getElementById('snowCanvas');
-    const blizzardCanvas = document.getElementById('blizzardCanvas');
+    const isFullscreen = document.fullscreenElement || displaySettings.fullscreen;
 
-    if (snowCanvas) {
-        snowCanvas.width = startScreen.offsetWidth;
-        snowCanvas.height = startScreen.offsetHeight;
+    // Directly set start screen styles via JavaScript for fullscreen
+    if (isFullscreen) {
+        startScreen.style.width = '100vw';
+        startScreen.style.height = '100vh';
+        startScreen.style.top = '0';
+        startScreen.style.left = '0';
+        startScreen.style.transform = 'none';
+        startScreen.style.borderRadius = '0';
+        startScreen.style.border = 'none';
+    } else {
+        // Reset to CSS defaults
+        startScreen.style.width = '';
+        startScreen.style.height = '';
+        startScreen.style.top = '';
+        startScreen.style.left = '';
+        startScreen.style.transform = '';
+        startScreen.style.borderRadius = '';
+        startScreen.style.border = '';
     }
 
-    // Blizzard canvas scales with logo area
-    if (blizzardCanvas && displaySettings.fullscreen) {
-        blizzardCanvas.width = 800;
-        blizzardCanvas.height = 500;
-    } else if (blizzardCanvas) {
-        blizzardCanvas.width = 520;
-        blizzardCanvas.height = 360;
-    }
+    // Wait a frame for layout to update, then resize canvases
+    requestAnimationFrame(() => {
+        const snowCanvas = document.getElementById('snowCanvas');
+        const blizzardCanvas = document.getElementById('blizzardCanvas');
+
+        if (snowCanvas) {
+            snowCanvas.width = startScreen.offsetWidth;
+            snowCanvas.height = startScreen.offsetHeight;
+        }
+
+        // Blizzard canvas scales with logo area
+        if (blizzardCanvas && isFullscreen) {
+            blizzardCanvas.width = 800;
+            blizzardCanvas.height = 500;
+        } else if (blizzardCanvas) {
+            blizzardCanvas.width = 520;
+            blizzardCanvas.height = 360;
+        }
+    });
 }
 
 window.addEventListener('resize', fitCanvasToViewport);
