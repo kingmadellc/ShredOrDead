@@ -1550,6 +1550,16 @@ function draw() {
     // Refresh gradient cache if needed
     gradientCache.refreshDimensions(CANVAS_WIDTH, CANVAS_HEIGHT);
 
+    // Debug: Verify canvas and context are valid
+    if (!ctx) {
+        console.error('DRAW ERROR: ctx is null/undefined');
+        return;
+    }
+    if (!canvas) {
+        console.error('DRAW ERROR: canvas is null/undefined');
+        return;
+    }
+
     ctx.fillStyle = COLORS.bgDark;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
@@ -1561,6 +1571,11 @@ function draw() {
     if (gameState.screen === 'gameOver') {
         drawGameOverScreen();
         return;
+    }
+
+    // Debug: Log that we're actually drawing gameplay
+    if (gameState.animationTime < 0.5) {
+        console.log(`DRAW: screen=${gameState.screen}, canvas=${CANVAS_WIDTH}x${CANVAS_HEIGHT}, player=(${gameState.player.visualX.toFixed(1)}, ${gameState.player.visualY.toFixed(1)}), camera.y=${gameState.camera.y.toFixed(1)}`);
     }
 
     // Draw background gradient
@@ -2724,6 +2739,9 @@ function drawGameOverScreen() {
 // ===================
 
 function startGame() {
+    console.log('=== startGame() called ===');
+    console.log(`Before: screen=${gameState.screen}, canvas=${canvas ? `${canvas.width}x${canvas.height}` : 'null'}`);
+
     // Hide the HTML start screen
     hideStartScreen();
 
@@ -2735,6 +2753,12 @@ function startGame() {
 
     // Re-apply canvas viewport fitting to ensure proper display
     fitCanvasToViewport();
+
+    // CRITICAL: Re-acquire context after canvas resize
+    if (canvas) {
+        ctx = canvas.getContext('2d');
+        console.log(`Context re-acquired: ctx=${ctx ? 'valid' : 'null'}`);
+    }
 
     // Ensure terrain dimensions are correct for current resolution
     TERRAIN.slopeWidth = getTerrainSlopeWidth();
@@ -2822,6 +2846,9 @@ function startGame() {
 
     gameState.dangerLevel = 0;
     gameState.deathCause = null;
+
+    console.log('=== startGame() complete ===');
+    console.log(`After: screen=${gameState.screen}, camera.y=${gameState.camera.y}, CANVAS=${CANVAS_WIDTH}x${CANVAS_HEIGHT}`);
 }
 
 function triggerGameOver(cause) {
