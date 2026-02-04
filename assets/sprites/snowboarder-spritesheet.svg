@@ -47,37 +47,37 @@
     </filter>
   </defs>
 
-  <!-- ROW 0: IDLE + CARVE LEFT -->
+  <!-- ROW 0: IDLE (STRAIGHT DOWN) + CARVE LEFT -->
 
-  <!-- Frame 0: Neutral idle -->
+  <!-- Frame 0: Straight down the mountain - facing forward (back of snowboarder visible) -->
   <g transform="translate(32, 32)">
     <ellipse cx="0" cy="29" rx="14" ry="3" fill="rgba(0,0,0,0.25)"/>
-    <!-- Board -->
+    <!-- Board - horizontal across the slope (perpendicular to travel direction) -->
     <rect x="-16" y="24" width="32" height="4" rx="2" fill="url(#boardGrad)" filter="url(#glow)"/>
     <rect x="-5" y="25" width="3" height="2" fill="#222"/><rect x="2" y="25" width="3" height="2" fill="#222"/>
-    <!-- Left leg (thin) -->
-    <path d="M-4,10 L-5,24" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
-    <!-- Right leg -->
-    <path d="M4,10 L5,24" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
-    <!-- Torso - thin rectangle -->
+    <!-- Legs - symmetrical, centered stance facing forward -->
+    <path d="M-4,10 L-4,24" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <path d="M4,10 L4,24" stroke="url(#pantsGrad)" stroke-width="5" stroke-linecap="round"/>
+    <!-- Torso - back of jacket visible (facing down mountain) -->
     <rect x="-6" y="-10" width="12" height="22" rx="2" fill="url(#jacketMain)"/>
-    <!-- Jacket panels (color blocking) -->
-    <rect x="-6" y="-10" width="5" height="22" rx="1" fill="url(#jacketYellow)"/>
-    <rect x="3" y="-4" width="3" height="10" fill="url(#jacketTeal)"/>
-    <!-- Jacket bottom flare (baggy) -->
-    <path d="M-8,10 Q-6,14 -5,12 L5,12 Q6,14 8,10" fill="url(#jacketMain)" opacity="0.8"/>
-    <!-- Left arm -->
-    <path d="M-6,-4 L-12,4" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
-    <path d="M-12,4 L-14,10" stroke="url(#jacketYellow)" stroke-width="3" stroke-linecap="round"/>
-    <circle cx="-14" cy="11" r="2.5" fill="#2244aa"/>
-    <!-- Right arm -->
-    <path d="M6,-4 L12,4" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
-    <path d="M12,4 L14,10" stroke="url(#jacketTeal)" stroke-width="3" stroke-linecap="round"/>
-    <circle cx="14" cy="11" r="2.5" fill="#2244aa"/>
-    <!-- Head (small) -->
+    <!-- Back panel detail - center stripe -->
+    <rect x="-2" y="-8" width="4" height="18" rx="1" fill="url(#jacketTeal)" opacity="0.7"/>
+    <!-- Shoulder stripe accents -->
+    <rect x="-6" y="-10" width="3" height="6" rx="1" fill="url(#jacketYellow)"/>
+    <rect x="3" y="-10" width="3" height="6" rx="1" fill="url(#jacketYellow)"/>
+    <!-- Jacket bottom flare (baggy, symmetric) -->
+    <path d="M-8,10 Q-6,14 0,12 Q6,14 8,10" fill="url(#jacketMain)" opacity="0.8"/>
+    <!-- Arms - relaxed at sides, symmetric -->
+    <path d="M-6,-4 L-10,6" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M-10,6 L-11,12" stroke="url(#jacketYellow)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="-11" cy="13" r="2.5" fill="#2244aa"/>
+    <path d="M6,-4 L10,6" stroke="url(#jacketMain)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M10,6 L11,12" stroke="url(#jacketYellow)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="11" cy="13" r="2.5" fill="#2244aa"/>
+    <!-- Head - back of helmet visible -->
     <ellipse cx="0" cy="-16" rx="6" ry="5" fill="url(#helmetGrad)"/>
-    <rect x="-5" y="-18" width="10" height="4" rx="1.5" fill="url(#goggleGrad)" filter="url(#glow)"/>
-    <ellipse cx="-2" cy="-16" rx="1.5" ry="0.8" fill="rgba(255,255,255,0.5)"/>
+    <!-- Goggle strap visible on back of helmet -->
+    <path d="M-5,-16 Q0,-14 5,-16" stroke="#333" stroke-width="1.5" fill="none"/>
   </g>
 
   <!-- Frame 1: Slight left lean -->
