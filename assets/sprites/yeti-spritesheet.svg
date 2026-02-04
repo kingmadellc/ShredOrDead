@@ -1,0 +1,393 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="384" viewBox="0 0 512 384">
+  <!-- Yeti/Beast Sprite Sheet: 4 columns x 3 rows = 12 frames, 128x128 per frame -->
+  <!-- Row 1: Chase/Movement (frames 0-3) -->
+  <!-- Row 2: Attack/Lunge (frames 4-7) -->
+  <!-- Row 3: Rage/Special States (frames 8-11) -->
+
+  <defs>
+    <!-- Body gradient (dark purple) -->
+    <radialGradient id="bodyGrad" cx="50%" cy="30%" r="70%">
+      <stop offset="0%" style="stop-color:#6a3a7a"/>
+      <stop offset="60%" style="stop-color:#4a2a5a"/>
+      <stop offset="100%" style="stop-color:#1a0a2a"/>
+    </radialGradient>
+    <!-- Rage aura gradient -->
+    <radialGradient id="auraGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" style="stop-color:#ff00ff;stop-opacity:0.3"/>
+      <stop offset="70%" style="stop-color:#8800aa;stop-opacity:0.1"/>
+      <stop offset="100%" style="stop-color:#440066;stop-opacity:0"/>
+    </radialGradient>
+    <!-- Eye glow cyan -->
+    <radialGradient id="eyeCyan" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" style="stop-color:#ffffff"/>
+      <stop offset="40%" style="stop-color:#00ffff"/>
+      <stop offset="100%" style="stop-color:#0088aa"/>
+    </radialGradient>
+    <!-- Eye glow magenta -->
+    <radialGradient id="eyeMagenta" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" style="stop-color:#ffffff"/>
+      <stop offset="40%" style="stop-color:#ff00ff"/>
+      <stop offset="100%" style="stop-color:#aa0088"/>
+    </radialGradient>
+    <!-- Mouth glow -->
+    <radialGradient id="mouthGrad" cx="50%" cy="0%" r="100%">
+      <stop offset="0%" style="stop-color:#ff4444"/>
+      <stop offset="100%" style="stop-color:#aa0000"/>
+    </radialGradient>
+    <!-- Glow filter -->
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <!-- Strong glow -->
+    <filter id="strongGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- ROW 1: CHASE/MOVEMENT -->
+  <!-- Frame 0: Neutral chase pose -->
+  <g transform="translate(64, 64)">
+    <!-- Aura -->
+    <ellipse cx="0" cy="10" rx="50" ry="45" fill="url(#auraGrad)"/>
+    <!-- Shadow tendrils -->
+    <path d="M-35,30 Q-50,20 -45,45" stroke="#330044" stroke-width="4" fill="none" opacity="0.6"/>
+    <path d="M35,30 Q50,20 45,45" stroke="#330044" stroke-width="4" fill="none" opacity="0.6"/>
+    <path d="M-20,40 Q-30,50 -25,55" stroke="#330044" stroke-width="3" fill="none" opacity="0.4"/>
+    <path d="M20,40 Q30,50 25,55" stroke="#330044" stroke-width="3" fill="none" opacity="0.4"/>
+    <!-- Main body -->
+    <ellipse cx="0" cy="10" rx="35" ry="45" fill="url(#bodyGrad)" filter="url(#glow)"/>
+    <!-- Fur texture lines -->
+    <path d="M-25,-20 Q-23,-10 -25,0" stroke="#2a1a3a" stroke-width="2" fill="none"/>
+    <path d="M-15,-25 Q-13,-15 -15,-5" stroke="#2a1a3a" stroke-width="2" fill="none"/>
+    <path d="M0,-30 Q2,-20 0,-10" stroke="#2a1a3a" stroke-width="2" fill="none"/>
+    <path d="M15,-25 Q17,-15 15,-5" stroke="#2a1a3a" stroke-width="2" fill="none"/>
+    <path d="M25,-20 Q27,-10 25,0" stroke="#2a1a3a" stroke-width="2" fill="none"/>
+    <!-- Arms -->
+    <ellipse cx="-38" cy="5" rx="12" ry="20" fill="url(#bodyGrad)"/>
+    <ellipse cx="38" cy="5" rx="12" ry="20" fill="url(#bodyGrad)"/>
+    <!-- Claws -->
+    <path d="M-45,20 L-48,28 M-42,22 L-44,30 M-39,23 L-40,31" stroke="#1a0a1a" stroke-width="2" stroke-linecap="round"/>
+    <path d="M45,20 L48,28 M42,22 L44,30 M39,23 L40,31" stroke="#1a0a1a" stroke-width="2" stroke-linecap="round"/>
+    <!-- Left eye (cyan) -->
+    <ellipse cx="-12" cy="-10" rx="10" ry="12" fill="url(#eyeCyan)" filter="url(#glow)"/>
+    <circle cx="-12" cy="-10" r="4" fill="#000"/>
+    <!-- Right eye (magenta) -->
+    <ellipse cx="12" cy="-10" rx="10" ry="12" fill="url(#eyeMagenta)" filter="url(#glow)"/>
+    <circle cx="12" cy="-10" r="4" fill="#000"/>
+    <!-- Mouth -->
+    <ellipse cx="0" cy="20" rx="15" ry="10" fill="url(#mouthGrad)" filter="url(#glow)"/>
+    <!-- Teeth -->
+    <polygon points="-10,15 -8,22 -6,15" fill="#ffffff"/>
+    <polygon points="-4,14 -2,23 0,14" fill="#ffffff"/>
+    <polygon points="2,14 4,23 6,14" fill="#ffffff"/>
+    <polygon points="8,15 10,22 12,15" fill="#ffffff"/>
+  </g>
+
+  <!-- Frame 1: Chase lean forward -->
+  <g transform="translate(192, 64) rotate(8)">
+    <ellipse cx="0" cy="10" rx="50" ry="45" fill="url(#auraGrad)"/>
+    <path d="M-35,30 Q-55,15 -50,40" stroke="#330044" stroke-width="4" fill="none" opacity="0.6"/>
+    <path d="M35,30 Q55,15 50,40" stroke="#330044" stroke-width="4" fill="none" opacity="0.6"/>
+    <ellipse cx="0" cy="10" rx="35" ry="45" fill="url(#bodyGrad)" filter="url(#glow)"/>
+    <path d="M-25,-20 Q-21,-10 -25,0" stroke="#2a1a3a" stroke-width="2" fill="none"/>
+    <path d="M-15,-25 Q-11,-15 -15,-5" stroke="#2a1a3a" stroke-width="2" fill="none"/>
+    <path d="M0,-30 Q4,-20 0,-10" stroke="#2a1a3a" stroke-width="2" fill="none"/>
+    <path d="M15,-25 Q19,-15 15,-5" stroke="#2a1a3a" stroke-width="2" fill="none"/>
+    <path d="M25,-20 Q29,-10 25,0" stroke="#2a1a3a" stroke-width="2" fill="none"/>
+    <!-- Arms reaching forward -->
+    <ellipse cx="-40" cy="-5" rx="12" ry="20" fill="url(#bodyGrad)" transform="rotate(-20)"/>
+    <ellipse cx="40" cy="-5" rx="12" ry="20" fill="url(#bodyGrad)" transform="rotate(20)"/>
+    <path d="M-50,10 L-55,16 M-47,12 L-51,18 M-44,13 L-47,19" stroke="#1a0a1a" stroke-width="2" stroke-linecap="round"/>
+    <path d="M50,10 L55,16 M47,12 L51,18 M44,13 L47,19" stroke="#1a0a1a" stroke-width="2" stroke-linecap="round"/>
+    <ellipse cx="-12" cy="-10" rx="10" ry="12" fill="url(#eyeCyan)" filter="url(#glow)"/>
+    <circle cx="-10" cy="-10" r="4" fill="#000"/>
+    <ellipse cx="12" cy="-10" rx="10" ry="12" fill="url(#eyeMagenta)" filter="url(#glow)"/>
+    <circle cx="14" cy="-10" r="4" fill="#000"/>
+    <ellipse cx="0" cy="20" rx="18" ry="12" fill="url(#mouthGrad)" filter="url(#glow)"/>
+    <polygon points="-12,14 -10,24 -8,14" fill="#ffffff"/>
+    <polygon points="-4,13 -2,25 0,13" fill="#ffffff"/>
+    <polygon points="4,13 6,25 8,13" fill="#ffffff"/>
+    <polygon points="10,14 12,24 14,14" fill="#ffffff"/>
+  </g>
+
+  <!-- Frame 2: Chase stride 1 -->
+  <g transform="translate(320, 64)">
+    <ellipse cx="0" cy="10" rx="55" ry="50" fill="url(#auraGrad)"/>
+    <path d="M-40,25 Q-60,10 -55,35" stroke="#330044" stroke-width="5" fill="none" opacity="0.7"/>
+    <path d="M40,25 Q60,10 55,35" stroke="#330044" stroke-width="5" fill="none" opacity="0.7"/>
+    <ellipse cx="0" cy="10" rx="38" ry="48" fill="url(#bodyGrad)" filter="url(#glow)"/>
+    <path d="M-28,-22 Q-24,-12 -28,0" stroke="#2a1a3a" stroke-width="2" fill="none"/>
+    <path d="M-14,-28 Q-10,-18 -14,-6" stroke="#2a1a3a" stroke-width="2" fill="none"/>
+    <path d="M0,-32 Q4,-22 0,-10" stroke="#2a1a3a" stroke-width="2" fill="none"/>
+    <path d="M14,-28 Q18,-18 14,-6" stroke="#2a1a3a" stroke-width="2" fill="none"/>
+    <path d="M28,-22 Q32,-12 28,0" stroke="#2a1a3a" stroke-width="2" fill="none"/>
+    <!-- Left arm up -->
+    <ellipse cx="-42" cy="-10" rx="13" ry="22" fill="url(#bodyGrad)" transform="rotate(-30 -42 -10)"/>
+    <!-- Right arm down -->
+    <ellipse cx="42" cy="15" rx="13" ry="22" fill="url(#bodyGrad)" transform="rotate(30 42 15)"/>
+    <path d="M-55,-5 L-60,2 M-52,-3 L-56,4 M-49,-2 L-52,5" stroke="#1a0a1a" stroke-width="2" stroke-linecap="round"/>
+    <path d="M52,30 L56,38 M49,32 L52,40 M46,33 L48,41" stroke="#1a0a1a" stroke-width="2" stroke-linecap="round"/>
+    <ellipse cx="-12" cy="-12" rx="11" ry="13" fill="url(#eyeCyan)" filter="url(#glow)"/>
+    <circle cx="-14" cy="-12" r="4" fill="#000"/>
+    <ellipse cx="12" cy="-12" rx="11" ry="13" fill="url(#eyeMagenta)" filter="url(#glow)"/>
+    <circle cx="10" cy="-12" r="4" fill="#000"/>
+    <ellipse cx="0" cy="18" rx="16" ry="11" fill="url(#mouthGrad)" filter="url(#glow)"/>
+    <polygon points="-11,13 -9,22 -7,13" fill="#ffffff"/>
+    <polygon points="-3,12 -1,23 1,12" fill="#ffffff"/>
+    <polygon points="5,12 7,23 9,12" fill="#ffffff"/>
+    <polygon points="11,13 13,22 15,13" fill="#ffffff"/>
+  </g>
+
+  <!-- Frame 3: Chase stride 2 -->
+  <g transform="translate(448, 64)">
+    <ellipse cx="0" cy="10" rx="55" ry="50" fill="url(#auraGrad)"/>
+    <path d="M-40,25 Q-60,10 -55,35" stroke="#330044" stroke-width="5" fill="none" opacity="0.7"/>
+    <path d="M40,25 Q60,10 55,35" stroke="#330044" stroke-width="5" fill="none" opacity="0.7"/>
+    <ellipse cx="0" cy="10" rx="38" ry="48" fill="url(#bodyGrad)" filter="url(#glow)"/>
+    <path d="M-28,-22 Q-32,-12 -28,0" stroke="#2a1a3a" stroke-width="2" fill="none"/>
+    <path d="M-14,-28 Q-18,-18 -14,-6" stroke="#2a1a3a" stroke-width="2" fill="none"/>
+    <path d="M0,-32 Q-4,-22 0,-10" stroke="#2a1a3a" stroke-width="2" fill="none"/>
+    <path d="M14,-28 Q10,-18 14,-6" stroke="#2a1a3a" stroke-width="2" fill="none"/>
+    <path d="M28,-22 Q24,-12 28,0" stroke="#2a1a3a" stroke-width="2" fill="none"/>
+    <!-- Right arm up -->
+    <ellipse cx="42" cy="-10" rx="13" ry="22" fill="url(#bodyGrad)" transform="rotate(30 42 -10)"/>
+    <!-- Left arm down -->
+    <ellipse cx="-42" cy="15" rx="13" ry="22" fill="url(#bodyGrad)" transform="rotate(-30 -42 15)"/>
+    <path d="M55,-5 L60,2 M52,-3 L56,4 M49,-2 L52,5" stroke="#1a0a1a" stroke-width="2" stroke-linecap="round"/>
+    <path d="M-52,30 L-56,38 M-49,32 L-52,40 M-46,33 L-48,41" stroke="#1a0a1a" stroke-width="2" stroke-linecap="round"/>
+    <ellipse cx="-12" cy="-12" rx="11" ry="13" fill="url(#eyeCyan)" filter="url(#glow)"/>
+    <circle cx="-10" cy="-12" r="4" fill="#000"/>
+    <ellipse cx="12" cy="-12" rx="11" ry="13" fill="url(#eyeMagenta)" filter="url(#glow)"/>
+    <circle cx="14" cy="-12" r="4" fill="#000"/>
+    <ellipse cx="0" cy="18" rx="16" ry="11" fill="url(#mouthGrad)" filter="url(#glow)"/>
+    <polygon points="-11,13 -9,22 -7,13" fill="#ffffff"/>
+    <polygon points="-3,12 -1,23 1,12" fill="#ffffff"/>
+    <polygon points="5,12 7,23 9,12" fill="#ffffff"/>
+    <polygon points="11,13 13,22 15,13" fill="#ffffff"/>
+  </g>
+
+  <!-- ROW 2: ATTACK/LUNGE -->
+  <!-- Frame 4: Wind up -->
+  <g transform="translate(64, 192)">
+    <ellipse cx="0" cy="5" rx="55" ry="50" fill="url(#auraGrad)"/>
+    <ellipse cx="0" cy="5" rx="40" ry="50" fill="url(#bodyGrad)" filter="url(#glow)"/>
+    <!-- Arms pulled back -->
+    <ellipse cx="-45" cy="-15" rx="14" ry="24" fill="url(#bodyGrad)" transform="rotate(-45 -45 -15)"/>
+    <ellipse cx="45" cy="-15" rx="14" ry="24" fill="url(#bodyGrad)" transform="rotate(45 45 -15)"/>
+    <path d="M-58,-25 L-65,-20 M-55,-27 L-62,-22 M-52,-28 L-58,-24" stroke="#1a0a1a" stroke-width="3" stroke-linecap="round"/>
+    <path d="M58,-25 L65,-20 M55,-27 L62,-22 M52,-28 L58,-24" stroke="#1a0a1a" stroke-width="3" stroke-linecap="round"/>
+    <!-- Intense eyes -->
+    <ellipse cx="-14" cy="-15" rx="12" ry="14" fill="url(#eyeCyan)" filter="url(#strongGlow)"/>
+    <circle cx="-14" cy="-15" r="5" fill="#000"/>
+    <ellipse cx="14" cy="-15" rx="12" ry="14" fill="url(#eyeMagenta)" filter="url(#strongGlow)"/>
+    <circle cx="14" cy="-15" r="5" fill="#000"/>
+    <!-- Open mouth roar -->
+    <ellipse cx="0" cy="20" rx="20" ry="18" fill="url(#mouthGrad)" filter="url(#strongGlow)"/>
+    <polygon points="-14,10 -12,24 -10,10" fill="#ffffff"/>
+    <polygon points="-6,8 -4,26 -2,8" fill="#ffffff"/>
+    <polygon points="2,8 4,26 6,8" fill="#ffffff"/>
+    <polygon points="10,10 12,24 14,10" fill="#ffffff"/>
+    <!-- Lower fangs -->
+    <polygon points="-8,30 -6,38 -4,30" fill="#ffffff"/>
+    <polygon points="4,30 6,38 8,30" fill="#ffffff"/>
+  </g>
+
+  <!-- Frame 5: Lunge mid -->
+  <g transform="translate(192, 192) rotate(15)">
+    <ellipse cx="0" cy="5" rx="60" ry="55" fill="url(#auraGrad)"/>
+    <!-- Motion blur effect -->
+    <ellipse cx="-20" cy="5" rx="35" ry="45" fill="url(#bodyGrad)" opacity="0.3"/>
+    <ellipse cx="0" cy="5" rx="42" ry="52" fill="url(#bodyGrad)" filter="url(#glow)"/>
+    <!-- Arms forward attack -->
+    <ellipse cx="-35" cy="15" rx="14" ry="26" fill="url(#bodyGrad)" transform="rotate(60 -35 15)"/>
+    <ellipse cx="35" cy="15" rx="14" ry="26" fill="url(#bodyGrad)" transform="rotate(-60 35 15)"/>
+    <path d="M-42,35 L-48,45 M-38,38 L-44,48 M-34,40 L-38,50" stroke="#1a0a1a" stroke-width="3" stroke-linecap="round"/>
+    <path d="M42,35 L48,45 M38,38 L44,48 M34,40 L38,50" stroke="#1a0a1a" stroke-width="3" stroke-linecap="round"/>
+    <ellipse cx="-14" cy="-18" rx="13" ry="15" fill="url(#eyeCyan)" filter="url(#strongGlow)"/>
+    <circle cx="-16" cy="-18" r="5" fill="#000"/>
+    <ellipse cx="14" cy="-18" rx="13" ry="15" fill="url(#eyeMagenta)" filter="url(#strongGlow)"/>
+    <circle cx="12" cy="-18" r="5" fill="#000"/>
+    <ellipse cx="0" cy="18" rx="22" ry="20" fill="url(#mouthGrad)" filter="url(#strongGlow)"/>
+    <polygon points="-16,8 -14,26 -12,8" fill="#ffffff"/>
+    <polygon points="-6,6 -4,28 -2,6" fill="#ffffff"/>
+    <polygon points="2,6 4,28 6,6" fill="#ffffff"/>
+    <polygon points="12,8 14,26 16,8" fill="#ffffff"/>
+    <polygon points="-10,32 -8,42 -6,32" fill="#ffffff"/>
+    <polygon points="6,32 8,42 10,32" fill="#ffffff"/>
+  </g>
+
+  <!-- Frame 6: Full lunge/swipe -->
+  <g transform="translate(320, 192) rotate(25)">
+    <ellipse cx="0" cy="0" rx="65" ry="60" fill="url(#auraGrad)"/>
+    <ellipse cx="-30" cy="0" rx="35" ry="45" fill="url(#bodyGrad)" opacity="0.2"/>
+    <ellipse cx="-15" cy="0" rx="38" ry="48" fill="url(#bodyGrad)" opacity="0.3"/>
+    <ellipse cx="0" cy="0" rx="45" ry="55" fill="url(#bodyGrad)" filter="url(#glow)"/>
+    <!-- Arms fully extended -->
+    <ellipse cx="-25" cy="30" rx="15" ry="28" fill="url(#bodyGrad)" transform="rotate(80 -25 30)"/>
+    <ellipse cx="25" cy="30" rx="15" ry="28" fill="url(#bodyGrad)" transform="rotate(-80 25 30)"/>
+    <!-- Extended claws -->
+    <path d="M-30,55 L-35,68 M-25,58 L-28,72 M-20,60 L-22,74" stroke="#1a0a1a" stroke-width="4" stroke-linecap="round"/>
+    <path d="M30,55 L35,68 M25,58 L28,72 M20,60 L22,74" stroke="#1a0a1a" stroke-width="4" stroke-linecap="round"/>
+    <!-- Rage eyes -->
+    <ellipse cx="-16" cy="-22" rx="14" ry="16" fill="url(#eyeCyan)" filter="url(#strongGlow)"/>
+    <circle cx="-18" cy="-22" r="6" fill="#000"/>
+    <ellipse cx="16" cy="-22" rx="14" ry="16" fill="url(#eyeMagenta)" filter="url(#strongGlow)"/>
+    <circle cx="14" cy="-22" r="6" fill="#000"/>
+    <!-- Max open mouth -->
+    <ellipse cx="0" cy="12" rx="25" ry="24" fill="url(#mouthGrad)" filter="url(#strongGlow)"/>
+    <polygon points="-18,2 -16,24 -14,2" fill="#ffffff"/>
+    <polygon points="-8,0 -6,28 -4,0" fill="#ffffff"/>
+    <polygon points="4,0 6,28 8,0" fill="#ffffff"/>
+    <polygon points="14,2 16,24 18,2" fill="#ffffff"/>
+    <polygon points="-12,30 -10,44 -8,30" fill="#ffffff"/>
+    <polygon points="8,30 10,44 12,30" fill="#ffffff"/>
+  </g>
+
+  <!-- Frame 7: Recovery -->
+  <g transform="translate(448, 192) rotate(-5)">
+    <ellipse cx="0" cy="10" rx="50" ry="45" fill="url(#auraGrad)"/>
+    <ellipse cx="0" cy="10" rx="36" ry="46" fill="url(#bodyGrad)" filter="url(#glow)"/>
+    <!-- Arms returning -->
+    <ellipse cx="-40" cy="10" rx="12" ry="22" fill="url(#bodyGrad)" transform="rotate(15 -40 10)"/>
+    <ellipse cx="40" cy="10" rx="12" ry="22" fill="url(#bodyGrad)" transform="rotate(-15 40 10)"/>
+    <path d="M-48,28 L-52,36 M-45,30 L-48,38 M-42,31 L-44,39" stroke="#1a0a1a" stroke-width="2" stroke-linecap="round"/>
+    <path d="M48,28 L52,36 M45,30 L48,38 M42,31 L44,39" stroke="#1a0a1a" stroke-width="2" stroke-linecap="round"/>
+    <ellipse cx="-12" cy="-10" rx="10" ry="12" fill="url(#eyeCyan)" filter="url(#glow)"/>
+    <circle cx="-12" cy="-10" r="4" fill="#000"/>
+    <ellipse cx="12" cy="-10" rx="10" ry="12" fill="url(#eyeMagenta)" filter="url(#glow)"/>
+    <circle cx="12" cy="-10" r="4" fill="#000"/>
+    <ellipse cx="0" cy="20" rx="16" ry="12" fill="url(#mouthGrad)" filter="url(#glow)"/>
+    <polygon points="-10,15 -8,24 -6,15" fill="#ffffff"/>
+    <polygon points="-2,14 0,25 2,14" fill="#ffffff"/>
+    <polygon points="6,15 8,24 10,15" fill="#ffffff"/>
+  </g>
+
+  <!-- ROW 3: RAGE/SPECIAL STATES -->
+  <!-- Frame 8: Low rage (normal) -->
+  <g transform="translate(64, 320)">
+    <ellipse cx="0" cy="10" rx="48" ry="43" fill="url(#auraGrad)" opacity="0.5"/>
+    <ellipse cx="0" cy="10" rx="33" ry="43" fill="url(#bodyGrad)" filter="url(#glow)"/>
+    <ellipse cx="-36" cy="5" rx="11" ry="18" fill="url(#bodyGrad)"/>
+    <ellipse cx="36" cy="5" rx="11" ry="18" fill="url(#bodyGrad)"/>
+    <path d="M-43,18 L-46,26 M-40,20 L-42,28 M-37,21 L-38,29" stroke="#1a0a1a" stroke-width="2" stroke-linecap="round"/>
+    <path d="M43,18 L46,26 M40,20 L42,28 M37,21 L38,29" stroke="#1a0a1a" stroke-width="2" stroke-linecap="round"/>
+    <ellipse cx="-11" cy="-10" rx="9" ry="11" fill="url(#eyeCyan)" filter="url(#glow)"/>
+    <circle cx="-11" cy="-10" r="3" fill="#000"/>
+    <ellipse cx="11" cy="-10" rx="9" ry="11" fill="url(#eyeMagenta)" filter="url(#glow)"/>
+    <circle cx="11" cy="-10" r="3" fill="#000"/>
+    <ellipse cx="0" cy="18" rx="13" ry="9" fill="url(#mouthGrad)"/>
+    <polygon points="-8,14 -6,21 -4,14" fill="#ffffff"/>
+    <polygon points="-1,13 1,22 3,13" fill="#ffffff"/>
+    <polygon points="6,14 8,21 10,14" fill="#ffffff"/>
+  </g>
+
+  <!-- Frame 9: Medium rage -->
+  <g transform="translate(192, 320)">
+    <ellipse cx="0" cy="8" rx="55" ry="50" fill="url(#auraGrad)" opacity="0.7"/>
+    <!-- Pulsing effect ring -->
+    <ellipse cx="0" cy="8" rx="50" ry="45" fill="none" stroke="#ff00ff" stroke-width="2" opacity="0.4"/>
+    <ellipse cx="0" cy="8" rx="38" ry="48" fill="url(#bodyGrad)" filter="url(#glow)"/>
+    <!-- Raised fur -->
+    <path d="M-30,-25 L-32,-35" stroke="#4a2a5a" stroke-width="3" stroke-linecap="round"/>
+    <path d="M-15,-32 L-16,-42" stroke="#4a2a5a" stroke-width="3" stroke-linecap="round"/>
+    <path d="M0,-35 L0,-45" stroke="#4a2a5a" stroke-width="3" stroke-linecap="round"/>
+    <path d="M15,-32 L16,-42" stroke="#4a2a5a" stroke-width="3" stroke-linecap="round"/>
+    <path d="M30,-25 L32,-35" stroke="#4a2a5a" stroke-width="3" stroke-linecap="round"/>
+    <ellipse cx="-40" cy="3" rx="13" ry="21" fill="url(#bodyGrad)"/>
+    <ellipse cx="40" cy="3" rx="13" ry="21" fill="url(#bodyGrad)"/>
+    <path d="M-48,18 L-52,28 M-44,21 L-47,31 M-40,23 L-42,33" stroke="#1a0a1a" stroke-width="3" stroke-linecap="round"/>
+    <path d="M48,18 L52,28 M44,21 L47,31 M40,23 L42,33" stroke="#1a0a1a" stroke-width="3" stroke-linecap="round"/>
+    <ellipse cx="-13" cy="-12" rx="11" ry="13" fill="url(#eyeCyan)" filter="url(#strongGlow)"/>
+    <circle cx="-13" cy="-12" r="4" fill="#000"/>
+    <ellipse cx="13" cy="-12" rx="11" ry="13" fill="url(#eyeMagenta)" filter="url(#strongGlow)"/>
+    <circle cx="13" cy="-12" r="4" fill="#000"/>
+    <ellipse cx="0" cy="20" rx="17" ry="13" fill="url(#mouthGrad)" filter="url(#glow)"/>
+    <polygon points="-12,14 -10,25 -8,14" fill="#ffffff"/>
+    <polygon points="-4,13 -2,26 0,13" fill="#ffffff"/>
+    <polygon points="4,13 6,26 8,13" fill="#ffffff"/>
+    <polygon points="10,14 12,25 14,14" fill="#ffffff"/>
+  </g>
+
+  <!-- Frame 10: High rage -->
+  <g transform="translate(320, 320)">
+    <ellipse cx="0" cy="5" rx="60" ry="55" fill="url(#auraGrad)"/>
+    <!-- Multiple pulse rings -->
+    <ellipse cx="0" cy="5" rx="55" ry="50" fill="none" stroke="#ff00ff" stroke-width="2" opacity="0.5"/>
+    <ellipse cx="0" cy="5" rx="50" ry="45" fill="none" stroke="#00ffff" stroke-width="2" opacity="0.3"/>
+    <ellipse cx="0" cy="5" rx="42" ry="52" fill="url(#bodyGrad)" filter="url(#strongGlow)"/>
+    <!-- More raised fur -->
+    <path d="M-32,-28 L-36,-42" stroke="#5a3a6a" stroke-width="4" stroke-linecap="round"/>
+    <path d="M-16,-35 L-18,-50" stroke="#5a3a6a" stroke-width="4" stroke-linecap="round"/>
+    <path d="M0,-38 L0,-54" stroke="#5a3a6a" stroke-width="4" stroke-linecap="round"/>
+    <path d="M16,-35 L18,-50" stroke="#5a3a6a" stroke-width="4" stroke-linecap="round"/>
+    <path d="M32,-28 L36,-42" stroke="#5a3a6a" stroke-width="4" stroke-linecap="round"/>
+    <!-- Raised arms -->
+    <ellipse cx="-44" cy="-5" rx="14" ry="24" fill="url(#bodyGrad)" transform="rotate(-20 -44 -5)"/>
+    <ellipse cx="44" cy="-5" rx="14" ry="24" fill="url(#bodyGrad)" transform="rotate(20 44 -5)"/>
+    <path d="M-54,12 L-60,22 M-50,15 L-55,25 M-46,17 L-50,27" stroke="#1a0a1a" stroke-width="3" stroke-linecap="round"/>
+    <path d="M54,12 L60,22 M50,15 L55,25 M46,17 L50,27" stroke="#1a0a1a" stroke-width="3" stroke-linecap="round"/>
+    <!-- Intense glowing eyes -->
+    <ellipse cx="-14" cy="-15" rx="13" ry="15" fill="url(#eyeCyan)" filter="url(#strongGlow)"/>
+    <circle cx="-14" cy="-15" r="5" fill="#000"/>
+    <ellipse cx="14" cy="-15" rx="13" ry="15" fill="url(#eyeMagenta)" filter="url(#strongGlow)"/>
+    <circle cx="14" cy="-15" r="5" fill="#000"/>
+    <!-- Roaring mouth -->
+    <ellipse cx="0" cy="18" rx="20" ry="18" fill="url(#mouthGrad)" filter="url(#strongGlow)"/>
+    <polygon points="-14,10 -12,26 -10,10" fill="#ffffff"/>
+    <polygon points="-6,8 -4,28 -2,8" fill="#ffffff"/>
+    <polygon points="2,8 4,28 6,8" fill="#ffffff"/>
+    <polygon points="10,10 12,26 14,10" fill="#ffffff"/>
+    <polygon points="-8,30 -6,40 -4,30" fill="#ffffff"/>
+    <polygon points="4,30 6,40 8,30" fill="#ffffff"/>
+  </g>
+
+  <!-- Frame 11: Max rage / Berserk -->
+  <g transform="translate(448, 320)">
+    <!-- Intense aura -->
+    <ellipse cx="0" cy="0" rx="62" ry="58" fill="url(#auraGrad)"/>
+    <ellipse cx="0" cy="0" rx="58" ry="54" fill="none" stroke="#ff00ff" stroke-width="3" opacity="0.7"/>
+    <ellipse cx="0" cy="0" rx="52" ry="48" fill="none" stroke="#ff00ff" stroke-width="2" opacity="0.5"/>
+    <ellipse cx="0" cy="0" rx="46" ry="42" fill="none" stroke="#00ffff" stroke-width="2" opacity="0.3"/>
+    <!-- Larger, angrier body -->
+    <ellipse cx="0" cy="0" rx="45" ry="55" fill="url(#bodyGrad)" filter="url(#strongGlow)"/>
+    <!-- Maximum fur raise -->
+    <path d="M-35,-32 L-42,-50" stroke="#6a4a7a" stroke-width="5" stroke-linecap="round"/>
+    <path d="M-18,-40 L-22,-58" stroke="#6a4a7a" stroke-width="5" stroke-linecap="round"/>
+    <path d="M0,-44 L0,-64" stroke="#6a4a7a" stroke-width="5" stroke-linecap="round"/>
+    <path d="M18,-40 L22,-58" stroke="#6a4a7a" stroke-width="5" stroke-linecap="round"/>
+    <path d="M35,-32 L42,-50" stroke="#6a4a7a" stroke-width="5" stroke-linecap="round"/>
+    <!-- Arms raised high -->
+    <ellipse cx="-48" cy="-15" rx="15" ry="26" fill="url(#bodyGrad)" transform="rotate(-40 -48 -15)"/>
+    <ellipse cx="48" cy="-15" rx="15" ry="26" fill="url(#bodyGrad)" transform="rotate(40 48 -15)"/>
+    <!-- Huge claws -->
+    <path d="M-60,-5 L-70,5 M-56,-8 L-66,2 M-52,-10 L-60,-2" stroke="#1a0a1a" stroke-width="4" stroke-linecap="round"/>
+    <path d="M60,-5 L70,5 M56,-8 L66,2 M52,-10 L60,-2" stroke="#1a0a1a" stroke-width="4" stroke-linecap="round"/>
+    <!-- Maximum glow eyes -->
+    <ellipse cx="-15" cy="-18" rx="14" ry="16" fill="#ffffff" filter="url(#strongGlow)"/>
+    <ellipse cx="-15" cy="-18" rx="12" ry="14" fill="url(#eyeCyan)" filter="url(#strongGlow)"/>
+    <circle cx="-15" cy="-18" r="4" fill="#000"/>
+    <ellipse cx="15" cy="-18" rx="14" ry="16" fill="#ffffff" filter="url(#strongGlow)"/>
+    <ellipse cx="15" cy="-18" rx="12" ry="14" fill="url(#eyeMagenta)" filter="url(#strongGlow)"/>
+    <circle cx="15" cy="-18" r="4" fill="#000"/>
+    <!-- Maximum roar mouth -->
+    <ellipse cx="0" cy="15" rx="24" ry="22" fill="url(#mouthGrad)" filter="url(#strongGlow)"/>
+    <polygon points="-18,6 -16,28 -14,6" fill="#ffffff"/>
+    <polygon points="-8,4 -6,32 -4,4" fill="#ffffff"/>
+    <polygon points="4,4 6,32 8,4" fill="#ffffff"/>
+    <polygon points="14,6 16,28 18,6" fill="#ffffff"/>
+    <polygon points="-12,32 -10,46 -8,32" fill="#ffffff"/>
+    <polygon points="8,32 10,46 12,32" fill="#ffffff"/>
+    <!-- Drool/saliva -->
+    <path d="M-6,35 Q-8,45 -4,50" stroke="#ff6666" stroke-width="2" fill="none" opacity="0.6"/>
+    <path d="M6,35 Q8,45 4,50" stroke="#ff6666" stroke-width="2" fill="none" opacity="0.6"/>
+  </g>
+</svg>
