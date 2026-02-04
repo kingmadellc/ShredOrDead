@@ -2726,6 +2726,10 @@ function update(dt) {
     updateCelebrations(dt);
     updateCombo(dt);
     updateScreenShake(dt);
+
+    // Update sprite animations
+    if (sprites.player) sprites.player.update(dt);
+    if (sprites.beast) sprites.beast.update(dt);
 }
 
 function gameLoop(timestamp) {
@@ -2753,6 +2757,13 @@ function init() {
     setupInput();
     loadHighScore();
     updateSettingsUI();
+
+    // Load sprites asynchronously (game works without them)
+    loadSprites().then(() => {
+        console.log('Sprite system ready');
+    }).catch(err => {
+        console.warn('Sprites failed to load, using procedural rendering:', err);
+    });
 
     requestAnimationFrame(gameLoop);
 }
