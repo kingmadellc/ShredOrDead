@@ -61,6 +61,18 @@
             image-rendering: pixelated;
             image-rendering: crisp-edges;
             transition: opacity 0.3s ease;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* In fullscreen mode, make the game canvas fill the screen */
+        body.fullscreen-mode #gameCanvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 50;
+            border: none;
+            box-shadow: none;
         }
 
         #controls-hint {

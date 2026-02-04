@@ -2727,12 +2727,23 @@ function startGame() {
     // Hide the HTML start screen
     hideStartScreen();
 
+    // Ensure canvas is visible and properly sized for current resolution
+    if (canvas) {
+        canvas.style.display = 'block';
+        canvas.style.opacity = '1';
+    }
+
+    // Re-apply canvas viewport fitting to ensure proper display
+    fitCanvasToViewport();
+
     // Ensure terrain dimensions are correct for current resolution
     TERRAIN.slopeWidth = getTerrainSlopeWidth();
     TERRAIN.laneWidth = getTerrainLaneWidth();
 
     // Invalidate gradient cache to regenerate for current resolution
     gradientCache.invalidate();
+
+    console.log(`Starting game with canvas: ${CANVAS_WIDTH}x${CANVAS_HEIGHT}, terrain width: ${TERRAIN.slopeWidth}`);
 
     // Reset game state
     gameState.screen = 'playing';
