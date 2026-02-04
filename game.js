@@ -11,7 +11,65 @@
 const BASE_WIDTH = 480;
 const BASE_HEIGHT = 640;
 
-// Resolution scaling system
+// ============================================
+// PERFORMANCE OPTIMIZATION: GRADIENT CACHE
+// ============================================
+// Gradients are expensive to create. Cache them and recreate only on canvas resize.
+const gradientCache = {
+    width: 0,
+    height: 0,
+    background: null,
+    dangerVignette: null,
+    fogGradient: null,
+
+    invalidate() {
+        this.background = null;
+        this.dangerVignette = null;
+        this.fogGradient = null;
+    },
+
+    needsRefresh(w, h) {
+        return this.width !== w || this.height !== h;
+    },
+
+    refreshDimensions(w, h) {
+        if (this.needsRefresh(w, h)) {
+            this.width = w;
+            this.height = h;
+            this.invalidate();
+        }
+    }
+};
+
+// ============================================
+// PERFORMANCE OPTIMIZATION: ANIMATION CACHE
+// ============================================
+// Pre-calculate common trig values once per frame instead of many times
+const animCache = {
+    time: 0,
+    sin2: 0, sin3: 0, sin4: 0, sin5: 0, sin6: 0, sin8: 0, sin10: 0,
+    cos3: 0, cos4: 0, cos5: 0, cos6: 0,
+
+    update(animationTime) {
+        this.time = animationTime;
+        this.sin2 = Math.sin(animationTime * 2);
+        this.sin3 = Math.sin(animationTime * 3);
+        this.sin4 = Math.sin(animationTime * 4);
+        this.sin5 = Math.sin(animationTime * 5);
+        this.sin6 = Math.sin(animationTime * 6);
+        this.sin8 = Math.sin(animationTime * 8);
+        this.sin10 = Math.sin(animationTime * 10);
+        this.cos3 = Math.cos(animationTime * 3);
+        this.cos4 = Math.cos(animationTime * 4);
+        this.cos5 = Math.cos(animationTime * 5);
+        this.cos6 = Math.cos(animationTime * 6);
+    }
+};
+
+// ============================================
+// RESOLUTION SCALING SYSTEM
+// Supports portrait, landscape, and handheld gaming devices
+// ============================================
 const displaySettings = {
     baseWidth: BASE_WIDTH,
     baseHeight: BASE_HEIGHT,
@@ -19,22 +77,61 @@ const displaySettings = {
     fullscreen: false,
     currentResolution: '480x640',
     autoDetect: true,
-    screenShakeEnabled: true
+    screenShakeEnabled: true,
+    hapticsEnabled: true
 };
 
+// Available resolutions with aspect ratio info
+// Portrait resolutions for standard play, landscape for handheld gaming devices
 const RESOLUTIONS = {
-    '480x640': { width: 480, height: 640, scale: 1, aspectRatio: '3:4' },
-    '600x800': { width: 600, height: 800, scale: 1.25, aspectRatio: '3:4' },
-    '720x960': { width: 720, height: 960, scale: 1.5, aspectRatio: '3:4' },
-    '768x1024': { width: 768, height: 1024, scale: 1.6, aspectRatio: '3:4' },
-    '900x1200': { width: 900, height: 1200, scale: 1.875, aspectRatio: '3:4' },
-    '405x720': { width: 405, height: 720, scale: 1.125, aspectRatio: '9:16' },
-    '608x1080': { width: 608, height: 1080, scale: 1.6875, aspectRatio: '9:16' },
-    '500x800': { width: 500, height: 800, scale: 1.25, aspectRatio: '10:16' }
+    // Portrait resolutions (3:4) - Traditional mobile/tablet
+    '480x640': { width: 480, height: 640, scale: 1, aspectRatio: '3:4', orientation: 'portrait' },
+    '600x800': { width: 600, height: 800, scale: 1.25, aspectRatio: '3:4', orientation: 'portrait' },
+    '720x960': { width: 720, height: 960, scale: 1.5, aspectRatio: '3:4', orientation: 'portrait' },
+    '768x1024': { width: 768, height: 1024, scale: 1.6, aspectRatio: '3:4', orientation: 'portrait' },
+    '900x1200': { width: 900, height: 1200, scale: 1.875, aspectRatio: '3:4', orientation: 'portrait' },
+
+    // Portrait mobile (9:16)
+    '405x720': { width: 405, height: 720, scale: 1.125, aspectRatio: '9:16', orientation: 'portrait' },
+    '608x1080': { width: 608, height: 1080, scale: 1.6875, aspectRatio: '9:16', orientation: 'portrait' },
+
+    // Steam Deck portrait (10:16)
+    '500x800': { width: 500, height: 800, scale: 1.25, aspectRatio: '10:16', orientation: 'portrait' },
+
+    // === LANDSCAPE / WIDESCREEN RESOLUTIONS ===
+    // For handheld gaming devices (ROG Ally, Steam Deck in landscape)
+
+    // HD Widescreen (16:9) - Great for ROG Ally, desktop
+    '854x480': { width: 854, height: 480, scale: 1, aspectRatio: '16:9', orientation: 'landscape' },
+    '1280x720': { width: 1280, height: 720, scale: 1.5, aspectRatio: '16:9', orientation: 'landscape' },
+    '1920x1080': { width: 1920, height: 1080, scale: 2.25, aspectRatio: '16:9', orientation: 'landscape' },
+
+    // Steam Deck native (16:10)
+    '1280x800': { width: 1280, height: 800, scale: 1.67, aspectRatio: '16:10', orientation: 'landscape' },
+
+    // ROG Ally / Ally X native (Full HD)
+    '1920x1080-ally': { width: 1920, height: 1080, scale: 2.25, aspectRatio: '16:9', orientation: 'landscape', device: 'ally' }
 };
 
+// Dynamic canvas dimensions (will be updated by resolution system)
 let CANVAS_WIDTH = BASE_WIDTH;
 let CANVAS_HEIGHT = BASE_HEIGHT;
+
+// Derived slope width - adapts to resolution
+function getSlopeWidth() {
+    const res = RESOLUTIONS[displaySettings.currentResolution];
+    if (res && res.orientation === 'landscape') {
+        // For landscape, slope is centered with margins
+        return Math.min(res.width * 0.6, 720);
+    }
+    return CANVAS_WIDTH;
+}
+
+// Get scale factor for UI elements
+function getUIScale() {
+    const res = RESOLUTIONS[displaySettings.currentResolution];
+    return res ? res.scale : 1;
+}
 
 const COLORS = {
     // Neon palette
@@ -77,11 +174,12 @@ const PHYSICS = {
     airControlFactor: 0.6
 };
 
+// TERRAIN settings - slopeWidth is dynamically calculated based on resolution
 const TERRAIN = {
     chunkHeight: 600,
     laneCount: 7,
     laneWidth: 68,
-    slopeWidth: 480,
+    baseSlopeWidth: 480,        // Base slope width (updated dynamically)
     baseDensity: 0.08,          // Fewer obstacles
     maxDensity: 0.18,           // Less cluttered
     densityRampDistance: 4000,
@@ -89,6 +187,25 @@ const TERRAIN = {
     railChance: 0.04,           // Reduced - fewer rails
     clearPathWidth: 2
 };
+
+// Dynamic terrain properties that adapt to resolution
+function getTerrainSlopeWidth() {
+    const res = RESOLUTIONS[displaySettings.currentResolution];
+    if (!res) return TERRAIN.baseSlopeWidth;
+
+    if (res.orientation === 'landscape') {
+        // For landscape, slope fills center portion of screen
+        // Scale with height to maintain playable area ratio
+        return Math.min(res.height * 0.9, 720);
+    }
+    // For portrait, slope fills width
+    return Math.min(res.width, 720);
+}
+
+function getTerrainLaneWidth() {
+    const slopeWidth = getTerrainSlopeWidth();
+    return Math.floor(slopeWidth / TERRAIN.laneCount);
+}
 
 // Jump variety system
 const JUMP_TYPES = {
@@ -1413,6 +1530,12 @@ function worldToScreen(worldX, worldY) {
 // ===================
 
 function draw() {
+    // Update animation cache at start of frame for performance
+    animCache.update(gameState.animationTime);
+
+    // Refresh gradient cache if needed
+    gradientCache.refreshDimensions(CANVAS_WIDTH, CANVAS_HEIGHT);
+
     ctx.fillStyle = COLORS.bgDark;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
@@ -1473,13 +1596,46 @@ function draw() {
 }
 
 function drawBackground() {
-    // Gradient sky
-    const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
-    gradient.addColorStop(0, COLORS.bgDark);
-    gradient.addColorStop(0.5, COLORS.bgMid);
-    gradient.addColorStop(1, COLORS.bgLight);
-    ctx.fillStyle = gradient;
+    // Use cached gradient for performance
+    if (!gradientCache.background) {
+        gradientCache.background = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
+        gradientCache.background.addColorStop(0, COLORS.bgDark);
+        gradientCache.background.addColorStop(0.5, COLORS.bgMid);
+        gradientCache.background.addColorStop(1, COLORS.bgLight);
+    }
+    ctx.fillStyle = gradientCache.background;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    // Draw side margins for landscape mode (mountain scenery)
+    const res = RESOLUTIONS[displaySettings.currentResolution];
+    if (res && res.orientation === 'landscape') {
+        const slopeWidth = getTerrainSlopeWidth();
+        const marginWidth = (CANVAS_WIDTH - slopeWidth) / 2;
+
+        if (marginWidth > 10) {
+            // Left mountain margin
+            ctx.fillStyle = 'rgba(10, 5, 20, 0.7)';
+            ctx.fillRect(0, 0, marginWidth - 5, CANVAS_HEIGHT);
+
+            // Right mountain margin
+            ctx.fillRect(CANVAS_WIDTH - marginWidth + 5, 0, marginWidth - 5, CANVAS_HEIGHT);
+
+            // Mountain silhouette effect on sides
+            const mountainGrad = ctx.createLinearGradient(0, 0, marginWidth, 0);
+            mountainGrad.addColorStop(0, 'rgba(20, 10, 40, 0.9)');
+            mountainGrad.addColorStop(0.7, 'rgba(30, 15, 60, 0.6)');
+            mountainGrad.addColorStop(1, 'transparent');
+            ctx.fillStyle = mountainGrad;
+            ctx.fillRect(0, 0, marginWidth, CANVAS_HEIGHT);
+
+            const mountainGradR = ctx.createLinearGradient(CANVAS_WIDTH, 0, CANVAS_WIDTH - marginWidth, 0);
+            mountainGradR.addColorStop(0, 'rgba(20, 10, 40, 0.9)');
+            mountainGradR.addColorStop(0.7, 'rgba(30, 15, 60, 0.6)');
+            mountainGradR.addColorStop(1, 'transparent');
+            ctx.fillStyle = mountainGradR;
+            ctx.fillRect(CANVAS_WIDTH - marginWidth, 0, marginWidth, CANVAS_HEIGHT);
+        }
+    }
 
     // Snow texture lines (parallax)
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
@@ -2788,17 +2944,44 @@ function hideSettingsMenu() {
 }
 
 function updateSettingsUI() {
+    // Device profile with suggested resolution
     const deviceLabel = document.getElementById('deviceProfileLabel');
-    if (deviceLabel) deviceLabel.textContent = getDeviceProfile();
+    if (deviceLabel) {
+        const profile = getDeviceProfileInfo();
+        deviceLabel.textContent = profile.label;
+    }
 
+    // Current resolution
     const resSelect = document.getElementById('resolutionSelect');
     if (resSelect) resSelect.value = displaySettings.currentResolution;
 
+    // Auto-detect toggle
     const autoDetectToggle = document.getElementById('autoDetectToggle');
     if (autoDetectToggle) autoDetectToggle.checked = displaySettings.autoDetect;
 
+    // Screen shake toggle
     const screenShakeToggle = document.getElementById('screenShakeToggle');
     if (screenShakeToggle) screenShakeToggle.checked = displaySettings.screenShakeEnabled;
+
+    // Haptics toggle
+    const hapticsToggle = document.getElementById('hapticsToggle');
+    if (hapticsToggle) hapticsToggle.checked = displaySettings.hapticsEnabled;
+
+    // Gamepad status
+    const gamepadStatus = document.getElementById('gamepadStatus');
+    if (gamepadStatus) {
+        gamepadStatus.textContent = gamepadState.connected ? 'Connected' : 'Not Connected';
+        gamepadStatus.style.color = gamepadState.connected ? '#00ffff' : '#ff6b6b';
+    }
+
+    // Show current resolution info
+    const res = RESOLUTIONS[displaySettings.currentResolution];
+    if (res) {
+        const resInfo = document.getElementById('resolutionInfo');
+        if (resInfo) {
+            resInfo.textContent = `${res.width}×${res.height} (${res.orientation})`;
+        }
+    }
 }
 
 function setResolution(resKey) {
@@ -2815,10 +2998,19 @@ function setResolution(resKey) {
 
     CANVAS_WIDTH = res.width;
     CANVAS_HEIGHT = res.height;
-    TERRAIN.slopeWidth = res.width;
+
+    // Update terrain slope width based on orientation
+    TERRAIN.slopeWidth = getTerrainSlopeWidth();
+    TERRAIN.laneWidth = getTerrainLaneWidth();
+
+    // Invalidate gradient cache on resolution change
+    gradientCache.invalidate();
 
     try { localStorage.setItem('shredordead_resolution', resKey); } catch (e) {}
     fitCanvasToViewport();
+    updateSettingsUI();
+
+    console.log(`Resolution set to ${resKey} (${res.width}x${res.height}, ${res.orientation})`);
 }
 
 function fitCanvasToViewport() {
@@ -2856,20 +3048,119 @@ function toggleFullscreen() {
     }
 }
 
+// Auto-detect best resolution based on screen size, aspect ratio, and device
 function autoDetectResolution() {
+    const screenWidth = window.innerWidth;
     const screenHeight = window.innerHeight;
+    const aspectRatio = screenWidth / screenHeight;
+    const dpr = window.devicePixelRatio || 1;
+    const ua = navigator.userAgent || '';
+
+    const isIOS = /iPhone|iPad|iPod/i.test(ua);
+    const isAndroid = /Android/i.test(ua);
+    const isMobile = isIOS || isAndroid || ('ontouchstart' in window && screenWidth < 900);
+
+    // === HANDHELD GAMING DEVICE DETECTION ===
+
+    // Asus ROG Ally / Ally X - 1920x1080 native
+    if (/ROG Ally|ASUS/i.test(ua) && screenWidth >= 1920) {
+        return '1920x1080-ally';
+    }
+
+    // Generic 1080p handheld detection (not phone)
+    const isHandheld1080p = (screenWidth >= 1920 && screenHeight >= 1080 &&
+        'ontouchstart' in window && !isIOS && !isAndroid);
+    if (isHandheld1080p && aspectRatio >= 1.7) {
+        return '1920x1080';
+    }
+
+    // Steam Deck - 1280x800 native (16:10)
+    if (/Steam Deck/i.test(ua)) {
+        return '1280x800';
+    }
+
+    // === LANDSCAPE / WIDESCREEN DETECTION ===
+
+    // 16:9 aspect ratio (desktop widescreen, gaming monitors)
+    if (aspectRatio >= 1.7 && aspectRatio <= 1.85) {
+        if (screenWidth >= 1920 && screenHeight >= 1080) return '1920x1080';
+        if (screenHeight >= 720) return '1280x720';
+        return '854x480';
+    }
+
+    // 16:10 aspect ratio (some laptops, Steam Deck in browser)
+    if (aspectRatio >= 1.55 && aspectRatio < 1.7) {
+        return '1280x800';
+    }
+
+    // === PORTRAIT / MOBILE DETECTION ===
+
+    // iOS / Mobile - conservative internal resolution
+    if (isIOS || isMobile) {
+        if (Math.min(screenWidth, screenHeight) >= 900 || dpr > 2) return '600x800';
+        return '480x640';
+    }
+
+    // Portrait detection (taller than wide)
+    if (aspectRatio < 1) {
+        // 9:16 mobile
+        if (aspectRatio <= 0.6 && screenHeight >= 1080) return '608x1080';
+        if (aspectRatio <= 0.6) return '405x720';
+
+        // 3:4 tablet-like
+        if (screenHeight >= 1200) return '900x1200';
+        if (screenHeight >= 1024) return '768x1024';
+        if (screenHeight >= 960) return '720x960';
+        if (screenHeight >= 800) return '600x800';
+        return '480x640';
+    }
+
+    // Square-ish or default: use portrait based on height
     if (screenHeight >= 1080) return '720x960';
     if (screenHeight >= 800) return '600x800';
     return '480x640';
 }
 
+// Get detailed device profile for display
 function getDeviceProfile() {
     const ua = navigator.userAgent || '';
-    if (/iPhone|iPad|iPod/i.test(ua)) return 'iOS Device';
-    if (/Android/i.test(ua)) return 'Android';
-    if (/Steam Deck/i.test(ua)) return 'Steam Deck';
-    if ('ontouchstart' in window) return 'Mobile';
+    const screenWidth = window.innerWidth;
+    const screenHeight = window.innerHeight;
+    const aspectRatio = screenWidth / screenHeight;
+
+    // Specific device detection
+    if (/ROG Ally|ASUS/i.test(ua) && screenWidth >= 1920) {
+        return 'ROG Ally / Ally X';
+    }
+    if (/Steam Deck/i.test(ua)) {
+        return 'Steam Deck';
+    }
+    if (/iPhone|iPad|iPod/i.test(ua)) {
+        return 'iOS Device';
+    }
+    if (/Android/i.test(ua)) {
+        return 'Android';
+    }
+
+    // Generic detection by characteristics
+    const isHandheld = (screenWidth >= 1920 && 'ontouchstart' in window);
+    if (isHandheld && aspectRatio >= 1.7) {
+        return 'Gaming Handheld (1080p)';
+    }
+
+    if (aspectRatio >= 1.7) return 'Desktop (16:9)';
+    if (aspectRatio >= 1.55) return 'Desktop (16:10)';
+    if (aspectRatio < 1) return 'Portrait Display';
+    if ('ontouchstart' in window) return 'Touchscreen';
     return 'Desktop';
+}
+
+// Get device profile with suggested resolution
+function getDeviceProfileInfo() {
+    return {
+        label: getDeviceProfile(),
+        suggested: autoDetectResolution()
+    };
 }
 
 function loadSettings() {
