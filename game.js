@@ -843,16 +843,7 @@ function setupInput() {
 // ===================
 
 function setupTouchInput() {
-    const canvas = document.getElementById('gameCanvas');
-
-    // Add to canvas
-    canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
-    canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
-    canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
-    canvas.addEventListener('touchcancel', handleTouchEnd, { passive: false });
-
-    // Also add to document for iOS Safari compatibility
-    // (sometimes touch events don't fire on canvas in iOS)
+    // Use document-level listeners for best iOS compatibility
     document.addEventListener('touchstart', handleTouchStart, { passive: false });
     document.addEventListener('touchmove', handleTouchMove, { passive: false });
     document.addEventListener('touchend', handleTouchEnd, { passive: false });
@@ -862,13 +853,17 @@ function setupTouchInput() {
     document.body.style.touchAction = 'none';
     document.body.style.webkitTouchCallout = 'none';
     document.body.style.webkitUserSelect = 'none';
+
+    console.log('Touch input initialized');
 }
 
 function handleTouchStart(e) {
     e.preventDefault();
-    if (touchState.active) return;
 
-    const touch = e.touches[0];
+    // Always take the first touch
+    const touch = e.changedTouches[0] || e.touches[0];
+    if (!touch) return;
+
     touchState.active = true;
     touchState.touchId = touch.identifier;
     touchState.startX = touch.clientX;
@@ -878,14 +873,29 @@ function handleTouchStart(e) {
     touchState.startTime = performance.now();
 
     // Reset input flags
-    input.left = input.right = input.up = input.down = false;
+    input.left = false;
+    input.right = false;
+    input.up = false;
+    input.down = false;
+
+    console.log('Touch start:', touch.clientX, touch.clientY);
 }
 
 function handleTouchMove(e) {
     e.preventDefault();
     if (!touchState.active) return;
 
-    const touch = Array.from(e.touches).find(t => t.identifier === touchState.touchId);
+    // Find our touch or use first available
+    let touch = null;
+    for (let i = 0; i < e.touches.length; i++) {
+        if (e.touches[i].identifier === touchState.touchId) {
+            touch = e.touches[i];
+            break;
+        }
+    }
+    if (!touch && e.touches.length > 0) {
+        touch = e.touches[0];
+    }
     if (!touch) return;
 
     touchState.currentX = touch.clientX;
@@ -902,7 +912,8 @@ function handleTouchMove(e) {
         input.left = true;
         input.right = false;
     } else {
-        input.left = input.right = false;
+        input.left = false;
+        input.right = false;
     }
 
     // Vertical speed control (up = brake, down = tuck/accelerate)
@@ -913,16 +924,27 @@ function handleTouchMove(e) {
         input.down = true;
         input.up = false;
     } else {
-        input.up = input.down = false;
+        input.up = false;
+        input.down = false;
     }
+
+    console.log('Touch move - deltaX:', deltaX, 'deltaY:', deltaY, 'left:', input.left, 'right:', input.right);
 }
 
 function handleTouchEnd(e) {
     e.preventDefault();
 
+    if (!touchState.active) return;
+
     // Check if our tracked touch ended
-    const touchEnded = !Array.from(e.touches).find(t => t.identifier === touchState.touchId);
-    if (!touchEnded) return;
+    let ourTouchEnded = true;
+    for (let i = 0; i < e.touches.length; i++) {
+        if (e.touches[i].identifier === touchState.touchId) {
+            ourTouchEnded = false;
+            break;
+        }
+    }
+    if (!ourTouchEnded) return;
 
     // Detect tap gesture for start/confirm
     const duration = performance.now() - touchState.startTime;
@@ -931,16 +953,22 @@ function handleTouchEnd(e) {
         touchState.currentY - touchState.startY
     );
 
+    console.log('Touch end - duration:', duration, 'distance:', distance);
+
     if (duration < TOUCH_THRESHOLDS.tapMaxDuration && distance < TOUCH_THRESHOLDS.tapMaxDistance) {
         // Fire momentary space input for tap
         input.space = true;
         setTimeout(() => { input.space = false; }, 100);
+        console.log('Tap detected!');
     }
 
     // Reset touch state
     touchState.active = false;
     touchState.touchId = null;
-    input.left = input.right = input.up = input.down = false;
+    input.left = false;
+    input.right = false;
+    input.up = false;
+    input.down = false;
 }
 
 function getInputDirection() {
