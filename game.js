@@ -190,8 +190,9 @@ const TERRAIN = {
     baseDensity: 0.10,          // More obstacles (trees/rocks)
     maxDensity: 0.22,           // Denser terrain
     densityRampDistance: 4000,
-    jumpChance: 0.08,           // Reduced - fewer jumps
-    railChance: 0.009,          // Drastically reduced rails (15% of 0.06)
+    jumpChance: 0.008,          // Very rare jumps (90% reduction from 0.08)
+    railChance: 0.009,          // Rare rails
+    massiveJumpChance: 0.002,   // Very rare massive jumps for 1080+ tricks
     rockChance: 0.06,           // New: chance for large rocks
     treeClusterChance: 0.60,    // Higher tree cluster chance
     clearPathWidth: 2
@@ -244,7 +245,9 @@ const JUMP_TYPES = {
     small:  { width: 40, height: 14, power: 0.7, color: 'snow', glow: false },
     medium: { width: 55, height: 22, power: 1.0, color: 'snow', glow: false },
     large:  { width: 80, height: 32, power: 1.4, color: 'snow', glow: true },
-    mega:   { width: 110, height: 45, power: 1.8, color: 'snow', glow: true }
+    mega:   { width: 110, height: 45, power: 1.8, color: 'snow', glow: true },
+    // MASSIVE jump - rare, launches player into 1080+ territory
+    massive: { width: 140, height: 60, power: 3.0, color: 'snow', glow: true, massive: true }
 };
 
 const TRICKS = {
@@ -252,6 +255,10 @@ const TRICKS = {
     spin360: { name: '360', minRot: 330, maxRot: 390, points: 250 },
     spin540: { name: '540', minRot: 510, maxRot: 570, points: 500 },
     spin720: { name: '720!', minRot: 690, maxRot: 750, points: 1000 },
+    spin900: { name: '900!!', minRot: 870, maxRot: 930, points: 2000 },
+    spin1080: { name: '1080!!!', minRot: 1050, maxRot: 1110, points: 4000 },
+    spin1260: { name: '1260!!!!', minRot: 1230, maxRot: 1290, points: 6000 },
+    spin1440: { name: '1440 INSANE', minRot: 1410, maxRot: 1470, points: 10000 },
     shortGrind: { name: 'Grind', minLen: 0, maxLen: 120, points: 50 },
     longGrind: { name: 'Rail Slide', minLen: 120, maxLen: 250, points: 150 },
     epicGrind: { name: 'EPIC GRIND', minLen: 250, maxLen: 9999, points: 400 }
@@ -867,6 +874,21 @@ function generateTerrainChunk(chunkIndex) {
     const tempJumps = [];
     const tempRails = [];
 
+    // Helper to check if position is too close to existing jumps/rails
+    function isTooCloseToJumpsOrRails(x, y, minDist = 150) {
+        for (const jump of tempJumps) {
+            const dist = Math.sqrt(Math.pow(x - jump.x, 2) + Math.pow(y - jump.y, 2));
+            if (dist < minDist) return true;
+        }
+        for (const rail of tempRails) {
+            // Check distance to rail start and end
+            const distStart = Math.sqrt(Math.pow(x - rail.x, 2) + Math.pow(y - rail.y, 2));
+            const distEnd = Math.sqrt(Math.pow(x - rail.endX, 2) + Math.pow(y - rail.endY, 2));
+            if (distStart < minDist || distEnd < minDist) return true;
+        }
+        return false;
+    }
+
     // First pass: determine where jumps and rails will go
     for (let row = 0; row < gridRows; row++) {
         const rowSeed = baseSeed + row * 100;
@@ -874,59 +896,95 @@ function generateTerrainChunk(chunkIndex) {
             const cellSeed = rowSeed + col;
             const rng = seededRandom(cellSeed);
 
-            if (rng >= density && rng < density + TERRAIN.jumpChance) {
-                // Select jump type based on weighted random
-                const typeRng = seededRandom(cellSeed + 0.6);
-                let jumpType;
-                if (typeRng < 0.40) jumpType = JUMP_TYPES.small;
-                else if (typeRng < 0.75) jumpType = JUMP_TYPES.medium;
-                else if (typeRng < 0.95) jumpType = JUMP_TYPES.large;
-                else jumpType = JUMP_TYPES.mega;
+            const jumpX = (col - gridCols / 2 + 0.5) * TERRAIN.laneWidth;
+            const jumpY = chunk.y + row * 80;
 
-                const jumpX = (col - gridCols / 2 + 0.5) * TERRAIN.laneWidth;
-                const jumpY = chunk.y + row * 80;
+            // Check for MASSIVE jump first (very rare)
+            if (rng >= density && rng < density + TERRAIN.massiveJumpChance) {
+                // Only spawn if not too close to other jumps/rails
+                if (!isTooCloseToJumpsOrRails(jumpX, jumpY, 200)) {
+                    const jumpType = JUMP_TYPES.massive;
+                    tempJumps.push({
+                        x: jumpX,
+                        y: jumpY,
+                        width: jumpType.width,
+                        height: jumpType.height,
+                        launchPower: jumpType.power,
+                        color: jumpType.color,
+                        glow: jumpType.glow,
+                        type: 'massive',
+                        massive: true,
+                        col: col,
+                        row: row
+                    });
+                }
+            } else if (rng >= density + TERRAIN.massiveJumpChance && rng < density + TERRAIN.massiveJumpChance + TERRAIN.jumpChance) {
+                // Regular jumps - only spawn if not too close to other jumps/rails
+                if (!isTooCloseToJumpsOrRails(jumpX, jumpY, 150)) {
+                    // Select jump type based on weighted random
+                    const typeRng = seededRandom(cellSeed + 0.6);
+                    let jumpType;
+                    if (typeRng < 0.50) jumpType = JUMP_TYPES.small;
+                    else if (typeRng < 0.80) jumpType = JUMP_TYPES.medium;
+                    else if (typeRng < 0.95) jumpType = JUMP_TYPES.large;
+                    else jumpType = JUMP_TYPES.mega;
 
-                tempJumps.push({
-                    x: jumpX,
-                    y: jumpY,
-                    width: jumpType.width,
-                    height: jumpType.height,
-                    launchPower: jumpType.power,
-                    color: jumpType.color,
-                    glow: jumpType.glow,
-                    type: jumpType === JUMP_TYPES.mega ? 'mega' : jumpType === JUMP_TYPES.large ? 'large' : 'normal',
-                    col: col,
-                    row: row
-                });
-            } else if (rng >= density + TERRAIN.jumpChance && rng < density + TERRAIN.jumpChance + TERRAIN.railChance) {
+                    tempJumps.push({
+                        x: jumpX,
+                        y: jumpY,
+                        width: jumpType.width,
+                        height: jumpType.height,
+                        launchPower: jumpType.power,
+                        color: jumpType.color,
+                        glow: jumpType.glow,
+                        type: jumpType === JUMP_TYPES.mega ? 'mega' : jumpType === JUMP_TYPES.large ? 'large' : 'normal',
+                        col: col,
+                        row: row
+                    });
+                }
+            } else if (rng >= density + TERRAIN.massiveJumpChance + TERRAIN.jumpChance &&
+                       rng < density + TERRAIN.massiveJumpChance + TERRAIN.jumpChance + TERRAIN.railChance) {
+                // Rails - must be mostly VERTICAL (player goes DOWN the mountain)
                 const railLength = 100 + seededRandom(cellSeed + 0.8) * 150;
-                const endCol = col + (seededRandom(cellSeed + 0.9) - 0.5) * 2;
+
+                // FIXED: Rails should be mostly vertical with only slight horizontal drift
+                // Max horizontal drift is 20% of rail length to ensure grindable
+                const maxDrift = railLength * 0.15;
+                const horizontalDrift = (seededRandom(cellSeed + 0.9) - 0.5) * maxDrift;
+
+                const railX = (col - gridCols / 2 + 0.5) * TERRAIN.laneWidth;
+                const railY = chunk.y + row * 80;
+
                 const newRail = {
-                    x: (col - gridCols / 2 + 0.5) * TERRAIN.laneWidth,
-                    y: chunk.y + row * 80,
-                    endX: (clamp(endCol, 0, gridCols - 1) - gridCols / 2 + 0.5) * TERRAIN.laneWidth,
-                    endY: chunk.y + row * 80 + railLength,
+                    x: railX,
+                    y: railY,
+                    endX: railX + horizontalDrift,  // Mostly vertical with slight drift
+                    endY: railY + railLength,       // Always goes DOWN (positive Y)
                     length: railLength,
                     col: col,
-                    endColApprox: clamp(endCol, 0, gridCols - 1)
+                    endColApprox: col
                 };
 
-                // Check for collision with existing rails
-                let collides = false;
-                const minDistX = 50;
-                const minDistY = 120;
+                // Check for collision with existing rails AND jumps
+                let collides = isTooCloseToJumpsOrRails(railX, railY, 150);
 
-                for (const existingRail of tempRails) {
-                    const xDist = Math.abs(newRail.x - existingRail.x);
-                    const newTop = newRail.y;
-                    const newBottom = newRail.endY;
-                    const existTop = existingRail.y;
-                    const existBottom = existingRail.endY;
-                    const yOverlap = !(newBottom < existTop - minDistY || newTop > existBottom + minDistY);
+                if (!collides) {
+                    // Also check rail-to-rail collision
+                    const minDistX = 80;
+                    const minDistY = 150;
 
-                    if (xDist < minDistX && yOverlap) {
-                        collides = true;
-                        break;
+                    for (const existingRail of tempRails) {
+                        const xDist = Math.abs(newRail.x - existingRail.x);
+                        const newTop = newRail.y;
+                        const newBottom = newRail.endY;
+                        const existTop = existingRail.y;
+                        const existBottom = existingRail.endY;
+                        const yOverlap = !(newBottom < existTop - minDistY || newTop > existBottom + minDistY);
+
+                        if (xDist < minDistX && yOverlap) {
+                            collides = true;
+                            break;
+                        }
                     }
                 }
 
@@ -937,28 +995,29 @@ function generateTerrainChunk(chunkIndex) {
         }
     }
 
-    // 8% chance per chunk to spawn a jump sequence (2-3 consecutive jumps for combos)
-    if (seededRandom(baseSeed + 999) < 0.08) {
-        const seqLane = Math.floor(seededRandom(baseSeed + 998) * (gridCols - 2)) + 1;
-        const seqStart = chunk.y + 100 + seededRandom(baseSeed + 997) * 200;
-        const seqCount = 2 + Math.floor(seededRandom(baseSeed + 996) * 3); // 2-4 jumps
+    // 2% chance per chunk to spawn a guaranteed MASSIVE jump (for 1080+ tricks)
+    // Only if no massive jump already exists in this chunk
+    const hasMassive = tempJumps.some(j => j.massive);
+    if (!hasMassive && seededRandom(baseSeed + 999) < 0.02) {
+        const massiveLane = Math.floor(seededRandom(baseSeed + 998) * (gridCols - 2)) + 1;
+        const massiveX = (massiveLane - gridCols / 2 + 0.5) * TERRAIN.laneWidth;
+        const massiveY = chunk.y + 200 + seededRandom(baseSeed + 997) * 200;
 
-        for (let i = 0; i < seqCount; i++) {
-            const seqJumpType = i === seqCount - 1 ? JUMP_TYPES.large : JUMP_TYPES.medium;
-            const jumpX = (seqLane - gridCols / 2 + 0.5) * TERRAIN.laneWidth + (seededRandom(baseSeed + 990 + i) - 0.5) * 30;
-            const jumpY = seqStart + i * 80;
-
+        // Only add if not too close to existing jumps/rails
+        if (!isTooCloseToJumpsOrRails(massiveX, massiveY, 200)) {
+            const jumpType = JUMP_TYPES.massive;
             tempJumps.push({
-                x: jumpX,
-                y: jumpY,
-                width: seqJumpType.width,
-                height: seqJumpType.height,
-                launchPower: seqJumpType.power,
-                color: seqJumpType.color,
-                glow: seqJumpType.glow,
-                type: i === seqCount - 1 ? 'large' : 'normal',
-                col: seqLane,
-                row: Math.floor((jumpY - chunk.y) / 80)
+                x: massiveX,
+                y: massiveY,
+                width: jumpType.width,
+                height: jumpType.height,
+                launchPower: jumpType.power,
+                color: jumpType.color,
+                glow: jumpType.glow,
+                type: 'massive',
+                massive: true,
+                col: massiveLane,
+                row: Math.floor((massiveY - chunk.y) / 80)
             });
         }
     }
@@ -999,7 +1058,8 @@ function generateTerrainChunk(chunkIndex) {
             launchPower: jump.launchPower,
             color: jump.color,
             glow: jump.glow,
-            type: jump.type
+            type: jump.type,
+            massive: jump.massive || false
         });
     }
 
@@ -1537,6 +1597,18 @@ function triggerJump(player, jump) {
     player.spinDirection = inputDir; // Store spin direction at launch (0 = no spin)
     player.preJumpAngle = player.angle; // Remember orientation before jump
     player.jumpLaunchPower = jump.launchPower; // Store for animation reference
+    player.massiveJump = jump.massive || false; // Track if this is a massive jump
+
+    // Special celebration for MASSIVE jumps
+    if (jump.massive) {
+        gameState.celebrations.push({
+            text: '🚀 MASSIVE LAUNCH!',
+            subtext: 'GO FOR 1080+!',
+            color: COLORS.yellow,
+            timer: 2.0,
+            scale: 1.3
+        });
+    }
 
     // Select trick based on jump power and input direction
     if (jump.launchPower >= 1.0) {
@@ -1595,10 +1667,15 @@ function landFromJump(player) {
         trickPoints = player.autoTrick.points;
         trickLanded = true;
     } else {
-        // Fall back to manual spin detection
+        // Fall back to manual spin detection - check in descending order (highest spins first)
         const absRot = Math.abs(player.trickRotation);
-        for (const [id, trick] of Object.entries(TRICKS)) {
-            if (trick.minRot && absRot >= trick.minRot && absRot <= trick.maxRot) {
+        // Sort tricks by minRot descending so we match the highest applicable spin
+        const spinTricks = Object.entries(TRICKS)
+            .filter(([id, trick]) => trick.minRot)
+            .sort((a, b) => b[1].minRot - a[1].minRot);
+
+        for (const [id, trick] of spinTricks) {
+            if (absRot >= trick.minRot) {
                 trickName = trick.name;
                 trickPoints = trick.points;
                 trickLanded = true;
@@ -2716,7 +2793,30 @@ function drawJumps() {
         ctx.fill();
 
         // Subtle ambient glow for large/mega jumps - white/cyan, not neon
-        if (jump.glow) {
+        // MASSIVE jumps get an intense golden glow
+        if (jump.massive) {
+            // Intense pulsing golden glow for MASSIVE jumps
+            const glowPulse = 0.4 + Math.sin(time * 4 + jump.x * 0.01) * 0.2;
+            const glowGrad = ctx.createRadialGradient(
+                screen.x, screen.y - jump.height * 0.5,
+                jump.width * 0.1,
+                screen.x, screen.y - jump.height * 0.3,
+                jump.width * 1.2
+            );
+            glowGrad.addColorStop(0, `rgba(255, 220, 100, ${glowPulse})`);
+            glowGrad.addColorStop(0.5, `rgba(255, 180, 50, ${glowPulse * 0.5})`);
+            glowGrad.addColorStop(1, 'rgba(255, 150, 0, 0)');
+            ctx.fillStyle = glowGrad;
+            ctx.beginPath();
+            ctx.ellipse(screen.x, screen.y - jump.height * 0.3, jump.width * 0.9, jump.height * 0.8, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // "1080+" indicator text
+            ctx.fillStyle = `rgba(255, 200, 50, ${0.6 + Math.sin(time * 3) * 0.2})`;
+            ctx.font = 'bold 12px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('★ 1080+ ★', screen.x, screen.y - jump.height - 15);
+        } else if (jump.glow) {
             const glowPulse = 0.15 + Math.sin(time * 2 + jump.x * 0.01) * 0.08;
             const glowGrad = ctx.createRadialGradient(
                 screen.x, screen.y - jump.height * 0.4,
