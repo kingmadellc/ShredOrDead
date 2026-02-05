@@ -2892,21 +2892,19 @@ function drawPlayer() {
     const boardY = 8 - grabOffset;
 
     if (goingStraight) {
-        // STRAIGHT DOWN THE MOUNTAIN
-        // Rotate the entire character 90 degrees so board points downhill
-        ctx.rotate(stanceRotation);
+        // STRAIGHT DOWN THE MOUNTAIN - SIDE PROFILE VIEW
+        // Board points down, rider's body is SIDEWAYS on board (perpendicular to board direction)
+        // We see the rider's side profile - one shoulder toward camera, one away
+        // Regular stance: left foot forward (rider faces left), Goofy: right foot forward (rider faces right)
 
-        // Shadow (rotated with character)
+        // Shadow - elongated vertically for the vertical board
         ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
         ctx.beginPath();
-        ctx.ellipse(0, 15 + shadowOffset, 18, 6, 0, 0, Math.PI * 2);
+        ctx.ellipse(0, 20 + shadowOffset, 10, 18, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // Now draw the normal carving pose (board horizontal in local coords)
-        // which will appear vertical after the 90-degree rotation
-
-        // Snowboard with gradient
-        const boardGrad = ctx.createLinearGradient(-20, boardY, 20, boardY + 6);
+        // Board - VERTICAL, pointing straight down the mountain
+        const boardGrad = ctx.createLinearGradient(0, -8, 0, 28);
         boardGrad.addColorStop(0, COLORS.hotPink);
         boardGrad.addColorStop(0.5, '#ff69b4');
         boardGrad.addColorStop(1, COLORS.magenta);
@@ -2914,76 +2912,125 @@ function drawPlayer() {
         ctx.shadowColor = COLORS.hotPink;
         ctx.shadowBlur = 10;
         ctx.beginPath();
-        ctx.roundRect(-22, boardY, 44, 6, 3);
+        ctx.roundRect(-4, -4, 8, 36, 4);
         ctx.fill();
 
-        // Board edge highlight
+        // Board edge highlight (vertical)
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.moveTo(-20, boardY + 1);
-        ctx.lineTo(20, boardY + 1);
+        ctx.moveTo(-3, -2);
+        ctx.lineTo(-3, 28);
         ctx.stroke();
-
-        // Bindings
-        ctx.fillStyle = '#333';
-        ctx.fillRect(-10, boardY - 1, 6, 8);
-        ctx.fillRect(4, boardY - 1, 6, 8);
         ctx.shadowBlur = 0;
 
-        // Body/jacket
-        const jacketGrad = ctx.createLinearGradient(-12, -20, 12, 10);
+        // Bindings - horizontal across the vertical board
+        ctx.fillStyle = '#333';
+        ctx.fillRect(-6, 4, 12, 5);   // Front binding
+        ctx.fillRect(-6, 18, 12, 5);  // Back binding
+
+        // The rider faces sideways - we see their SIDE PROFILE
+        // Flip drawing direction based on stance
+        const faceDir = isGoofy ? 1 : -1;  // 1 = facing right, -1 = facing left
+
+        // Legs - side view, bent knees in snowboard stance
+        const legGrad = ctx.createLinearGradient(0, -10, 0, 20);
+        legGrad.addColorStop(0, '#7744bb');
+        legGrad.addColorStop(1, '#553399');
+        ctx.strokeStyle = legGrad;
+        ctx.lineWidth = 7;
+        ctx.lineCap = 'round';
+
+        // Front leg (bent, on front binding)
+        ctx.beginPath();
+        ctx.moveTo(faceDir * 4, -6);
+        ctx.quadraticCurveTo(faceDir * 8, 2, 0, 7);
+        ctx.stroke();
+
+        // Back leg (bent, on back binding)
+        ctx.beginPath();
+        ctx.moveTo(faceDir * -2, -6);
+        ctx.quadraticCurveTo(faceDir * 2, 12, 0, 20);
+        ctx.stroke();
+
+        // Body/torso - SIDE VIEW (thin profile)
+        const jacketGrad = ctx.createLinearGradient(faceDir * -8, -30, faceDir * 8, -5);
         jacketGrad.addColorStop(0, COLORS.cyan);
         jacketGrad.addColorStop(0.5, COLORS.electricBlue);
         jacketGrad.addColorStop(1, '#0099cc');
         ctx.fillStyle = jacketGrad;
         ctx.shadowColor = COLORS.cyan;
-        ctx.shadowBlur = 8;
+        ctx.shadowBlur = 6;
         ctx.beginPath();
-        ctx.ellipse(0, -5, 12, 16, 0, 0, Math.PI * 2);
+        // Side profile of torso - thin ellipse
+        ctx.ellipse(faceDir * 2, -18, 7, 14, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // Magenta stripe on jacket
+        // Jacket stripe (side view)
         ctx.fillStyle = COLORS.magenta;
-        ctx.fillRect(-12, -8, 24, 4);
+        ctx.beginPath();
+        ctx.ellipse(faceDir * 2, -18, 7, 2, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
 
-        // Arms out for balance
+        // Arms - side view, one arm visible (the one closer to camera), slight bend
         ctx.strokeStyle = jacketGrad;
         ctx.lineWidth = 5;
         ctx.lineCap = 'round';
+        // Leading arm (in front, bent for balance)
         ctx.beginPath();
-        ctx.moveTo(-10, -5);
-        ctx.lineTo(-18, -12);
+        ctx.moveTo(faceDir * 6, -22);
+        ctx.quadraticCurveTo(faceDir * 14, -18, faceDir * 12, -10);
         ctx.stroke();
+        // Trailing arm (behind, relaxed)
         ctx.beginPath();
-        ctx.moveTo(10, -5);
-        ctx.lineTo(18, -12);
+        ctx.moveTo(faceDir * -2, -22);
+        ctx.quadraticCurveTo(faceDir * -8, -16, faceDir * -6, -8);
         ctx.stroke();
-        ctx.shadowBlur = 0;
 
-        // Head
-        ctx.fillStyle = '#ffcc99';
+        // Gloves
+        ctx.fillStyle = '#2244aa';
         ctx.beginPath();
-        ctx.arc(0, -24, 9, 0, Math.PI * 2);
+        ctx.arc(faceDir * 12, -9, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(faceDir * -6, -7, 3, 0, Math.PI * 2);
         ctx.fill();
 
-        // Helmet
+        // Head - SIDE PROFILE
+        ctx.fillStyle = '#ffcc99';  // Skin tone for face
+        ctx.beginPath();
+        ctx.arc(faceDir * 3, -36, 8, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Helmet - side view
         ctx.fillStyle = '#222';
         ctx.beginPath();
-        ctx.arc(0, -26, 10, Math.PI, 0);
+        ctx.arc(faceDir * 3, -38, 9, Math.PI * 0.8, Math.PI * 2.2);
         ctx.fill();
 
-        // Goggles
-        const goggleGrad = ctx.createLinearGradient(-8, -28, 8, -22);
+        // Helmet color accent
+        ctx.fillStyle = COLORS.hotPink;
+        ctx.beginPath();
+        ctx.arc(faceDir * 3, -40, 7, Math.PI, Math.PI * 2);
+        ctx.fill();
+
+        // Goggles - side view (visible on the side of face)
+        const goggleGrad = ctx.createLinearGradient(faceDir * -2, -40, faceDir * 8, -34);
         goggleGrad.addColorStop(0, COLORS.magenta);
-        goggleGrad.addColorStop(0.3, '#ff66cc');
-        goggleGrad.addColorStop(0.7, COLORS.cyan);
-        goggleGrad.addColorStop(1, COLORS.electricBlue);
+        goggleGrad.addColorStop(0.5, '#ff66cc');
+        goggleGrad.addColorStop(1, COLORS.cyan);
         ctx.fillStyle = goggleGrad;
         ctx.shadowColor = COLORS.magenta;
-        ctx.shadowBlur = 6;
+        ctx.shadowBlur = 4;
         ctx.beginPath();
-        ctx.roundRect(-9, -28, 18, 7, 2);
+        ctx.ellipse(faceDir * 6, -37, 5, 3, faceDir * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Goggle lens shine
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+        ctx.beginPath();
+        ctx.ellipse(faceDir * 5, -38, 2, 1, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.shadowBlur = 0;
     } else {
