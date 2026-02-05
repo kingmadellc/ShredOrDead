@@ -2878,132 +2878,222 @@ function drawPlayer() {
         ctx.rotate(Math.sin(gameState.animationTime * 15) * 0.5);
     }
 
+    // Check if going straight down (not carving) - angle threshold of 5 degrees
+    const goingStraight = !player.airborne && !player.crashed && Math.abs(player.angle) < 5;
+
     // Shadow (moves down when airborne)
     ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
     ctx.beginPath();
-    ctx.ellipse(0, 15 + shadowOffset, 18 - shadowOffset * 0.05, 6, 0, 0, Math.PI * 2);
+    if (goingStraight) {
+        // Elongated shadow for vertical board pointing downhill
+        ctx.ellipse(0, 18 + shadowOffset, 6, 14, 0, 0, Math.PI * 2);
+    } else {
+        ctx.ellipse(0, 15 + shadowOffset, 18 - shadowOffset * 0.05, 6, 0, 0, Math.PI * 2);
+    }
     ctx.fill();
 
     // Determine grab offset for board (moves toward body during grabs)
     const grabOffset = player.grabPhase * 6;
     const boardY = 8 - grabOffset;
 
-    // Snowboard with gradient and edge highlights
-    const boardGrad = ctx.createLinearGradient(-20, boardY, 20, boardY + 6);
-    boardGrad.addColorStop(0, COLORS.hotPink);
-    boardGrad.addColorStop(0.5, '#ff69b4');
-    boardGrad.addColorStop(1, COLORS.magenta);
-    ctx.fillStyle = boardGrad;
-    ctx.shadowColor = COLORS.hotPink;
-    ctx.shadowBlur = 10;
-    ctx.beginPath();
-    ctx.roundRect(-22, boardY, 44, 6, 3);
-    ctx.fill();
+    if (goingStraight) {
+        // STRAIGHT DOWN THE MOUNTAIN - board is VERTICAL (pointing downhill)
+        // Board vertical - 6 wide, 44 tall
+        const boardGrad = ctx.createLinearGradient(0, -12, 0, 28);
+        boardGrad.addColorStop(0, COLORS.hotPink);
+        boardGrad.addColorStop(0.5, '#ff69b4');
+        boardGrad.addColorStop(1, COLORS.magenta);
+        ctx.fillStyle = boardGrad;
+        ctx.shadowColor = COLORS.hotPink;
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        ctx.roundRect(-3, -8, 6, 40, 3);
+        ctx.fill();
 
-    // Board edge highlight
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(-20, boardY + 1);
-    ctx.lineTo(20, boardY + 1);
-    ctx.stroke();
+        // Board edge highlight (vertical)
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(-2, -6);
+        ctx.lineTo(-2, 28);
+        ctx.stroke();
 
-    // Bindings
-    ctx.fillStyle = '#333';
-    ctx.fillRect(-10, boardY - 1, 6, 8);
-    ctx.fillRect(4, boardY - 1, 6, 8);
-    ctx.shadowBlur = 0;
+        // Bindings (horizontal on vertical board)
+        ctx.fillStyle = '#333';
+        ctx.fillRect(-5, 0, 10, 4);
+        ctx.fillRect(-5, 16, 10, 4);
+        ctx.shadowBlur = 0;
 
-    // Body/jacket with gradient and stripe
-    const jacketGrad = ctx.createLinearGradient(-12, -20, 12, 10);
-    jacketGrad.addColorStop(0, COLORS.cyan);
-    jacketGrad.addColorStop(0.5, COLORS.electricBlue);
-    jacketGrad.addColorStop(1, '#0099cc');
-    ctx.fillStyle = jacketGrad;
-    ctx.shadowColor = COLORS.cyan;
-    ctx.shadowBlur = 8;
-    ctx.beginPath();
-    ctx.ellipse(0, -5, 12, 16, 0, 0, Math.PI * 2);
-    ctx.fill();
+        // Body - viewed from behind, slightly hunched forward for speed
+        const jacketGrad = ctx.createLinearGradient(-10, -28, 10, -4);
+        jacketGrad.addColorStop(0, COLORS.cyan);
+        jacketGrad.addColorStop(0.5, COLORS.electricBlue);
+        jacketGrad.addColorStop(1, '#0099cc');
+        ctx.fillStyle = jacketGrad;
+        ctx.shadowColor = COLORS.cyan;
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.ellipse(0, -16, 10, 14, 0, 0, Math.PI * 2);
+        ctx.fill();
 
-    // Magenta stripe on jacket
-    ctx.fillStyle = COLORS.magenta;
-    ctx.fillRect(-12, -8, 24, 4);
+        // Back stripe on jacket (vertical center stripe)
+        ctx.fillStyle = COLORS.magenta;
+        ctx.fillRect(-2, -28, 4, 18);
 
-    // Arms - different poses for different tricks
-    let leftArmX = -18, leftArmY = -12;
-    let rightArmX = 18, rightArmY = -12;
+        // Arms out for balance (symmetric)
+        ctx.fillStyle = COLORS.cyan;
+        ctx.shadowBlur = 4;
+        // Left arm
+        ctx.beginPath();
+        ctx.ellipse(-16, -14, 4, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Right arm
+        ctx.beginPath();
+        ctx.ellipse(16, -14, 4, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
 
-    if (player.autoTrick && player.airborne) {
-        const trick = player.autoTrick;
-        const progress = player.autoTrickProgress;
+        // Helmet (back of head visible)
+        ctx.fillStyle = COLORS.hotPink;
+        ctx.shadowColor = COLORS.hotPink;
+        ctx.shadowBlur = 6;
+        ctx.beginPath();
+        ctx.arc(0, -32, 7, 0, Math.PI * 2);
+        ctx.fill();
 
-        if (trick.grabStyle === 'method') {
-            // Method grab - one arm up, one reaching for board
-            leftArmX = -15; leftArmY = -25; // Up in air
-            rightArmX = 8; rightArmY = boardY - 5; // Grabbing board
-        } else if (trick.grabStyle === 'indy') {
-            // Indy grab - reach between legs for board
-            rightArmX = 5; rightArmY = boardY;
-            leftArmX = -20; leftArmY = -8;
-        } else if (trick.grabStyle === 'tail') {
-            // Tail grab - reach back for tail
-            rightArmX = 20; rightArmY = boardY + 2;
-            leftArmX = -15; leftArmY = -20;
-        } else if (trick.grabStyle === 'stale') {
-            // Stalefish - reach behind for backside rail
-            leftArmX = -5; leftArmY = boardY;
-            rightArmX = 20; rightArmY = -15;
-        } else {
-            // Spin tricks - arms out for style
-            const wave = Math.sin(progress * Math.PI * 2) * 8;
-            leftArmX = -22; leftArmY = -15 + wave;
-            rightArmX = 22; rightArmY = -15 - wave;
-        }
-    } else if (player.airborne) {
-        // Default airborne arm wave
-        const armAngle = Math.sin(gameState.animationTime * 8) * 0.4;
-        leftArmY = -12 + Math.sin(armAngle) * 8;
-        rightArmY = -12 - Math.sin(armAngle) * 8;
+        // Goggle strap on back of helmet
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, -32, 6, 0.3, Math.PI - 0.3);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+    } else {
+        // CARVING - board is HORIZONTAL (original drawing)
+        // Snowboard with gradient and edge highlights
+        const boardGrad = ctx.createLinearGradient(-20, boardY, 20, boardY + 6);
+        boardGrad.addColorStop(0, COLORS.hotPink);
+        boardGrad.addColorStop(0.5, '#ff69b4');
+        boardGrad.addColorStop(1, COLORS.magenta);
+        ctx.fillStyle = boardGrad;
+        ctx.shadowColor = COLORS.hotPink;
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        ctx.roundRect(-22, boardY, 44, 6, 3);
+        ctx.fill();
+
+        // Board edge highlight
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(-20, boardY + 1);
+        ctx.lineTo(20, boardY + 1);
+        ctx.stroke();
+
+        // Bindings
+        ctx.fillStyle = '#333';
+        ctx.fillRect(-10, boardY - 1, 6, 8);
+        ctx.fillRect(4, boardY - 1, 6, 8);
+        ctx.shadowBlur = 0;
+
+        // Body/jacket with gradient and stripe
+        const jacketGrad = ctx.createLinearGradient(-12, -20, 12, 10);
+        jacketGrad.addColorStop(0, COLORS.cyan);
+        jacketGrad.addColorStop(0.5, COLORS.electricBlue);
+        jacketGrad.addColorStop(1, '#0099cc');
+        ctx.fillStyle = jacketGrad;
+        ctx.shadowColor = COLORS.cyan;
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.ellipse(0, -5, 12, 16, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Magenta stripe on jacket
+        ctx.fillStyle = COLORS.magenta;
+        ctx.fillRect(-12, -8, 24, 4);
     }
 
-    ctx.strokeStyle = jacketGrad;
-    ctx.lineWidth = 5;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(-10, -5);
-    ctx.lineTo(leftArmX, leftArmY);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(10, -5);
-    ctx.lineTo(rightArmX, rightArmY);
-    ctx.stroke();
-    ctx.shadowBlur = 0;
+    // Arms, head, helmet - only draw if NOT going straight (straight pose already drew these)
+    if (!goingStraight) {
+        // Arms - different poses for different tricks
+        let leftArmX = -18, leftArmY = -12;
+        let rightArmX = 18, rightArmY = -12;
 
-    // Head
-    ctx.fillStyle = '#ffcc99';
-    ctx.beginPath();
-    ctx.arc(0, -24, 9, 0, Math.PI * 2);
-    ctx.fill();
+        if (player.autoTrick && player.airborne) {
+            const trick = player.autoTrick;
+            const progress = player.autoTrickProgress;
 
-    // Helmet
-    ctx.fillStyle = '#222';
-    ctx.beginPath();
-    ctx.arc(0, -26, 10, Math.PI, 0);
-    ctx.fill();
+            if (trick.grabStyle === 'method') {
+                // Method grab - one arm up, one reaching for board
+                leftArmX = -15; leftArmY = -25; // Up in air
+                rightArmX = 8; rightArmY = boardY - 5; // Grabbing board
+            } else if (trick.grabStyle === 'indy') {
+                // Indy grab - reach between legs for board
+                rightArmX = 5; rightArmY = boardY;
+                leftArmX = -20; leftArmY = -8;
+            } else if (trick.grabStyle === 'tail') {
+                // Tail grab - reach back for tail
+                rightArmX = 20; rightArmY = boardY + 2;
+                leftArmX = -15; leftArmY = -20;
+            } else if (trick.grabStyle === 'stale') {
+                // Stalefish - reach behind for backside rail
+                leftArmX = -5; leftArmY = boardY;
+                rightArmX = 20; rightArmY = -15;
+            } else {
+                // Spin tricks - arms out for style
+                const wave = Math.sin(progress * Math.PI * 2) * 8;
+                leftArmX = -22; leftArmY = -15 + wave;
+                rightArmX = 22; rightArmY = -15 - wave;
+            }
+        } else if (player.airborne) {
+            // Default airborne arm wave
+            const armAngle = Math.sin(gameState.animationTime * 8) * 0.4;
+            leftArmY = -12 + Math.sin(armAngle) * 8;
+            rightArmY = -12 - Math.sin(armAngle) * 8;
+        }
 
-    // Goggles with reflective gradient
-    const goggleGrad = ctx.createLinearGradient(-8, -28, 8, -22);
-    goggleGrad.addColorStop(0, COLORS.magenta);
-    goggleGrad.addColorStop(0.3, '#ff66cc');
-    goggleGrad.addColorStop(0.7, COLORS.cyan);
-    goggleGrad.addColorStop(1, COLORS.electricBlue);
-    ctx.fillStyle = goggleGrad;
-    ctx.shadowColor = COLORS.magenta;
-    ctx.shadowBlur = 6;
-    ctx.beginPath();
-    ctx.roundRect(-9, -28, 18, 7, 2);
-    ctx.fill();
+        // Need to recreate jacketGrad for arms since it was in the else block
+        const armGrad = ctx.createLinearGradient(-12, -20, 12, 10);
+        armGrad.addColorStop(0, COLORS.cyan);
+        armGrad.addColorStop(0.5, COLORS.electricBlue);
+        armGrad.addColorStop(1, '#0099cc');
+        ctx.strokeStyle = armGrad;
+        ctx.lineWidth = 5;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(-10, -5);
+        ctx.lineTo(leftArmX, leftArmY);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(10, -5);
+        ctx.lineTo(rightArmX, rightArmY);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        // Head
+        ctx.fillStyle = '#ffcc99';
+        ctx.beginPath();
+        ctx.arc(0, -24, 9, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Helmet
+        ctx.fillStyle = '#222';
+        ctx.beginPath();
+        ctx.arc(0, -26, 10, Math.PI, 0);
+        ctx.fill();
+
+        // Goggles with reflective gradient
+        const goggleGrad = ctx.createLinearGradient(-8, -28, 8, -22);
+        goggleGrad.addColorStop(0, COLORS.magenta);
+        goggleGrad.addColorStop(0.3, '#ff66cc');
+        goggleGrad.addColorStop(0.7, COLORS.cyan);
+        goggleGrad.addColorStop(1, COLORS.electricBlue);
+        ctx.fillStyle = goggleGrad;
+        ctx.shadowColor = COLORS.magenta;
+        ctx.shadowBlur = 6;
+        ctx.beginPath();
+        ctx.roundRect(-9, -28, 18, 7, 2);
+        ctx.fill();
+    }
 
     // Goggle shine
     ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
