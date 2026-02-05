@@ -403,17 +403,22 @@ const CHASE = {
     fogStartOffset: -300,       // Starts closer
     fogBaseSpeed: 150,          // Faster
     fogAcceleration: 1.5,       // Was 1.2 - fog catches up faster
-    beastSpawnDistance: 300,    // Was 500 - spawns earlier (~3 seconds)
+    beastSpawnDistance: 200,    // Spawn earlier for more tension
     beastSpeed: 1.4,            // 40% faster than player!
-    beastLungeInterval: 1.8,    // Was 2.0 - more frequent lunges
-    beastLungeVariance: 0.8,    // Was 1.0 - less random delay
+    beastLungeInterval: 1.5,    // More frequent lunges
+    beastLungeVariance: 0.5,    // Less random delay
     beastLungeDuration: 0.35,
-    beastRetreatDuration: 0.5,  // Was 0.6 - shorter retreat
+    beastRetreatDuration: 0.4,  // Shorter retreat
     // Crash/slow triggers
-    crashThreshold: 2,          // Was 3 - 2 crashes = instant beast
-    crashWindow: 12,            // Was 10 - longer window to track crashes
-    slowSpeedThreshold: 150,    // Was 120 - easier to trigger
-    slowSpeedDuration: 1.5      // Was 2.0 - less time needed
+    crashThreshold: 2,          // 2 crashes in window = beast spawns
+    crashWindow: 30,            // Track crashes over 30 seconds
+    slowSpeedThreshold: 150,    // Going too slow triggers beast
+    slowSpeedDuration: 1.5,     // Time needed at slow speed
+    // Catch mechanics
+    maxMisses: 2,               // After 2 misses, next lunge is guaranteed
+    guaranteedCatchCrashes: 5,  // 5 total crashes = guaranteed catch on next lunge
+    baseCatchRadius: 35,        // Normal catch radius
+    enhancedCatchRadius: 70     // Catch radius after too many crashes/misses
 };
 
 // Ski Lodge configuration - rare safe haven from the beast
@@ -427,7 +432,7 @@ const LODGE = {
     // Entrance ramp (points UP the mountain so player can snowboard in)
     rampWidth: 80,              // Width of entrance ramp
     rampLength: 100,            // Length of ramp leading to lodge
-    spawnChance: 0.025,         // 2.5% chance per chunk (very rare)
+    spawnChance: 0.01,          // 1% chance per chunk (very rare)
     minSpawnDistance: 1500,     // Only spawn after 1500 units traveled
     minLodgeSpacing: 3000,      // Minimum distance between lodges
     // Interior settings
@@ -687,6 +692,8 @@ let gameState = {
         distanceTraveled: 0,
         // Crash/slow tracking
         recentCrashes: [],      // Timestamps of crashes
+        totalCrashes: 0,        // Total crashes this game session
+        missCount: 0,           // Consecutive lunge misses
         slowSpeedTimer: 0,      // Time spent going slow
         beastRage: 0            // Increases aggression (0-1)
     },
@@ -1219,8 +1226,8 @@ function generateTerrainChunk(chunkIndex) {
         const endCol = Math.round(rail.endColApprox);
 
         // Mark the entire rail path plus landing zone below (±2 lanes for maneuvering room)
-        // Mark from rail start to 3 rows past rail end for safe dismount
-        for (let row = Math.max(0, startRow - 1); row <= Math.min(gridRows - 1, endRow + 3); row++) {
+        // Mark from rail start to 6 rows past rail end for safe dismount (extended clearance)
+        for (let row = Math.max(0, startRow - 1); row <= Math.min(gridRows - 1, endRow + 6); row++) {
             // Interpolate column position along the rail
             const t = (row - startRow) / Math.max(1, endRow - startRow);
             const midCol = Math.round(startCol + (endCol - startCol) * Math.min(1, Math.max(0, t)));
@@ -2104,15 +2111,27 @@ function triggerCrash(player) {
     // Track crash for beast trigger
     const now = gameState.animationTime;
     gameState.chase.recentCrashes.push(now);
+    gameState.chase.totalCrashes++;  // Track total crashes this session
 
     // Remove old crashes outside the window
     gameState.chase.recentCrashes = gameState.chase.recentCrashes.filter(
         t => now - t < CHASE.crashWindow
     );
 
-    // If too many crashes, spawn beast immediately!
+    // If too many crashes in window, spawn beast immediately
     if (gameState.chase.recentCrashes.length >= CHASE.crashThreshold && !gameState.chase.beastActive) {
         spawnBeast('TOO MANY WIPEOUTS!');
+    }
+
+    // If total crashes hit guaranteed catch threshold, warn player
+    if (gameState.chase.totalCrashes === CHASE.guaranteedCatchCrashes) {
+        gameState.celebrations.push({
+            text: 'THE BEAST HUNGERS!',
+            subtext: 'One more crash...',
+            color: COLORS.magenta,
+            timer: 2.0,
+            scale: 1.2
+        });
     }
 }
 
@@ -2500,10 +2519,14 @@ function updateBeast(dt) {
     chase.beastRage = Math.min(1, chase.beastRage + dt * 0.02);
     const rageMod = 1 + chase.beastRage * 0.5; // Up to 50% faster/more aggressive
 
+    // Check if guaranteed catch conditions are met
+    const guaranteedCatch = chase.totalCrashes >= CHASE.guaranteedCatchCrashes ||
+                           chase.missCount >= CHASE.maxMisses;
+
     switch (chase.beastState) {
         case 'chasing':
-            // Track player X - faster tracking with rage
-            const trackSpeed = (2.5 + chase.beastRage * 2) * dt;
+            // Track player X - faster tracking with rage (even faster if guaranteed catch)
+            const trackSpeed = (2.5 + chase.beastRage * 2 + (guaranteedCatch ? 3 : 0)) * dt;
             chase.beastX += (player.x - chase.beastX) * trackSpeed;
 
             // Stay ahead of fog
@@ -2519,12 +2542,21 @@ function updateBeast(dt) {
 
             if (chase.beastLungeTimer <= 0 && distToPlayer < 280 && distToPlayer > 40) {
                 chase.beastState = 'lunging';
-                // Predict player position for smarter lunges
-                const predictTime = 0.3;
-                chase.lungeTargetX = player.x + player.lateralSpeed * predictTime * chase.beastRage;
-                chase.lungeTargetY = player.y + player.speed * predictTime * 0.5;
+
+                // If guaranteed catch, lunge directly at player with minimal prediction error
+                if (guaranteedCatch) {
+                    // Nearly perfect prediction - beast teleports closer
+                    chase.beastY = player.y - 50; // Start closer
+                    chase.lungeTargetX = player.x;
+                    chase.lungeTargetY = player.y + player.speed * 0.15;
+                } else {
+                    // Normal prediction with some variance
+                    const predictTime = 0.3;
+                    chase.lungeTargetX = player.x + player.lateralSpeed * predictTime * chase.beastRage;
+                    chase.lungeTargetY = player.y + player.speed * predictTime * 0.5;
+                }
                 chase.lungeProgress = 0;
-                triggerScreenShake(10, 0.8);
+                triggerScreenShake(guaranteedCatch ? 15 : 10, 0.8);
             }
             break;
 
@@ -2540,21 +2572,41 @@ function updateBeast(dt) {
             chase.beastX = lerp(startX, chase.lungeTargetX, easeT * 0.8);
             chase.beastY = lerp(chase.beastY, chase.lungeTargetY, easeT);
 
-            // Check catch - slightly larger catch radius with rage
-            // Use squared distance to avoid sqrt
-            const catchRadius = 35 + chase.beastRage * 10;
+            // Determine catch radius - much larger if guaranteed catch
+            const catchRadius = guaranteedCatch ? CHASE.enhancedCatchRadius :
+                               (CHASE.baseCatchRadius + chase.beastRage * 10);
             const catchRadiusSq = catchRadius * catchRadius;
             const cdx = player.x - chase.beastX;
             const cdy = player.y - chase.beastY;
             const catchDistSq = cdx * cdx + cdy * cdy;
-            if (catchDistSq < catchRadiusSq && player.invincible <= 0 && !player.crashed && player.stunned <= 0) {
+
+            // Catch check - if guaranteed catch, ignore some immunity
+            const canCatch = guaranteedCatch ?
+                           (player.invincible <= 0 && player.stunned <= 0) : // Can catch even if crashed
+                           (player.invincible <= 0 && !player.crashed && player.stunned <= 0);
+
+            if (catchDistSq < catchRadiusSq && canCatch) {
+                chase.missCount = 0; // Reset on successful catch
                 triggerGameOver('beast');
                 return;
             }
 
             if (chase.lungeProgress >= 1) {
+                // Lunge finished without catching - count as miss
+                chase.missCount++;
                 chase.beastState = 'retreating';
                 chase.retreatTimer = CHASE.beastRetreatDuration;
+
+                // Warn player if next lunge is guaranteed
+                if (chase.missCount >= CHASE.maxMisses - 1) {
+                    gameState.celebrations.push({
+                        text: 'NO ESCAPE!',
+                        subtext: '',
+                        color: COLORS.magenta,
+                        timer: 1.5,
+                        scale: 1.1
+                    });
+                }
             }
             break;
 
@@ -2565,8 +2617,10 @@ function updateBeast(dt) {
             if (chase.retreatTimer <= 0) {
                 chase.beastState = 'chasing';
                 // Less variance, more consistent pressure with rage
+                // Even faster lunge interval if close to guaranteed catch
                 const variance = CHASE.beastLungeVariance * (1 - chase.beastRage * 0.5);
-                chase.beastLungeTimer = CHASE.beastLungeInterval + Math.random() * variance;
+                const intervalMod = guaranteedCatch ? 0.5 : 1; // Half interval if guaranteed
+                chase.beastLungeTimer = (CHASE.beastLungeInterval + Math.random() * variance) * intervalMod;
             }
             break;
     }
@@ -3029,113 +3083,142 @@ function drawJumps() {
         if (jump.y < camera.y - 50 || jump.y > camera.y + CANVAS_HEIGHT + 50) continue;
 
         const screen = worldToScreen(jump.x, jump.y);
+        const w = jump.width;
+        const h = jump.height;
 
-        // ===== X GAMES / OLYMPIC STYLE SNOW KICKER =====
-        // Realistic packed snow jump with flat approach and sharp takeoff lip
+        // ===== X GAMES SUPERPIPE / BIG AIR STYLE KICKER =====
 
-        // Ground shadow - elongated to show jump projection
-        ctx.fillStyle = 'rgba(80, 100, 120, 0.25)';
+        // Ground shadow
+        ctx.fillStyle = 'rgba(60, 80, 100, 0.3)';
         ctx.beginPath();
-        ctx.ellipse(screen.x + 3, screen.y + 4, jump.width * 0.4, 6, 0, 0, Math.PI * 2);
+        ctx.ellipse(screen.x + 5, screen.y + 6, w * 0.45, 8, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // MASSIVE jumps only get indicator text (no glow - more realistic)
-        if (jump.massive) {
-            ctx.fillStyle = `rgba(255, 100, 50, ${0.7 + Math.sin(time * 2) * 0.15})`;
-            ctx.font = 'bold 11px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText('★ BIG AIR ★', screen.x, screen.y - jump.height - 12);
-        }
-
-        // Main kicker shape - flatter approach ramp with defined takeoff lip
-        const snowGrad = ctx.createLinearGradient(
-            screen.x - jump.width/2, screen.y,
-            screen.x, screen.y - jump.height
-        );
-        snowGrad.addColorStop(0, '#dce8f0');      // Shadowed base (groomed snow)
-        snowGrad.addColorStop(0.4, '#eef4f8');    // Mid-tone packed snow
-        snowGrad.addColorStop(0.7, '#f8fcff');    // Bright face
-        snowGrad.addColorStop(1, '#ffffff');      // Bright lip edge
-
-        ctx.fillStyle = snowGrad;
+        // ===== SIDE MARKER FLAGS (X Games style) =====
+        // Left flag pole
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 2;
         ctx.beginPath();
-        // X Games style: flat approach → curved transition → sharp lip
-        ctx.moveTo(screen.x - jump.width/2, screen.y);
-        // Flatter approach ramp (the "in-run")
-        ctx.lineTo(screen.x - jump.width/3, screen.y - jump.height * 0.15);
-        // Transition curve (where it starts to kick up)
+        ctx.moveTo(screen.x - w/2 - 8, screen.y);
+        ctx.lineTo(screen.x - w/2 - 8, screen.y - h - 20);
+        ctx.stroke();
+
+        // Left flag (orange)
+        ctx.fillStyle = '#ff6600';
+        ctx.beginPath();
+        ctx.moveTo(screen.x - w/2 - 8, screen.y - h - 20);
+        ctx.lineTo(screen.x - w/2 + 5, screen.y - h - 15);
+        ctx.lineTo(screen.x - w/2 - 8, screen.y - h - 10);
+        ctx.closePath();
+        ctx.fill();
+
+        // Right flag pole
+        ctx.strokeStyle = '#333';
+        ctx.beginPath();
+        ctx.moveTo(screen.x + w/2 + 8, screen.y);
+        ctx.lineTo(screen.x + w/2 + 8, screen.y - h - 20);
+        ctx.stroke();
+
+        // Right flag (orange)
+        ctx.fillStyle = '#ff6600';
+        ctx.beginPath();
+        ctx.moveTo(screen.x + w/2 + 8, screen.y - h - 20);
+        ctx.lineTo(screen.x + w/2 - 5, screen.y - h - 15);
+        ctx.lineTo(screen.x + w/2 + 8, screen.y - h - 10);
+        ctx.closePath();
+        ctx.fill();
+
+        // ===== MAIN KICKER SHAPE =====
+        // Packed snow with strong contrast
+        ctx.fillStyle = '#e0e8f0';  // Base snow color
+        ctx.beginPath();
+        // X Games style: steep approach → vertical transition → sharp lip
+        ctx.moveTo(screen.x - w/2, screen.y);
+        // Steeper approach ramp
+        ctx.lineTo(screen.x - w/3, screen.y - h * 0.2);
+        // Aggressive transition curve (kicks up sharply)
         ctx.quadraticCurveTo(
-            screen.x - jump.width/6, screen.y - jump.height * 0.4,
-            screen.x - jump.width/12, screen.y - jump.height * 0.75
+            screen.x - w/8, screen.y - h * 0.5,
+            screen.x - w/15, screen.y - h * 0.85
         );
-        // Sharp takeoff lip
+        // Sharp vertical takeoff lip
         ctx.quadraticCurveTo(
-            screen.x, screen.y - jump.height * 1.02,
-            screen.x + jump.width/10, screen.y - jump.height * 0.85
+            screen.x, screen.y - h * 1.1,
+            screen.x + w/12, screen.y - h * 0.9
         );
-        // Back side (knuckle) - steeper drop
+        // Back side drop (knuckle)
         ctx.quadraticCurveTo(
-            screen.x + jump.width/4, screen.y - jump.height * 0.4,
-            screen.x + jump.width/2, screen.y
+            screen.x + w/4, screen.y - h * 0.3,
+            screen.x + w/2, screen.y
         );
         ctx.closePath();
         ctx.fill();
 
-        // Groomed snow texture lines (horizontal compression marks from grooming)
-        ctx.strokeStyle = 'rgba(160, 180, 200, 0.25)';
+        // Snow face highlight (lit side)
+        ctx.fillStyle = '#f5faff';
+        ctx.beginPath();
+        ctx.moveTo(screen.x - w/3, screen.y - h * 0.2);
+        ctx.quadraticCurveTo(
+            screen.x - w/8, screen.y - h * 0.5,
+            screen.x - w/15, screen.y - h * 0.85
+        );
+        ctx.quadraticCurveTo(
+            screen.x, screen.y - h * 1.1,
+            screen.x + w/12, screen.y - h * 0.9
+        );
+        ctx.lineTo(screen.x - w/10, screen.y - h * 0.7);
+        ctx.closePath();
+        ctx.fill();
+
+        // Grooming lines
+        ctx.strokeStyle = 'rgba(140, 170, 200, 0.3)';
         ctx.lineWidth = 1;
-        for (let i = 1; i <= 4; i++) {
-            const lineY = screen.y - jump.height * (i * 0.18);
-            const lineStartX = screen.x - jump.width * (0.45 - i * 0.05);
-            const lineEndX = screen.x + jump.width * (0.15 + i * 0.04);
+        for (let i = 1; i <= 5; i++) {
+            const lineY = screen.y - h * (i * 0.15);
             ctx.beginPath();
-            ctx.moveTo(lineStartX, lineY + 2);
-            ctx.lineTo(lineEndX, lineY);
+            ctx.moveTo(screen.x - w * (0.4 - i * 0.04), lineY);
+            ctx.lineTo(screen.x + w * (0.1 + i * 0.03), lineY - 2);
             ctx.stroke();
         }
 
-        // Sharp lip edge highlight (the takeoff point)
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-        ctx.lineWidth = 2.5;
+        // Sharp lip edge (bright white highlight)
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
         ctx.beginPath();
-        ctx.moveTo(screen.x - jump.width/10, screen.y - jump.height * 0.8);
+        ctx.moveTo(screen.x - w/12, screen.y - h * 0.9);
         ctx.quadraticCurveTo(
-            screen.x, screen.y - jump.height - 1,
-            screen.x + jump.width/10, screen.y - jump.height * 0.85
+            screen.x, screen.y - h * 1.1,
+            screen.x + w/12, screen.y - h * 0.9
         );
         ctx.stroke();
+        ctx.lineCap = 'butt';
 
-        // Side shadow (knuckle/landing side is darker)
-        ctx.fillStyle = 'rgba(120, 150, 180, 0.2)';
+        // Knuckle shadow (back side darker)
+        ctx.fillStyle = 'rgba(100, 130, 160, 0.25)';
         ctx.beginPath();
-        ctx.moveTo(screen.x + jump.width/10, screen.y - jump.height * 0.85);
+        ctx.moveTo(screen.x + w/12, screen.y - h * 0.9);
         ctx.quadraticCurveTo(
-            screen.x + jump.width/4, screen.y - jump.height * 0.4,
-            screen.x + jump.width/2, screen.y
+            screen.x + w/4, screen.y - h * 0.3,
+            screen.x + w/2, screen.y
         );
-        ctx.lineTo(screen.x + jump.width/4, screen.y);
+        ctx.lineTo(screen.x + w/5, screen.y);
         ctx.closePath();
         ctx.fill();
 
-        // Approach ramp shadow (subtle depth on flat section)
-        ctx.fillStyle = 'rgba(140, 160, 180, 0.12)';
-        ctx.beginPath();
-        ctx.moveTo(screen.x - jump.width/2, screen.y);
-        ctx.lineTo(screen.x - jump.width/3, screen.y - jump.height * 0.15);
-        ctx.lineTo(screen.x - jump.width/3.5, screen.y);
-        ctx.closePath();
-        ctx.fill();
-
-        // Snow spray particles at base (optional visual detail for large jumps)
-        if (jump.height > 25) {
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-            for (let i = 0; i < 3; i++) {
-                const sprayX = screen.x - jump.width/3 + i * 8;
-                const sprayY = screen.y + 2;
-                ctx.beginPath();
-                ctx.arc(sprayX, sprayY, 2, 0, Math.PI * 2);
-                ctx.fill();
-            }
+        // ===== JUMP SIZE INDICATORS =====
+        if (jump.massive) {
+            // BIG AIR label for massive jumps
+            ctx.fillStyle = `rgba(255, 80, 40, ${0.8 + animCache.sin2 * 0.2})`;
+            ctx.font = 'bold 12px "Press Start 2P", monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('BIG AIR', screen.x, screen.y - h - 30);
+        } else if (h > 35) {
+            // Medium/large jump indicator
+            ctx.fillStyle = 'rgba(255, 150, 50, 0.7)';
+            ctx.font = '8px "Press Start 2P", monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('▲', screen.x, screen.y - h - 15);
         }
     }
 }
@@ -3547,23 +3630,65 @@ function drawLodges() {
         ctx.ellipse(screen.x + 10, screen.y + h + 15, w * 0.5, 20, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // ===== BACK STAIRS (behind lodge - secondary exit) =====
-        const stairsW = lodge.stairsWidth;
-        const stairsH = lodge.stairsHeight;
-        // Stair steps
-        ctx.fillStyle = '#8b7355';
-        for (let i = 0; i < 3; i++) {
-            const stepY = screen.y + h + i * (stairsH / 3);
-            const stepW = stairsW - i * 8;
-            ctx.fillRect(screen.x - stepW / 2, stepY, stepW, stairsH / 3 + 2);
+        // ===== ENTRANCE RAMP (TOP - main entry point) =====
+        const rampW = LODGE.rampWidth;
+        const rampL = LODGE.rampLength;
+        const rampTopY = screen.y - rampL;  // Ramp extends UP from lodge
+
+        // Ramp shadow
+        ctx.fillStyle = 'rgba(60, 80, 100, 0.3)';
+        ctx.beginPath();
+        ctx.moveTo(screen.x - rampW / 2 - 5, rampTopY + 10);
+        ctx.lineTo(screen.x + rampW / 2 + 5, rampTopY + 10);
+        ctx.lineTo(screen.x + rampW / 2 + 15, screen.y + 10);
+        ctx.lineTo(screen.x - rampW / 2 - 15, screen.y + 10);
+        ctx.closePath();
+        ctx.fill();
+
+        // Ramp surface (groomed snow)
+        ctx.fillStyle = '#e8f0f8';
+        ctx.beginPath();
+        ctx.moveTo(screen.x - rampW / 2, rampTopY);
+        ctx.lineTo(screen.x + rampW / 2, rampTopY);
+        ctx.lineTo(screen.x + rampW / 2 + 10, screen.y);
+        ctx.lineTo(screen.x - rampW / 2 - 10, screen.y);
+        ctx.closePath();
+        ctx.fill();
+
+        // Ramp grooming lines
+        ctx.strokeStyle = 'rgba(180, 200, 220, 0.4)';
+        ctx.lineWidth = 1;
+        for (let i = 1; i < 5; i++) {
+            const t = i / 5;
+            const y = rampTopY + t * rampL;
+            const xOffset = t * 10;
+            ctx.beginPath();
+            ctx.moveTo(screen.x - rampW / 2 - xOffset, y);
+            ctx.lineTo(screen.x + rampW / 2 + xOffset, y);
+            ctx.stroke();
         }
-        // Stair shadows
-        ctx.fillStyle = 'rgba(60, 40, 30, 0.3)';
-        for (let i = 0; i < 3; i++) {
-            const stepY = screen.y + h + i * (stairsH / 3);
-            const stepW = stairsW - i * 8;
-            ctx.fillRect(screen.x - stepW / 2, stepY, stepW, 3);
+
+        // Ramp side rails (orange safety markers)
+        ctx.fillStyle = '#ff6600';
+        for (let i = 0; i < 4; i++) {
+            const t = i / 3;
+            const y = rampTopY + t * rampL;
+            const xOffset = t * 10;
+            // Left marker
+            ctx.beginPath();
+            ctx.arc(screen.x - rampW / 2 - xOffset - 5, y, 4, 0, Math.PI * 2);
+            ctx.fill();
+            // Right marker
+            ctx.beginPath();
+            ctx.arc(screen.x + rampW / 2 + xOffset + 5, y, 4, 0, Math.PI * 2);
+            ctx.fill();
         }
+
+        // "ENTER" text on ramp
+        ctx.fillStyle = 'rgba(0, 200, 150, 0.8)';
+        ctx.font = '10px "Press Start 2P", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('▼ ENTER ▼', screen.x, rampTopY + rampL * 0.4);
 
         // ===== MAIN BUILDING BODY =====
         // Base/foundation
@@ -3702,11 +3827,11 @@ function drawLodges() {
         ctx.textAlign = 'center';
         ctx.fillText('SKI LODGE', screen.x, screen.y + h * 0.25 + 13);
 
-        // ===== ENTRANCE INDICATOR (pulsing) =====
-        if (Math.sin(time * 4) > 0) {
-            ctx.fillStyle = 'rgba(0, 255, 200, 0.3)';
+        // ===== ENTRANCE INDICATOR (pulsing - at TOP of ramp) =====
+        if (animCache.sin4 > 0) {
+            ctx.fillStyle = 'rgba(0, 255, 200, 0.4)';
             ctx.beginPath();
-            ctx.arc(doorX, doorY + doorH + stairsH / 2, 25, 0, Math.PI * 2);
+            ctx.arc(screen.x, rampTopY + 20, 30, 0, Math.PI * 2);
             ctx.fill();
         }
     }
@@ -5419,6 +5544,8 @@ function startGame() {
         retreatTimer: 0,
         distanceTraveled: 0,
         recentCrashes: [],
+        totalCrashes: 0,
+        missCount: 0,
         slowSpeedTimer: 0,
         beastRage: 0
     };
