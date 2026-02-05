@@ -652,11 +652,10 @@ function setupInput() {
             case 'KeyW':
                 input.up = true;
                 break;
-            // DOWN/S disabled - does nothing
-            // case 'ArrowDown':
-            // case 'KeyS':
-            //     input.down = true;
-            //     break;
+            case 'ArrowDown':
+            case 'KeyS':
+                input.down = true;
+                break;
             case 'Space':
                 input.space = true;
                 break;
@@ -677,11 +676,10 @@ function setupInput() {
             case 'KeyW':
                 input.up = false;
                 break;
-            // DOWN/S disabled - does nothing
-            // case 'ArrowDown':
-            // case 'KeyS':
-            //     input.down = false;
-            //     break;
+            case 'ArrowDown':
+            case 'KeyS':
+                input.down = false;
+                break;
             case 'Space':
                 input.space = false;
                 break;
@@ -3993,9 +3991,7 @@ function drawPlayer() {
             } else {
                 sprites.player.setAnimation('airborne');
             }
-        } else if (input.down && !player.airborne) {
-            // Tucking for speed - crouch down (no speed requirement - animation shows immediately)
-            sprites.player.setAnimation('tuck');
+        // DOWN/S only affects speed, no animation change
         } else if (input.up && !player.airborne) {
             // Braking/slowing - use idle animation (arms spread for drag)
             sprites.player.setAnimation('idle');
