@@ -652,10 +652,11 @@ function setupInput() {
             case 'KeyW':
                 input.up = true;
                 break;
-            case 'ArrowDown':
-            case 'KeyS':
-                input.down = true;
-                break;
+            // DOWN/S disabled - does nothing
+            // case 'ArrowDown':
+            // case 'KeyS':
+            //     input.down = true;
+            //     break;
             case 'Space':
                 input.space = true;
                 break;
@@ -676,10 +677,11 @@ function setupInput() {
             case 'KeyW':
                 input.up = false;
                 break;
-            case 'ArrowDown':
-            case 'KeyS':
-                input.down = false;
-                break;
+            // DOWN/S disabled - does nothing
+            // case 'ArrowDown':
+            // case 'KeyS':
+            //     input.down = false;
+            //     break;
             case 'Space':
                 input.space = false;
                 break;
