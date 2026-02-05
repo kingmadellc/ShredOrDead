@@ -845,10 +845,23 @@ function setupInput() {
 function setupTouchInput() {
     const canvas = document.getElementById('gameCanvas');
 
+    // Add to canvas
     canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
     canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
     canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
     canvas.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+
+    // Also add to document for iOS Safari compatibility
+    // (sometimes touch events don't fire on canvas in iOS)
+    document.addEventListener('touchstart', handleTouchStart, { passive: false });
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
+    document.addEventListener('touchend', handleTouchEnd, { passive: false });
+    document.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+
+    // Prevent default touch behaviors on the whole page for iOS
+    document.body.style.touchAction = 'none';
+    document.body.style.webkitTouchCallout = 'none';
+    document.body.style.webkitUserSelect = 'none';
 }
 
 function handleTouchStart(e) {
