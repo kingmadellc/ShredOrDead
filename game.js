@@ -622,7 +622,7 @@ let gameState = {
         y: 0,
         visualX: 0,
         visualY: 0,
-        speed: 150,
+        speed: 260,
         lateralSpeed: 0,
         angle: 0,
         airborne: false,
