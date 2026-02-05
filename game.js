@@ -3049,9 +3049,11 @@ function drawFunbox(startScreen, endScreen, rail) {
     // Calculate midpoint and angle
     const midX = (startScreen.x + endScreen.x) / 2;
     const midY = (startScreen.y + endScreen.y) / 2;
+    const angle = Math.atan2(dy, dx);
 
     ctx.save();
     ctx.translate(midX, midY);
+    ctx.rotate(angle);  // Rotate to match rail direction
 
     // Shadow
     ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
@@ -3191,8 +3193,12 @@ function drawBench(startScreen, endScreen, rail) {
     const midX = (startScreen.x + endScreen.x) / 2;
     const midY = (startScreen.y + endScreen.y) / 2;
 
+    // Calculate rotation angle to match rail direction
+    const angle = Math.atan2(dy, dx);
+
     ctx.save();
     ctx.translate(midX, midY);
+    ctx.rotate(angle);  // Rotate to match rail direction
 
     // Shadow
     ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
@@ -4230,15 +4236,15 @@ function drawPlayer() {
         // ===== TUCK POSE - BOARD VERTICAL, RIDER SIDE PROFILE, CROUCHED LOW =====
         // Board points DOWN the mountain (vertical)
         // Rider turned perpendicular (side profile), head looking downhill
-        // Same basic orientation as normal riding but deeply crouched
+        // DRAMATICALLY offset to side - we see rider's profile clearly
         // Regular stance: faces LEFT, Goofy: faces RIGHT
 
         const faceDir = isGoofy ? 1 : -1;  // Which way the rider faces
 
-        // Shadow - elongated vertically for vertical board
+        // Shadow - offset to side where rider is
         ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
         ctx.beginPath();
-        ctx.ellipse(0, 18 + shadowOffset, 10, 16, 0, 0, Math.PI * 2);
+        ctx.ellipse(faceDir * 8, 18 + shadowOffset, 14, 12, 0, 0, Math.PI * 2);
         ctx.fill();
 
         // Board - VERTICAL, pointing down the mountain
@@ -4267,28 +4273,38 @@ function drawPlayer() {
         ctx.fillRect(-6, 4, 12, 5);   // Front binding
         ctx.fillRect(-6, 18, 12, 5);  // Back binding
 
-        // Legs - DEEPLY CROUCHED, very bent knees
+        // === SIDE PROFILE RIDER - significantly offset to faceDir ===
+        // Boots on board - positioned to the side
+        ctx.fillStyle = '#333';
+        ctx.beginPath();
+        ctx.ellipse(faceDir * 6, 6, 5, 4, 0, 0, Math.PI * 2);  // Front boot
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(faceDir * 4, 20, 5, 4, 0, 0, Math.PI * 2);  // Back boot
+        ctx.fill();
+
+        // Legs - DEEPLY CROUCHED, very bent knees - side view
         const legGrad = ctx.createLinearGradient(0, -5, 0, 15);
         legGrad.addColorStop(0, '#7744bb');
         legGrad.addColorStop(1, '#553399');
         ctx.strokeStyle = legGrad;
-        ctx.lineWidth = 7;
+        ctx.lineWidth = 8;
         ctx.lineCap = 'round';
 
-        // Front leg - very bent, low stance
+        // Front leg - bent forward at the knee (tucked)
         ctx.beginPath();
-        ctx.moveTo(faceDir * 5, 2);
-        ctx.quadraticCurveTo(faceDir * 14, 5, 0, 7);
+        ctx.moveTo(faceDir * 6, 4);  // From boot
+        ctx.quadraticCurveTo(faceDir * 16, -2, faceDir * 10, -8);  // Knee bent forward
         ctx.stroke();
 
-        // Back leg - very bent
+        // Back leg - bent under body
         ctx.beginPath();
-        ctx.moveTo(faceDir * -1, 2);
-        ctx.quadraticCurveTo(faceDir * 8, 14, 0, 20);
+        ctx.moveTo(faceDir * 4, 18);  // From back boot
+        ctx.quadraticCurveTo(faceDir * 12, 8, faceDir * 8, -4);  // Knee tucked
         ctx.stroke();
 
-        // Body/torso - LOW and compressed
-        const jacketGrad = ctx.createLinearGradient(faceDir * -8, -20, faceDir * 8, 5);
+        // Body/torso - LOW, compressed, clearly offset to side
+        const jacketGrad = ctx.createLinearGradient(faceDir * 4, -20, faceDir * 16, 0);
         jacketGrad.addColorStop(0, COLORS.cyan);
         jacketGrad.addColorStop(0.5, COLORS.electricBlue);
         jacketGrad.addColorStop(1, '#0099cc');
@@ -4296,61 +4312,62 @@ function drawPlayer() {
         ctx.shadowColor = COLORS.cyan;
         ctx.shadowBlur = 4;
         ctx.beginPath();
-        // Torso much lower than normal
-        ctx.ellipse(faceDir * 3, -4, 7, 10, 0, 0, Math.PI * 2);
+        // Torso - THIN ellipse for side profile, far to the side
+        ctx.ellipse(faceDir * 10, -10, 5, 10, faceDir * 0.3, 0, Math.PI * 2);
         ctx.fill();
 
         // Jacket stripe
         ctx.fillStyle = COLORS.magenta;
         ctx.beginPath();
-        ctx.ellipse(faceDir * 3, -4, 7, 2, 0, 0, Math.PI * 2);
+        ctx.ellipse(faceDir * 10, -10, 5, 2, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.shadowBlur = 0;
 
-        // Arms - TUCKED tight against body
+        // Arms - TUCKED tight, reaching toward front
         ctx.strokeStyle = jacketGrad;
         ctx.lineWidth = 5;
         ctx.lineCap = 'round';
 
-        // Lead arm - near front knee
+        // Lead arm - reaching forward and down (aerodynamic tuck)
         ctx.beginPath();
-        ctx.moveTo(faceDir * 7, -6);
-        ctx.quadraticCurveTo(faceDir * 10, 0, faceDir * 8, 4);
+        ctx.moveTo(faceDir * 12, -14);  // Shoulder
+        ctx.quadraticCurveTo(faceDir * 18, -8, faceDir * 16, -2);  // Reaching forward
         ctx.stroke();
 
-        // Trail arm - close to body
+        // Trail arm - tucked along body
         ctx.beginPath();
-        ctx.moveTo(faceDir * -1, -6);
-        ctx.quadraticCurveTo(faceDir * -3, 0, faceDir * -2, 3);
+        ctx.moveTo(faceDir * 8, -12);  // Shoulder
+        ctx.quadraticCurveTo(faceDir * 6, -6, faceDir * 8, -2);  // Tucked back
         ctx.stroke();
 
         // Gloves
         ctx.fillStyle = '#2244aa';
         ctx.beginPath();
-        ctx.arc(faceDir * 8, 4, 3, 0, Math.PI * 2);
+        ctx.arc(faceDir * 16, -2, 3, 0, Math.PI * 2);  // Lead hand
         ctx.fill();
         ctx.beginPath();
-        ctx.arc(faceDir * -2, 3, 3, 0, Math.PI * 2);
+        ctx.arc(faceDir * 8, -2, 3, 0, Math.PI * 2);  // Trail hand
         ctx.fill();
 
-        // Head - tucked down, looking DOWN the mountain
+        // Head - tucked down, looking DOWN the mountain - far to the side
         ctx.fillStyle = '#ffcc99';
         ctx.beginPath();
-        ctx.arc(faceDir * 5, -14, 7, 0, Math.PI * 2);
+        ctx.arc(faceDir * 14, -20, 7, 0, Math.PI * 2);  // Head way off to the side
         ctx.fill();
 
         // Helmet
         ctx.fillStyle = '#222';
         ctx.beginPath();
-        ctx.ellipse(faceDir * 5, -16, 8, 5, faceDir * 0.2, Math.PI, Math.PI * 2);
+        ctx.ellipse(faceDir * 14, -22, 8, 5, faceDir * 0.3, Math.PI, Math.PI * 2);
         ctx.fill();
 
-        // Goggles - looking down mountain
+        // Goggles - facing the direction of travel (down the mountain)
         ctx.fillStyle = COLORS.cyan;
         ctx.shadowColor = COLORS.cyan;
         ctx.shadowBlur = 3;
         ctx.beginPath();
-        ctx.ellipse(faceDir * 12, -15, 4, 3, faceDir * 0.4, 0, Math.PI * 2);
+        // Goggles on the FRONT of head (facing downhill)
+        ctx.ellipse(faceDir * 14, -20, 4, 3, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.shadowBlur = 0;
 
