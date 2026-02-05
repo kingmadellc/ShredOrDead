@@ -4036,18 +4036,17 @@ function drawPlayer() {
     // Determine player pose based on input and state
     const isSpinning = player.airborne && player.spinDirection !== 0 && Math.abs(player.trickRotation) > 30;
 
-    // BRAKING (UP pressed) - board turns perpendicular to slope, facing UP the mountain
+    // BRAKING (UP pressed) - board turns perpendicular to slope (horizontal), scraping snow to slow down
     const isBraking = !player.airborne && !player.crashed && input.up;
 
-    // TUCKING (DOWN pressed) - board perpendicular (like braking) but CROUCHED for speed
-    // Regular stance: board/body faces LEFT (90° left)
-    // Goofy stance: board/body faces RIGHT (90° right)
+    // TUCKING (DOWN pressed) - same side profile as going straight, but CROUCHED LOW for speed
+    // Board still points DOWN the mountain, rider is just lower/more aerodynamic
     const isTuckingDown = !player.airborne && !player.crashed && input.down;
 
-    // Going straight down the mountain (side profile view)
-    // This is the default when NOT braking and NOT tucking
-    const goingStraight = !player.crashed && !isBraking && !isTuckingDown && (
-        // On ground and going straight
+    // Going straight down the mountain (side profile view) - INCLUDES TUCKING
+    // Board points down, we see rider's side profile
+    const goingStraight = !player.crashed && !isBraking && (
+        // On ground and going straight (or tucking - same orientation, just crouched)
         (!player.airborne && Math.abs(player.angle) < 5) ||
         // Airborne but NOT spinning (maintains straight orientation)
         (player.airborne && !isSpinning)
@@ -4227,135 +4226,8 @@ function drawPlayer() {
             }
         }
 
-    } else if (isTuckingDown) {
-        // ===== TUCK POSE - CROUCHED LOW FOR SPEED, BOARD PERPENDICULAR =====
-        // Player presses DOWN to go fast - board turns perpendicular like braking
-        // But body is CROUCHED LOW in aerodynamic tuck position
-        // Regular stance: faces LEFT, Goofy stance: faces RIGHT
-
-        const faceDir = isGoofy ? 1 : -1;  // Which way the rider faces
-
-        // Shadow - horizontal for sideways board
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
-        ctx.beginPath();
-        ctx.ellipse(0, 14 + shadowOffset, 22, 6, 0, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Board - HORIZONTAL, perpendicular to slope
-        const boardGrad = ctx.createLinearGradient(-20, 0, 20, 0);
-        boardGrad.addColorStop(0, COLORS.hotPink);
-        boardGrad.addColorStop(0.5, '#ff69b4');
-        boardGrad.addColorStop(1, COLORS.magenta);
-        ctx.fillStyle = boardGrad;
-        ctx.shadowColor = COLORS.hotPink;
-        ctx.shadowBlur = 8;
-        ctx.beginPath();
-        ctx.roundRect(-22, 4, 44, 8, 4);
-        ctx.fill();
-
-        // Board edge highlight
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(-20, 5);
-        ctx.lineTo(20, 5);
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-
-        // Bindings - on the horizontal board
-        ctx.fillStyle = '#333';
-        ctx.fillRect(-12, 3, 8, 10);   // Left binding
-        ctx.fillRect(4, 3, 8, 10);     // Right binding
-
-        // Legs - CROUCHED LOW, knees deeply bent
-        const legGrad = ctx.createLinearGradient(0, -5, 0, 10);
-        legGrad.addColorStop(0, '#7744bb');
-        legGrad.addColorStop(1, '#553399');
-        ctx.strokeStyle = legGrad;
-        ctx.lineWidth = 7;
-        ctx.lineCap = 'round';
-
-        // Front leg - deeply bent
-        ctx.beginPath();
-        ctx.moveTo(faceDir * 4, -3);
-        ctx.quadraticCurveTo(faceDir * 12, 2, -8, 6);
-        ctx.stroke();
-
-        // Back leg - deeply bent
-        ctx.beginPath();
-        ctx.moveTo(faceDir * -2, -3);
-        ctx.quadraticCurveTo(faceDir * 6, 4, 8, 6);
-        ctx.stroke();
-
-        // Body/torso - CROUCHED LOW, leaning forward
-        const jacketGrad = ctx.createLinearGradient(faceDir * -5, -18, faceDir * 10, 0);
-        jacketGrad.addColorStop(0, COLORS.cyan);
-        jacketGrad.addColorStop(0.5, COLORS.electricBlue);
-        jacketGrad.addColorStop(1, '#0099cc');
-        ctx.fillStyle = jacketGrad;
-        ctx.shadowColor = COLORS.cyan;
-        ctx.shadowBlur = 4;
-        ctx.beginPath();
-        // Torso is lower and more compressed in tuck
-        ctx.ellipse(faceDir * 3, -8, 9, 10, faceDir * 0.3, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Jacket stripe
-        ctx.fillStyle = COLORS.magenta;
-        ctx.beginPath();
-        ctx.ellipse(faceDir * 3, -8, 9, 2, faceDir * 0.3, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-
-        // Arms - TUCKED IN close to body for aerodynamics
-        ctx.strokeStyle = jacketGrad;
-        ctx.lineWidth = 5;
-        ctx.lineCap = 'round';
-
-        // Lead arm - tucked against chest
-        ctx.beginPath();
-        ctx.moveTo(faceDir * 8, -10);
-        ctx.quadraticCurveTo(faceDir * 10, -5, faceDir * 6, -2);
-        ctx.stroke();
-
-        // Trail arm - tucked behind
-        ctx.beginPath();
-        ctx.moveTo(faceDir * -2, -10);
-        ctx.quadraticCurveTo(faceDir * -4, -6, faceDir * -2, -2);
-        ctx.stroke();
-
-        // Gloves - close to body
-        ctx.fillStyle = '#2244aa';
-        ctx.beginPath();
-        ctx.arc(faceDir * 6, -2, 3, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.arc(faceDir * -2, -2, 3, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Head - tucked down, looking forward
-        ctx.fillStyle = '#ffcc99';
-        ctx.beginPath();
-        ctx.arc(faceDir * 5, -20, 7, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Helmet
-        ctx.fillStyle = '#222';
-        ctx.beginPath();
-        ctx.ellipse(faceDir * 5, -22, 8, 5, faceDir * 0.2, Math.PI, Math.PI * 2);
-        ctx.fill();
-
-        // Goggles - facing direction of travel
-        ctx.fillStyle = COLORS.cyan;
-        ctx.shadowColor = COLORS.cyan;
-        ctx.shadowBlur = 3;
-        ctx.beginPath();
-        ctx.ellipse(faceDir * 8, -20, 4, 3, faceDir * 0.3, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-
     } else if (goingStraight) {
-        // STRAIGHT DOWN THE MOUNTAIN - SIDE PROFILE VIEW
+        // STRAIGHT DOWN THE MOUNTAIN - SIDE PROFILE VIEW (also used for TUCKING)
         // Board points down, rider's body is SIDEWAYS on board (perpendicular to board direction)
         // We see the rider's side profile - one shoulder toward camera, one away
         // Regular stance: left foot forward (rider faces left), Goofy: right foot forward (rider faces right)
