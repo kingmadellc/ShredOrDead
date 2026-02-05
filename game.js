@@ -15,18 +15,18 @@ const BASE_HEIGHT = 640;
 // PERFORMANCE SETTINGS
 // ============================================
 const performanceSettings = {
-    shadowQuality: 'medium',  // 'high', 'medium', 'low', 'off'
-    particleMultiplier: 1.0,  // Reduce for lower-end devices
-    maxParticles: 100,        // Cap particle count
+    shadowQuality: 'low',     // 'high', 'medium', 'low', 'off' - low for smooth performance
+    particleMultiplier: 0.7,  // Reduce particle spawn rate
+    maxParticles: 50,         // Cap particle count for performance
     skipFrameThreshold: 0.05  // Skip rendering if dt > this (lag spike recovery)
 };
 
-// Helper to get shadow blur based on quality setting
+// Helper to get shadow blur based on quality setting - USE THIS for all shadowBlur calls
 function getShadowBlur(baseBlur) {
     switch (performanceSettings.shadowQuality) {
         case 'high': return baseBlur;
-        case 'medium': return Math.floor(baseBlur * 0.6);
-        case 'low': return Math.floor(baseBlur * 0.3);
+        case 'medium': return Math.floor(baseBlur * 0.5);
+        case 'low': return Math.floor(baseBlur * 0.2);
         case 'off': return 0;
         default: return baseBlur;
     }
@@ -1176,10 +1176,10 @@ function generateTerrainChunk(chunkIndex) {
             if (usedCells.has(cellKey)) continue; // Skip if in landing zone
             usedCells.add(cellKey);
 
-            // Add size variation - trees range from 0.8x to 2.2x base size
-            const sizeMultiplier = 0.8 + seededRandom(clusterSeed + 40 + i) * 1.4;
-            const baseWidth = 35;
-            const baseHeight = 70;
+            // Add size variation - trees range from 0.6x to 1.65x base size (reduced 25%)
+            const sizeMultiplier = 0.6 + seededRandom(clusterSeed + 40 + i) * 1.05;
+            const baseWidth = 28;
+            const baseHeight = 56;
             chunk.obstacles.push({
                 x: (treeCol - gridCols / 2) * TERRAIN.laneWidth,
                 y: chunk.y + treeRow * 80 + seededRandom(clusterSeed + 30 + i) * 20,
@@ -1211,10 +1211,10 @@ function generateTerrainChunk(chunkIndex) {
             if (usedCells.has(cellKey)) continue; // Skip if in landing zone
             usedCells.add(cellKey);
 
-            // Add size variation for secondary cluster
-            const sizeMultiplier = 0.8 + seededRandom(clusterSeed + 75 + i) * 1.4;
-            const baseWidth = 35;
-            const baseHeight = 70;
+            // Add size variation for secondary cluster (reduced 25%)
+            const sizeMultiplier = 0.6 + seededRandom(clusterSeed + 75 + i) * 1.05;
+            const baseWidth = 28;
+            const baseHeight = 56;
             chunk.obstacles.push({
                 x: (treeCol - gridCols / 2) * TERRAIN.laneWidth,
                 y: chunk.y + treeRow * 80 + seededRandom(clusterSeed + 70 + i) * 20,
@@ -1246,10 +1246,10 @@ function generateTerrainChunk(chunkIndex) {
             if (usedCells.has(cellKey)) continue;
             usedCells.add(cellKey);
 
-            // Add size variation for tertiary cluster
-            const sizeMultiplier = 0.8 + seededRandom(clusterSeed + 105 + i) * 1.4;
-            const baseWidth = 35;
-            const baseHeight = 70;
+            // Add size variation for tertiary cluster (reduced 25%)
+            const sizeMultiplier = 0.6 + seededRandom(clusterSeed + 105 + i) * 1.05;
+            const baseWidth = 28;
+            const baseHeight = 56;
             chunk.obstacles.push({
                 x: (treeCol - gridCols / 2) * TERRAIN.laneWidth,
                 y: chunk.y + treeRow * 80 + seededRandom(clusterSeed + 100 + i) * 20,
@@ -1302,12 +1302,12 @@ function generateTerrainChunk(chunkIndex) {
                     }
                 }
 
-                // Add size variation for scattered trees
+                // Add size variation for scattered trees (reduced 25%)
                 let treeWidth = 24, treeHeight = 40;
                 if (obstacleType === 'tree') {
-                    const treeSizeMultiplier = 0.8 + seededRandom(cellSeed + 0.8) * 1.4;
-                    treeWidth = Math.floor(35 * treeSizeMultiplier);
-                    treeHeight = Math.floor(70 * treeSizeMultiplier);
+                    const treeSizeMultiplier = 0.6 + seededRandom(cellSeed + 0.8) * 1.05;
+                    treeWidth = Math.floor(28 * treeSizeMultiplier);
+                    treeHeight = Math.floor(56 * treeSizeMultiplier);
                 }
 
                 chunk.obstacles.push({
@@ -3241,7 +3241,7 @@ function drawFunbox(startScreen, endScreen, rail) {
 
     // Neon accent
     ctx.shadowColor = COLORS.magenta;
-    ctx.shadowBlur = 6;
+    ctx.shadowBlur = 1;
     ctx.strokeStyle = COLORS.magenta;
     ctx.lineWidth = 1;
     ctx.strokeRect(-length / 2, -5, length, 4);
@@ -3459,7 +3459,7 @@ function drawKinkedRail(startScreen, endScreen, rail) {
 
     // Neon glow
     ctx.shadowColor = COLORS.gold;
-    ctx.shadowBlur = 8;
+    ctx.shadowBlur = 2;
     ctx.strokeStyle = 'rgba(255, 255, 0, 0.3)';
     ctx.lineWidth = 8;
     ctx.beginPath();
@@ -3826,7 +3826,7 @@ function drawBoostPads() {
         ctx.strokeStyle = COLORS.cyan;
         ctx.lineWidth = 3;
         ctx.shadowColor = COLORS.cyan;
-        ctx.shadowBlur = 10 * pulse;
+        ctx.shadowBlur = 2 * pulse;
 
         // Draw chevrons pointing down (direction of travel)
         for (let i = 0; i < 3; i++) {
@@ -3847,7 +3847,7 @@ function drawBoostPads() {
         // Border ring
         ctx.strokeStyle = COLORS.cyan;
         ctx.lineWidth = 2;
-        ctx.shadowBlur = 8 * pulse;
+        ctx.shadowBlur = 2 * pulse;
         ctx.beginPath();
         ctx.ellipse(0, 0, w / 2 - 2, h / 2 - 2, 0, 0, Math.PI * 2);
         ctx.stroke();
@@ -4241,7 +4241,7 @@ function drawPlayer() {
         boardGrad.addColorStop(1, COLORS.magenta);
         ctx.fillStyle = boardGrad;
         ctx.shadowColor = COLORS.hotPink;
-        ctx.shadowBlur = 10;
+        ctx.shadowBlur = 2;
         ctx.beginPath();
         ctx.roundRect(-22, 6, 44, 8, 4);
         ctx.fill();
@@ -4287,7 +4287,7 @@ function drawPlayer() {
         jacketGrad.addColorStop(1, '#0099cc');
         ctx.fillStyle = jacketGrad;
         ctx.shadowColor = COLORS.cyan;
-        ctx.shadowBlur = 6;
+        ctx.shadowBlur = 1;
         ctx.beginPath();
         ctx.ellipse(0, -18, 10, 14, 0, 0, Math.PI * 2);
         ctx.fill();
@@ -4386,7 +4386,7 @@ function drawPlayer() {
         boardGrad.addColorStop(1, COLORS.magenta);
         ctx.fillStyle = boardGrad;
         ctx.shadowColor = COLORS.hotPink;
-        ctx.shadowBlur = 10;
+        ctx.shadowBlur = 2;
         ctx.beginPath();
         ctx.roundRect(-4, -4 + boardLift, 8, 36, 4);
         ctx.fill();
@@ -4437,7 +4437,7 @@ function drawPlayer() {
         jacketGrad.addColorStop(1, '#0099cc');
         ctx.fillStyle = jacketGrad;
         ctx.shadowColor = COLORS.cyan;
-        ctx.shadowBlur = 6;
+        ctx.shadowBlur = 1;
         ctx.beginPath();
         // Side profile of torso - thin ellipse, compressed when crouching
         const torsoY = -18 + crouchY;
@@ -4627,7 +4627,7 @@ function drawPlayer() {
         boardGrad.addColorStop(1, COLORS.magenta);
         ctx.fillStyle = boardGrad;
         ctx.shadowColor = COLORS.hotPink;
-        ctx.shadowBlur = 10;
+        ctx.shadowBlur = 2;
         ctx.beginPath();
         ctx.roundRect(-22, boardY, 44, 6, 3);
         ctx.fill();
@@ -4653,7 +4653,7 @@ function drawPlayer() {
         jacketGrad.addColorStop(1, '#0099cc');
         ctx.fillStyle = jacketGrad;
         ctx.shadowColor = COLORS.cyan;
-        ctx.shadowBlur = 8;
+        ctx.shadowBlur = 2;
         ctx.beginPath();
         ctx.ellipse(0, -5, 12, 16, 0, 0, Math.PI * 2);
         ctx.fill();
@@ -4858,7 +4858,7 @@ function drawFogWall() {
     ctx.strokeStyle = 'rgba(255, 100, 255, 0.4)';
     ctx.lineWidth = 4;
     ctx.shadowColor = COLORS.magenta;
-    ctx.shadowBlur = 15;
+    ctx.shadowBlur = 3;
     ctx.beginPath();
     ctx.moveTo(0, screen.y - 80);
     for (let x = 0; x <= CANVAS_WIDTH; x += 10) {
@@ -4994,7 +4994,7 @@ function drawBeast() {
     bodyGrad.addColorStop(1, '#c0d0e0');    // Edge shadow
     ctx.fillStyle = bodyGrad;
     ctx.shadowColor = 'rgba(180, 200, 220, 0.5)';
-    ctx.shadowBlur = 15;
+    ctx.shadowBlur = 3;
     ctx.beginPath();
     ctx.ellipse(0, 0, 38, 48, 0, 0, Math.PI * 2);
     ctx.fill();
@@ -5035,7 +5035,7 @@ function drawBeast() {
     const eyeTrack = Math.sin(time) * 2;
     ctx.fillStyle = COLORS.cyan;
     ctx.shadowColor = COLORS.cyan;
-    ctx.shadowBlur = 20;
+    ctx.shadowBlur = 4;
     // Left eye
     ctx.beginPath();
     ctx.ellipse(-12 + eyeTrack, -15, 7, 9, 0, 0, Math.PI * 2);
@@ -5048,7 +5048,7 @@ function drawBeast() {
     // Eye cores - bright white
     ctx.fillStyle = '#ffffff';
     ctx.shadowColor = '#ffffff';
-    ctx.shadowBlur = 8;
+    ctx.shadowBlur = 2;
     ctx.beginPath();
     ctx.ellipse(-12 + eyeTrack, -15, 3, 4, 0, 0, Math.PI * 2);
     ctx.fill();
@@ -5119,7 +5119,7 @@ function drawBeast() {
     if (chase.beastState === 'lunging') {
         ctx.fillStyle = '#e0e8f0';
         ctx.shadowColor = COLORS.cyan;
-        ctx.shadowBlur = 6;
+        ctx.shadowBlur = 1;
         for (let side = -1; side <= 1; side += 2) {
             for (let c = 0; c < 3; c++) {
                 const clawX = side * 35;
@@ -5147,7 +5147,7 @@ function drawParticles() {
         if (p.type === 'spark') {
             ctx.fillStyle = p.color;
             ctx.shadowColor = p.color;
-            ctx.shadowBlur = 6;
+            ctx.shadowBlur = 1;
             ctx.beginPath();
             ctx.arc(screen.x, screen.y, p.size, 0, Math.PI * 2);
             ctx.fill();
@@ -5161,33 +5161,36 @@ function drawParticles() {
 }
 
 function drawCelebrations() {
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'top';
 
     // Sort by timer (newest first) and limit visible count to prevent overlap
     const sortedCelebrations = [...gameState.celebrations].sort((a, b) => b.timer - a.timer);
-    const maxVisible = 4;
+    const maxVisible = 3;
+
+    // Position in top-right corner, below HUD (around y=50)
+    const baseX = CANVAS_WIDTH - 15;
+    const baseY = 50;
 
     for (let i = 0; i < Math.min(sortedCelebrations.length, maxVisible); i++) {
         const c = sortedCelebrations[i];
         const fade = Math.min(1, c.timer / 0.3);
-        const rise = (1.5 - c.timer) * 30;
-        const verticalOffset = i * 50; // Stack celebrations vertically
+        const verticalOffset = i * 28; // Tighter stacking for smaller text
 
-        ctx.globalAlpha = fade;
+        ctx.globalAlpha = fade * 0.9;
 
-        // Main text
-        ctx.font = `bold ${Math.floor(20 * c.scale)}px "Press Start 2P", monospace`;
+        // Main text - smaller font (12px instead of 20px)
+        ctx.font = `bold ${Math.floor(12 * c.scale)}px "Press Start 2P", monospace`;
         ctx.shadowColor = c.color;
-        ctx.shadowBlur = 15;
+        ctx.shadowBlur = 1;
         ctx.fillStyle = c.color;
-        ctx.fillText(c.text, CANVAS_WIDTH/2, CANVAS_HEIGHT/2 - 50 - rise - verticalOffset);
+        ctx.fillText(c.text, baseX, baseY + verticalOffset);
 
-        // Subtext (points)
+        // Subtext (points) - even smaller (9px instead of 14px)
         if (c.subtext) {
-            ctx.font = `bold ${Math.floor(14 * c.scale)}px "Press Start 2P", monospace`;
+            ctx.font = `bold ${Math.floor(9 * c.scale)}px "Press Start 2P", monospace`;
             ctx.fillStyle = '#fff';
-            ctx.fillText(c.subtext, CANVAS_WIDTH/2, CANVAS_HEIGHT/2 - 25 - rise - verticalOffset);
+            ctx.fillText(c.subtext, baseX, baseY + 14 + verticalOffset);
         }
 
         ctx.shadowBlur = 0;
@@ -5216,7 +5219,7 @@ function drawHUD() {
         ctx.textAlign = 'center';
         ctx.fillStyle = COLORS.gold;
         ctx.shadowColor = COLORS.gold;
-        ctx.shadowBlur = 10;
+        ctx.shadowBlur = 2;
         ctx.fillText(`x${gameState.trickMultiplier.toFixed(1)}`, CANVAS_WIDTH/2, comboY);
         ctx.shadowBlur = 0;
 
@@ -5286,7 +5289,7 @@ function drawHUD() {
         ctx.textAlign = 'center';
         ctx.fillStyle = COLORS.danger;
         ctx.shadowColor = COLORS.danger;
-        ctx.shadowBlur = 15;
+        ctx.shadowBlur = 3;
         ctx.fillText('SPEED UP!', CANVAS_WIDTH/2, CANVAS_HEIGHT - 60);
         ctx.shadowBlur = 0;
         ctx.globalAlpha = 1;
@@ -5297,7 +5300,7 @@ function drawNeonText(text, x, y, color, size, align) {
     ctx.font = `bold ${size}px "Press Start 2P", monospace`;
     ctx.textAlign = align;
     ctx.shadowColor = color;
-    ctx.shadowBlur = 10;
+    ctx.shadowBlur = 2;
     ctx.fillStyle = color;
     ctx.fillText(text, x, y);
     ctx.shadowBlur = 0;
@@ -5362,7 +5365,7 @@ function drawTitleScreen() {
 
     ctx.font = 'bold 36px "Press Start 2P", monospace';
     ctx.shadowColor = COLORS.cyan;
-    ctx.shadowBlur = 20;
+    ctx.shadowBlur = 4;
     ctx.fillStyle = COLORS.cyan;
     ctx.fillText('SNOW', CANVAS_WIDTH/2, titleY - 25 + pulse);
 
@@ -5419,7 +5422,7 @@ function drawGameOverScreen() {
 
     ctx.font = 'bold 18px "Press Start 2P", monospace';
     ctx.shadowColor = deathColor;
-    ctx.shadowBlur = 15;
+    ctx.shadowBlur = 3;
     ctx.fillStyle = deathColor;
     ctx.fillText(deathText, CANVAS_WIDTH/2, CANVAS_HEIGHT * 0.3);
     ctx.shadowBlur = 0;
@@ -5440,7 +5443,7 @@ function drawGameOverScreen() {
         ctx.font = '14px "Press Start 2P", monospace';
         ctx.fillStyle = COLORS.gold;
         ctx.shadowColor = COLORS.gold;
-        ctx.shadowBlur = 10;
+        ctx.shadowBlur = 2;
         ctx.fillText('NEW HIGH SCORE!', CANVAS_WIDTH/2, CANVAS_HEIGHT * 0.68);
         ctx.shadowBlur = 0;
         ctx.globalAlpha = 1;
@@ -5748,7 +5751,7 @@ function drawDeathAnimation() {
         // Glowing eyes
         ctx.fillStyle = COLORS.cyan;
         ctx.shadowColor = COLORS.cyan;
-        ctx.shadowBlur = 15;
+        ctx.shadowBlur = 3;
         ctx.beginPath();
         ctx.ellipse(-12, -40, 6, 4, 0, 0, Math.PI * 2);
         ctx.fill();
