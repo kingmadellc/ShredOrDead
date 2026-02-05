@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Shred or Dead</title>
 
     <!-- Social sharing meta tags -->
@@ -83,6 +83,11 @@
             transition: opacity 0.3s ease;
             position: relative;
             z-index: 1;
+            /* iOS touch handling */
+            touch-action: none;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
         }
 
         /* In fullscreen mode, make the game canvas fill the screen */
