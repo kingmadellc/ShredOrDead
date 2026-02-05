@@ -135,7 +135,7 @@ function getUIScale() {
 }
 
 const COLORS = {
-    // Neon palette
+    // Neon palette (for UI, rails, effects)
     cyan: '#00ffff',
     magenta: '#ff00ff',
     hotPink: '#ff1493',
@@ -151,10 +151,14 @@ const COLORS = {
     // Danger
     warning: '#ff6b6b',
     danger: '#ff0000',
-    // Background
-    bgDark: '#1a0a2e',
-    bgMid: '#2d1b4e',
-    bgLight: '#4a2c7a'
+    // Background - snow palette with subtle cyan/pink hints (matching SnowAsset references)
+    bgDark: '#c8e8f0',      // Light cyan-tinted shadow
+    bgMid: '#e8f4f8',       // Pale cyan-white mid-tone
+    bgLight: '#f8fcff',     // Near-white with cool tint
+    // Additional snow palette colors for terrain variety
+    snowCyan: '#d0f0f8',    // Subtle cyan for snow streaks
+    snowPink: '#f8e0e8',    // Subtle pink for snow highlights
+    snowShadow: '#b8d8e8'   // Cyan-tinted snow shadows
 };
 
 const PHYSICS = {
@@ -231,12 +235,13 @@ function getTerrainLaneCount() {
     return Math.max(7, Math.floor(slopeWidth / baseLaneWidth));
 }
 
-// Jump variety system
+// Jump variety system - snow jumps like Red Bull tournament kickers
+// Size differentiation through width, not color. All jumps are snow-colored
 const JUMP_TYPES = {
-    small:  { width: 35, height: 12, power: 0.7, color: 'cyan', glow: false },
-    medium: { width: 50, height: 20, power: 1.0, color: 'electricBlue', glow: false },
-    large:  { width: 70, height: 28, power: 1.4, color: 'limeGreen', glow: true },
-    mega:   { width: 95, height: 38, power: 1.8, color: 'yellow', glow: true }
+    small:  { width: 40, height: 14, power: 0.7, color: 'snow', glow: false },
+    medium: { width: 55, height: 22, power: 1.0, color: 'snow', glow: false },
+    large:  { width: 80, height: 32, power: 1.4, color: 'snow', glow: true },
+    mega:   { width: 110, height: 45, power: 1.8, color: 'snow', glow: true }
 };
 
 const TRICKS = {
@@ -265,18 +270,38 @@ const AUTO_TRICKS = [
 const CHASE = {
     fogStartOffset: -300,       // Starts closer
     fogBaseSpeed: 150,          // Faster
-    fogAcceleration: 1.2,       // Ramps faster
-    beastSpawnDistance: 500,    // Spawns at ~4-5 seconds!
+    fogAcceleration: 1.5,       // Was 1.2 - fog catches up faster
+    beastSpawnDistance: 300,    // Was 500 - spawns earlier (~3 seconds)
     beastSpeed: 1.4,            // 40% faster than player!
-    beastLungeInterval: 2.0,    // More frequent lunges
-    beastLungeVariance: 1.0,    // Randomness
+    beastLungeInterval: 1.8,    // Was 2.0 - more frequent lunges
+    beastLungeVariance: 0.8,    // Was 1.0 - less random delay
     beastLungeDuration: 0.35,
-    beastRetreatDuration: 0.6,  // Much shorter retreat
+    beastRetreatDuration: 0.5,  // Was 0.6 - shorter retreat
     // Crash/slow triggers
-    crashThreshold: 3,          // 3 crashes = instant beast
-    crashWindow: 10,            // Within 10 seconds
-    slowSpeedThreshold: 120,    // Below this = danger
-    slowSpeedDuration: 2.0      // 2 seconds slow = beast
+    crashThreshold: 2,          // Was 3 - 2 crashes = instant beast
+    crashWindow: 12,            // Was 10 - longer window to track crashes
+    slowSpeedThreshold: 150,    // Was 120 - easier to trigger
+    slowSpeedDuration: 1.5      // Was 2.0 - less time needed
+};
+
+// Ski Lodge configuration - rare safe haven from the beast
+const LODGE = {
+    width: 180,                 // Lodge building width
+    height: 140,                // Lodge building height
+    stairsWidth: 50,            // Width of entrance stairs
+    stairsHeight: 30,           // Height/depth of stairs
+    doorWidth: 36,              // Door hitbox width
+    doorHeight: 50,             // Door hitbox height
+    spawnChance: 0.025,         // 2.5% chance per chunk (very rare)
+    minSpawnDistance: 1500,     // Only spawn after 1500 units traveled
+    minLodgeSpacing: 3000,      // Minimum distance between lodges
+    // Interior settings
+    interiorWidth: 400,         // Lodge interior room width
+    interiorHeight: 300,        // Lodge interior room height
+    walkSpeed: 150,             // Player walking speed inside
+    maxStayTime: 12,            // Seconds before forced to leave
+    warningTime: 3,             // Seconds of warning before forced exit
+    exitInvincibility: 2.0      // Invincibility duration after exiting
 };
 
 // ===================
@@ -449,7 +474,7 @@ let canvas, ctx;
 let lastTime = 0;
 
 let gameState = {
-    screen: 'title', // 'title', 'playing', 'gameOver'
+    screen: 'title', // 'title', 'playing', 'gameOver', 'lodge'
     animationTime: 0,
 
     player: {
@@ -488,12 +513,14 @@ let gameState = {
     terrain: {
         chunks: [],
         nextChunkY: 0,
-        seed: 0
+        seed: 0,
+        lastLodgeY: -9999  // Track last lodge spawn position
     },
 
     obstacles: [],
     jumps: [],
     rails: [],
+    lodges: [],  // Ski lodge buildings
 
     chase: {
         fogY: 0,
@@ -512,6 +539,16 @@ let gameState = {
         recentCrashes: [],      // Timestamps of crashes
         slowSpeedTimer: 0,      // Time spent going slow
         beastRage: 0            // Increases aggression (0-1)
+    },
+
+    // Lodge interior state
+    lodge: {
+        active: false,
+        timeInside: 0,
+        playerX: 0,
+        playerY: 0,
+        currentLodge: null,     // Reference to the lodge we entered
+        warningShown: false
     },
 
     score: 0,
@@ -537,6 +574,7 @@ let gameState = {
 const input = {
     left: false,
     right: false,
+    up: false,
     down: false,
     space: false,
     _lastSpace: false
@@ -552,6 +590,10 @@ function setupInput() {
             case 'ArrowRight':
             case 'KeyD':
                 input.right = true;
+                break;
+            case 'ArrowUp':
+            case 'KeyW':
+                input.up = true;
                 break;
             case 'ArrowDown':
             case 'KeyS':
@@ -572,6 +614,10 @@ function setupInput() {
             case 'ArrowRight':
             case 'KeyD':
                 input.right = false;
+                break;
+            case 'ArrowUp':
+            case 'KeyW':
+                input.up = false;
                 break;
             case 'ArrowDown':
             case 'KeyS':
@@ -615,6 +661,16 @@ function randomRange(min, max) {
 function getNeonColor() {
     const colors = [COLORS.cyan, COLORS.magenta, COLORS.hotPink, COLORS.electricBlue, COLORS.limeGreen, COLORS.yellow];
     return colors[Math.floor(Math.random() * colors.length)];
+}
+
+function addCelebration(text, color, subtext = '') {
+    gameState.celebrations.push({
+        text: text,
+        subtext: subtext,
+        color: color || getNeonColor(),
+        timer: 1.5,
+        scale: 1.0
+    });
 }
 
 // ===================
@@ -736,7 +792,8 @@ function generateTerrainChunk(chunkIndex) {
         y: chunkIndex * TERRAIN.chunkHeight,
         obstacles: [],
         jumps: [],
-        rails: []
+        rails: [],
+        lodges: []
     };
 
     const distance = chunk.y / 100;
@@ -750,102 +807,24 @@ function generateTerrainChunk(chunkIndex) {
     const gridRows = Math.floor(TERRAIN.chunkHeight / 80);
     const gridCols = getTerrainLaneCount(); // Dynamic lane count for widescreen support
 
-    // Track cells used by clusters to avoid overlaps
+    // Track cells used by clusters, jumps, rails, and landing zones to avoid overlaps
     const usedCells = new Set();
 
-    // 25% chance to spawn a tree cluster per chunk (harder to navigate around)
-    if (seededRandom(baseSeed + 777) < 0.25) {
-        const clusterSeed = baseSeed + 778;
-        const clusterRow = 1 + Math.floor(seededRandom(clusterSeed) * (gridRows - 3));
-        const clusterCol = 1 + Math.floor(seededRandom(clusterSeed + 1) * (gridCols - 2));
-        const clusterSize = 4 + Math.floor(seededRandom(clusterSeed + 2) * 4); // 4-7 trees
+    // ===== PHASE 1: Generate jumps and rails FIRST =====
+    // This allows us to calculate landing zones before placing obstacles
 
-        // Generate cluster pattern (tight group of trees)
-        for (let i = 0; i < clusterSize; i++) {
-            const offsetX = (seededRandom(clusterSeed + 10 + i) - 0.5) * 2.5; // -1.25 to 1.25 lanes
-            const offsetY = (seededRandom(clusterSeed + 20 + i) - 0.5) * 2; // -1 to 1 rows
-            const treeCol = clusterCol + offsetX;
-            const treeRow = clusterRow + offsetY;
+    // Temporary storage for jumps and rails generated in grid pass
+    const tempJumps = [];
+    const tempRails = [];
 
-            // Bounds check
-            if (treeCol < 0.5 || treeCol > gridCols - 0.5) continue;
-            if (treeRow < 0 || treeRow >= gridRows) continue;
-
-            const cellKey = `${Math.floor(treeRow)},${Math.floor(treeCol)}`;
-            usedCells.add(cellKey);
-
-            chunk.obstacles.push({
-                x: (treeCol - gridCols / 2) * TERRAIN.laneWidth,
-                y: chunk.y + treeRow * 80 + seededRandom(clusterSeed + 30 + i) * 20,
-                type: 'tree',
-                width: 26, // Slightly larger cluster trees
-                height: 44,
-                isCluster: true
-            });
-        }
-    }
-
-    // Second cluster chance (20%) for even more challenging terrain
-    if (seededRandom(baseSeed + 888) < 0.20) {
-        const clusterSeed = baseSeed + 889;
-        const clusterRow = Math.floor(gridRows / 2) + Math.floor(seededRandom(clusterSeed) * (gridRows / 2 - 1));
-        const clusterCol = Math.floor(seededRandom(clusterSeed + 1) * (gridCols - 1));
-        const clusterSize = 3 + Math.floor(seededRandom(clusterSeed + 2) * 3); // 3-5 trees
-
-        for (let i = 0; i < clusterSize; i++) {
-            const offsetX = (seededRandom(clusterSeed + 50 + i) - 0.5) * 2;
-            const offsetY = (seededRandom(clusterSeed + 60 + i) - 0.5) * 1.5;
-            const treeCol = clusterCol + offsetX;
-            const treeRow = clusterRow + offsetY;
-
-            if (treeCol < 0.5 || treeCol > gridCols - 0.5) continue;
-            if (treeRow < 0 || treeRow >= gridRows) continue;
-
-            const cellKey = `${Math.floor(treeRow)},${Math.floor(treeCol)}`;
-            if (usedCells.has(cellKey)) continue;
-            usedCells.add(cellKey);
-
-            chunk.obstacles.push({
-                x: (treeCol - gridCols / 2) * TERRAIN.laneWidth,
-                y: chunk.y + treeRow * 80 + seededRandom(clusterSeed + 70 + i) * 20,
-                type: 'tree',
-                width: 24,
-                height: 40,
-                isCluster: true
-            });
-        }
-    }
-
+    // First pass: determine where jumps and rails will go
     for (let row = 0; row < gridRows; row++) {
         const rowSeed = baseSeed + row * 100;
-        const clearLane = Math.floor(seededRandom(rowSeed) * gridCols);
-
         for (let col = 0; col < gridCols; col++) {
-            if (Math.abs(col - clearLane) < TERRAIN.clearPathWidth) continue;
-
-            // Skip cells used by clusters
-            const cellKey = `${row},${col}`;
-            if (usedCells.has(cellKey)) continue;
-
             const cellSeed = rowSeed + col;
             const rng = seededRandom(cellSeed);
 
-            if (rng < density) {
-                const types = ['tree', 'tree', 'rock'];
-                if (distance > 800) types.push('rock', 'mogul');
-                if (distance > 2000) types.push('mogul');
-
-                const typeIndex = Math.floor(seededRandom(cellSeed + 0.5) * types.length);
-                const obstacleType = types[typeIndex];
-
-                chunk.obstacles.push({
-                    x: (col - gridCols / 2 + 0.5) * TERRAIN.laneWidth,
-                    y: chunk.y + row * 80 + seededRandom(cellSeed + 0.3) * 30,
-                    type: obstacleType,
-                    width: obstacleType === 'tree' ? 24 : obstacleType === 'rock' ? 32 : 40,
-                    height: obstacleType === 'tree' ? 40 : obstacleType === 'rock' ? 24 : 16
-                });
-            } else if (rng < density + TERRAIN.jumpChance) {
+            if (rng >= density && rng < density + TERRAIN.jumpChance) {
                 // Select jump type based on weighted random
                 const typeRng = seededRandom(cellSeed + 0.6);
                 let jumpType;
@@ -854,17 +833,22 @@ function generateTerrainChunk(chunkIndex) {
                 else if (typeRng < 0.95) jumpType = JUMP_TYPES.large;
                 else jumpType = JUMP_TYPES.mega;
 
-                chunk.jumps.push({
-                    x: (col - gridCols / 2 + 0.5) * TERRAIN.laneWidth,
-                    y: chunk.y + row * 80,
+                const jumpX = (col - gridCols / 2 + 0.5) * TERRAIN.laneWidth;
+                const jumpY = chunk.y + row * 80;
+
+                tempJumps.push({
+                    x: jumpX,
+                    y: jumpY,
                     width: jumpType.width,
                     height: jumpType.height,
                     launchPower: jumpType.power,
                     color: jumpType.color,
                     glow: jumpType.glow,
-                    type: jumpType === JUMP_TYPES.mega ? 'mega' : jumpType === JUMP_TYPES.large ? 'large' : 'normal'
+                    type: jumpType === JUMP_TYPES.mega ? 'mega' : jumpType === JUMP_TYPES.large ? 'large' : 'normal',
+                    col: col,
+                    row: row
                 });
-            } else if (rng < density + TERRAIN.jumpChance + TERRAIN.railChance) {
+            } else if (rng >= density + TERRAIN.jumpChance && rng < density + TERRAIN.jumpChance + TERRAIN.railChance) {
                 const railLength = 100 + seededRandom(cellSeed + 0.8) * 150;
                 const endCol = col + (seededRandom(cellSeed + 0.9) - 0.5) * 2;
                 const newRail = {
@@ -872,23 +856,22 @@ function generateTerrainChunk(chunkIndex) {
                     y: chunk.y + row * 80,
                     endX: (clamp(endCol, 0, gridCols - 1) - gridCols / 2 + 0.5) * TERRAIN.laneWidth,
                     endY: chunk.y + row * 80 + railLength,
-                    length: railLength
+                    length: railLength,
+                    col: col,
+                    endColApprox: clamp(endCol, 0, gridCols - 1)
                 };
 
                 // Check for collision with existing rails
                 let collides = false;
-                const minDistX = 50;  // Minimum horizontal distance between rails
-                const minDistY = 120; // Minimum vertical distance between rail starts
+                const minDistX = 50;
+                const minDistY = 120;
 
-                for (const existingRail of chunk.rails) {
-                    // Check if rails are too close horizontally
+                for (const existingRail of tempRails) {
                     const xDist = Math.abs(newRail.x - existingRail.x);
-                    // Check if Y ranges overlap
                     const newTop = newRail.y;
                     const newBottom = newRail.endY;
                     const existTop = existingRail.y;
                     const existBottom = existingRail.endY;
-
                     const yOverlap = !(newBottom < existTop - minDistY || newTop > existBottom + minDistY);
 
                     if (xDist < minDistX && yOverlap) {
@@ -898,7 +881,7 @@ function generateTerrainChunk(chunkIndex) {
                 }
 
                 if (!collides) {
-                    chunk.rails.push(newRail);
+                    tempRails.push(newRail);
                 }
             }
         }
@@ -912,17 +895,288 @@ function generateTerrainChunk(chunkIndex) {
 
         for (let i = 0; i < seqCount; i++) {
             const seqJumpType = i === seqCount - 1 ? JUMP_TYPES.large : JUMP_TYPES.medium;
-            chunk.jumps.push({
-                x: (seqLane - gridCols / 2 + 0.5) * TERRAIN.laneWidth + (seededRandom(baseSeed + 990 + i) - 0.5) * 30,
-                y: seqStart + i * 80,
+            const jumpX = (seqLane - gridCols / 2 + 0.5) * TERRAIN.laneWidth + (seededRandom(baseSeed + 990 + i) - 0.5) * 30;
+            const jumpY = seqStart + i * 80;
+
+            tempJumps.push({
+                x: jumpX,
+                y: jumpY,
                 width: seqJumpType.width,
                 height: seqJumpType.height,
                 launchPower: seqJumpType.power,
                 color: seqJumpType.color,
                 glow: seqJumpType.glow,
-                type: i === seqCount - 1 ? 'large' : 'normal'
+                type: i === seqCount - 1 ? 'large' : 'normal',
+                col: seqLane,
+                row: Math.floor((jumpY - chunk.y) / 80)
             });
         }
+    }
+
+    // ===== PHASE 2: Calculate landing zones and mark cells =====
+
+    // Mark jump landing zones as used (prevents obstacles from spawning there)
+    for (const jump of tempJumps) {
+        // Landing distance depends on jump power: small=80px, medium=100px, large=140px, mega=180px
+        const landingDistance = 60 + jump.launchPower * 80;
+        const landingY = jump.y + landingDistance;
+        const landingRow = Math.floor((landingY - chunk.y) / 80);
+        const jumpCol = Math.round((jump.x / TERRAIN.laneWidth) + gridCols / 2 - 0.5);
+
+        // Mark landing zone cells (±1 lane for safety margin, 2 rows deep)
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dy = 0; dy <= 2; dy++) {
+                const cellRow = landingRow + dy;
+                const cellCol = jumpCol + dx;
+                if (cellRow >= 0 && cellRow < gridRows && cellCol >= 0 && cellCol < gridCols) {
+                    usedCells.add(`${cellRow},${cellCol}`);
+                }
+            }
+        }
+
+        // Also mark the jump's own cell
+        const jumpRow = Math.floor((jump.y - chunk.y) / 80);
+        if (jumpRow >= 0 && jumpRow < gridRows) {
+            usedCells.add(`${jumpRow},${jumpCol}`);
+        }
+
+        // Add jump to chunk (remove temp properties)
+        chunk.jumps.push({
+            x: jump.x,
+            y: jump.y,
+            width: jump.width,
+            height: jump.height,
+            launchPower: jump.launchPower,
+            color: jump.color,
+            glow: jump.glow,
+            type: jump.type
+        });
+    }
+
+    // Mark rail endpoints as used (prevents obstacles from spawning at dismount points)
+    for (const rail of tempRails) {
+        const endRow = Math.floor((rail.endY - chunk.y) / 80);
+        const endCol = Math.round(rail.endColApprox);
+
+        // Mark rail endpoint zone (±1 lane for safety margin, 2 rows deep)
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dy = 0; dy <= 2; dy++) {
+                const cellRow = endRow + dy;
+                const cellCol = endCol + dx;
+                if (cellRow >= 0 && cellRow < gridRows && cellCol >= 0 && cellCol < gridCols) {
+                    usedCells.add(`${cellRow},${cellCol}`);
+                }
+            }
+        }
+
+        // Add rail to chunk (remove temp properties)
+        chunk.rails.push({
+            x: rail.x,
+            y: rail.y,
+            endX: rail.endX,
+            endY: rail.endY,
+            length: rail.length
+        });
+    }
+
+    // ===== PHASE 3: Generate tree clusters (larger clusters now) =====
+
+    // 25% chance to spawn a PRIMARY tree cluster per chunk (6-12 trees, was 4-7)
+    if (seededRandom(baseSeed + 777) < 0.25) {
+        const clusterSeed = baseSeed + 778;
+        const clusterRow = 1 + Math.floor(seededRandom(clusterSeed) * (gridRows - 3));
+        const clusterCol = 1 + Math.floor(seededRandom(clusterSeed + 1) * (gridCols - 2));
+        const clusterSize = 6 + Math.floor(seededRandom(clusterSeed + 2) * 7); // 6-12 trees (was 4-7)
+
+        // Generate cluster pattern (tight group of trees with wider spread)
+        for (let i = 0; i < clusterSize; i++) {
+            const offsetX = (seededRandom(clusterSeed + 10 + i) - 0.5) * 3.5; // -1.75 to 1.75 lanes (wider)
+            const offsetY = (seededRandom(clusterSeed + 20 + i) - 0.5) * 2.5; // -1.25 to 1.25 rows
+            const treeCol = clusterCol + offsetX;
+            const treeRow = clusterRow + offsetY;
+
+            // Bounds check
+            if (treeCol < 0.5 || treeCol > gridCols - 0.5) continue;
+            if (treeRow < 0 || treeRow >= gridRows) continue;
+
+            const cellKey = `${Math.floor(treeRow)},${Math.floor(treeCol)}`;
+            if (usedCells.has(cellKey)) continue; // Skip if in landing zone
+            usedCells.add(cellKey);
+
+            chunk.obstacles.push({
+                x: (treeCol - gridCols / 2) * TERRAIN.laneWidth,
+                y: chunk.y + treeRow * 80 + seededRandom(clusterSeed + 30 + i) * 20,
+                type: 'tree',
+                width: 26, // Slightly larger cluster trees
+                height: 44,
+                isCluster: true
+            });
+        }
+    }
+
+    // 20% chance for SECONDARY tree cluster (5-8 trees, was 3-5)
+    if (seededRandom(baseSeed + 888) < 0.20) {
+        const clusterSeed = baseSeed + 889;
+        const clusterRow = Math.floor(gridRows / 2) + Math.floor(seededRandom(clusterSeed) * (gridRows / 2 - 1));
+        const clusterCol = Math.floor(seededRandom(clusterSeed + 1) * (gridCols - 1));
+        const clusterSize = 5 + Math.floor(seededRandom(clusterSeed + 2) * 4); // 5-8 trees (was 3-5)
+
+        for (let i = 0; i < clusterSize; i++) {
+            const offsetX = (seededRandom(clusterSeed + 50 + i) - 0.5) * 2.5;
+            const offsetY = (seededRandom(clusterSeed + 60 + i) - 0.5) * 2;
+            const treeCol = clusterCol + offsetX;
+            const treeRow = clusterRow + offsetY;
+
+            if (treeCol < 0.5 || treeCol > gridCols - 0.5) continue;
+            if (treeRow < 0 || treeRow >= gridRows) continue;
+
+            const cellKey = `${Math.floor(treeRow)},${Math.floor(treeCol)}`;
+            if (usedCells.has(cellKey)) continue; // Skip if in landing zone
+            usedCells.add(cellKey);
+
+            chunk.obstacles.push({
+                x: (treeCol - gridCols / 2) * TERRAIN.laneWidth,
+                y: chunk.y + treeRow * 80 + seededRandom(clusterSeed + 70 + i) * 20,
+                type: 'tree',
+                width: 24,
+                height: 40,
+                isCluster: true
+            });
+        }
+    }
+
+    // 15% chance for TERTIARY tree cluster (4-6 trees) - NEW
+    if (seededRandom(baseSeed + 666) < 0.15) {
+        const clusterSeed = baseSeed + 667;
+        const clusterRow = Math.floor(seededRandom(clusterSeed) * (gridRows - 2)) + 1;
+        const clusterCol = Math.floor(seededRandom(clusterSeed + 1) * (gridCols - 2)) + 1;
+        const clusterSize = 4 + Math.floor(seededRandom(clusterSeed + 2) * 3); // 4-6 trees
+
+        for (let i = 0; i < clusterSize; i++) {
+            const offsetX = (seededRandom(clusterSeed + 80 + i) - 0.5) * 2;
+            const offsetY = (seededRandom(clusterSeed + 90 + i) - 0.5) * 1.5;
+            const treeCol = clusterCol + offsetX;
+            const treeRow = clusterRow + offsetY;
+
+            if (treeCol < 0.5 || treeCol > gridCols - 0.5) continue;
+            if (treeRow < 0 || treeRow >= gridRows) continue;
+
+            const cellKey = `${Math.floor(treeRow)},${Math.floor(treeCol)}`;
+            if (usedCells.has(cellKey)) continue;
+            usedCells.add(cellKey);
+
+            chunk.obstacles.push({
+                x: (treeCol - gridCols / 2) * TERRAIN.laneWidth,
+                y: chunk.y + treeRow * 80 + seededRandom(clusterSeed + 100 + i) * 20,
+                type: 'tree',
+                width: 22,
+                height: 38,
+                isCluster: true
+            });
+        }
+    }
+
+    // ===== PHASE 4: Generate scattered obstacles (respecting landing zones) =====
+
+    for (let row = 0; row < gridRows; row++) {
+        const rowSeed = baseSeed + row * 100;
+        const clearLane = Math.floor(seededRandom(rowSeed) * gridCols);
+
+        for (let col = 0; col < gridCols; col++) {
+            if (Math.abs(col - clearLane) < TERRAIN.clearPathWidth) continue;
+
+            // Skip cells used by clusters, jumps, rails, or landing zones
+            const cellKey = `${row},${col}`;
+            if (usedCells.has(cellKey)) continue;
+
+            const cellSeed = rowSeed + col;
+            const rng = seededRandom(cellSeed);
+
+            // Only spawn obstacles (jumps/rails already handled in Phase 1)
+            if (rng < density) {
+                const types = ['tree', 'tree', 'rock'];
+                if (distance > 800) types.push('rock', 'mogul');
+                if (distance > 2000) types.push('mogul');
+
+                const typeIndex = Math.floor(seededRandom(cellSeed + 0.5) * types.length);
+                const obstacleType = types[typeIndex];
+
+                // Dynamic rock sizing: 50% small, 35% medium, 15% large boulder
+                let rockWidth = 32, rockHeight = 24;
+                if (obstacleType === 'rock') {
+                    const sizeRng = seededRandom(cellSeed + 0.7);
+                    if (sizeRng < 0.50) {
+                        // Small rock (current size)
+                        rockWidth = 32; rockHeight = 24;
+                    } else if (sizeRng < 0.85) {
+                        // Medium rock
+                        rockWidth = 48; rockHeight = 36;
+                    } else {
+                        // Large boulder
+                        rockWidth = 64; rockHeight = 48;
+                    }
+                }
+
+                chunk.obstacles.push({
+                    x: (col - gridCols / 2 + 0.5) * TERRAIN.laneWidth,
+                    y: chunk.y + row * 80 + seededRandom(cellSeed + 0.3) * 30,
+                    type: obstacleType,
+                    width: obstacleType === 'tree' ? 24 : obstacleType === 'rock' ? rockWidth : 40,
+                    height: obstacleType === 'tree' ? 40 : obstacleType === 'rock' ? rockHeight : 16
+                });
+            }
+        }
+    }
+
+    // ===== PHASE 5: Generate Ski Lodges (very rare) =====
+    // Only spawn after minimum distance and with proper spacing
+    const chunkCenterY = chunk.y + TERRAIN.chunkHeight / 2;
+    const distanceFromStart = chunk.y;
+    const distanceFromLastLodge = chunkCenterY - gameState.terrain.lastLodgeY;
+
+    if (distanceFromStart >= LODGE.minSpawnDistance &&
+        distanceFromLastLodge >= LODGE.minLodgeSpacing &&
+        seededRandom(baseSeed + 5555) < LODGE.spawnChance) {
+
+        const lodgeSeed = baseSeed + 5556;
+        // Place lodge in center-ish area (avoid edges)
+        const lodgeCol = 1 + Math.floor(seededRandom(lodgeSeed) * (gridCols - 3));
+        const lodgeRow = 1 + Math.floor(seededRandom(lodgeSeed + 1) * (gridRows - 3));
+        const lodgeX = (lodgeCol - gridCols / 2 + 0.5) * TERRAIN.laneWidth;
+        const lodgeY = chunk.y + lodgeRow * 80;
+
+        // Mark large exclusion zone around lodge (no obstacles)
+        const lodgeLaneSpan = Math.ceil(LODGE.width / TERRAIN.laneWidth) + 1;
+        const lodgeRowSpan = Math.ceil(LODGE.height / 80) + 2;
+        for (let dx = -lodgeLaneSpan; dx <= lodgeLaneSpan; dx++) {
+            for (let dy = -1; dy <= lodgeRowSpan + 2; dy++) {
+                const cellRow = lodgeRow + dy;
+                const cellCol = lodgeCol + dx;
+                if (cellRow >= 0 && cellRow < gridRows && cellCol >= 0 && cellCol < gridCols) {
+                    usedCells.add(`${cellRow},${cellCol}`);
+                }
+            }
+        }
+
+        chunk.lodges.push({
+            x: lodgeX,
+            y: lodgeY,
+            width: LODGE.width,
+            height: LODGE.height,
+            // Door position (centered at bottom of lodge, on stairs)
+            doorX: lodgeX,
+            doorY: lodgeY + LODGE.height - LODGE.doorHeight / 2,
+            doorWidth: LODGE.doorWidth,
+            doorHeight: LODGE.doorHeight,
+            // Stairs position
+            stairsX: lodgeX,
+            stairsY: lodgeY + LODGE.height,
+            stairsWidth: LODGE.stairsWidth,
+            stairsHeight: LODGE.stairsHeight
+        });
+
+        // Update last lodge position
+        gameState.terrain.lastLodgeY = lodgeY;
     }
 
     return chunk;
@@ -940,6 +1194,7 @@ function updateTerrain() {
         gameState.obstacles.push(...newChunk.obstacles);
         gameState.jumps.push(...newChunk.jumps);
         gameState.rails.push(...newChunk.rails);
+        gameState.lodges.push(...newChunk.lodges);
 
         terrain.nextChunkY += TERRAIN.chunkHeight;
     }
@@ -949,6 +1204,7 @@ function updateTerrain() {
     gameState.obstacles = gameState.obstacles.filter(o => o.y > cullY);
     gameState.jumps = gameState.jumps.filter(j => j.y > cullY);
     gameState.rails = gameState.rails.filter(r => r.endY > cullY);
+    gameState.lodges = gameState.lodges.filter(l => l.y + l.height > cullY);
 }
 
 // ===================
@@ -1332,6 +1588,99 @@ function checkCollisions() {
             return;
         }
     }
+
+    // Check lodges
+    for (const lodge of gameState.lodges) {
+        // Quick distance check
+        if (Math.abs(lodge.y + lodge.height / 2 - player.y) > lodge.height) continue;
+        if (Math.abs(lodge.x - player.x) > lodge.width) continue;
+
+        const px = player.x, py = player.y;
+        const pw = 20, ph = 20;
+
+        // Check door/stairs collision (entry point)
+        // Door is at bottom center of lodge, with stairs in front
+        const doorLeft = lodge.doorX - lodge.stairsWidth / 2;
+        const doorRight = lodge.doorX + lodge.stairsWidth / 2;
+        const doorTop = lodge.y + lodge.height - lodge.doorHeight;
+        const doorBottom = lodge.y + lodge.height + lodge.stairsHeight;
+
+        // If player hits the door/stairs area, enter the lodge
+        if (px > doorLeft && px < doorRight &&
+            py > doorTop && py < doorBottom + 20) {
+            enterLodge(lodge);
+            return;
+        }
+
+        // Check wall collision (crash if hitting sides of lodge)
+        const lodgeLeft = lodge.x - lodge.width / 2;
+        const lodgeRight = lodge.x + lodge.width / 2;
+        const lodgeTop = lodge.y;
+        const lodgeBottom = lodge.y + lodge.height;
+
+        // Only check wall collision if NOT in the door zone
+        if (px - pw / 2 < lodgeRight && px + pw / 2 > lodgeLeft &&
+            py - ph / 2 < lodgeBottom && py + ph / 2 > lodgeTop) {
+            // Check if we're in the door zone (don't crash)
+            if (!(px > doorLeft - 10 && px < doorRight + 10 && py > doorTop - 20)) {
+                triggerCrash(player);
+                return;
+            }
+        }
+    }
+}
+
+// ===================
+// LODGE MECHANICS
+// ===================
+
+function enterLodge(lodge) {
+    const player = gameState.player;
+
+    // Save current position for when we exit
+    gameState.lodge.active = true;
+    gameState.lodge.timeInside = 0;
+    gameState.lodge.currentLodge = lodge;
+    gameState.lodge.warningShown = false;
+
+    // Position player in center of lodge interior
+    gameState.lodge.playerX = LODGE.interiorWidth / 2;
+    gameState.lodge.playerY = LODGE.interiorHeight - 60;
+
+    // Stop player momentum
+    player.speed = 0;
+    player.lateralSpeed = 0;
+
+    // Change game state
+    gameState.screen = 'lodge';
+
+    // Show entry message
+    addCelebration('SAFE HAVEN!', COLORS.cyan);
+}
+
+function exitLodge() {
+    const player = gameState.player;
+    const lodge = gameState.lodge.currentLodge;
+
+    // Restore player to slope, positioned at lodge exit
+    player.x = lodge.x;
+    player.y = lodge.y + lodge.height + lodge.stairsHeight + 50;
+    player.visualX = player.x;
+    player.visualY = player.y;
+
+    // Give some starting speed and invincibility
+    player.speed = 200;
+    player.invincible = LODGE.exitInvincibility;
+
+    // Reset lodge state
+    gameState.lodge.active = false;
+    gameState.lodge.currentLodge = null;
+
+    // Return to playing state
+    gameState.screen = 'playing';
+
+    // Show exit message
+    addCelebration('BACK TO THE SLOPE!', COLORS.yellow);
 }
 
 // ===================
@@ -1573,6 +1922,12 @@ function draw() {
         return;
     }
 
+    // Lodge interior is a separate render
+    if (gameState.screen === 'lodge') {
+        drawLodgeInterior();
+        return;
+    }
+
     // Draw background gradient
     drawBackground();
 
@@ -1584,6 +1939,9 @@ function draw() {
 
     // Draw jumps
     drawJumps();
+
+    // Draw lodges (behind obstacles, in front of jumps)
+    drawLodges();
 
     // Draw obstacles
     drawObstacles();
@@ -1620,56 +1978,81 @@ function draw() {
 }
 
 function drawBackground() {
-    // Use cached gradient for performance
+    // Use cached gradient for performance - snow palette with subtle cyan/pink
     if (!gradientCache.background) {
         gradientCache.background = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
-        gradientCache.background.addColorStop(0, COLORS.bgDark);
-        gradientCache.background.addColorStop(0.5, COLORS.bgMid);
-        gradientCache.background.addColorStop(1, COLORS.bgLight);
+        gradientCache.background.addColorStop(0, COLORS.bgLight);    // Bright snow at top
+        gradientCache.background.addColorStop(0.4, COLORS.bgMid);    // Mid-tone
+        gradientCache.background.addColorStop(0.7, COLORS.snowCyan); // Cyan hint
+        gradientCache.background.addColorStop(1, COLORS.bgDark);     // Slightly shadowed at bottom
     }
     ctx.fillStyle = gradientCache.background;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    // Draw side margins for landscape mode (mountain scenery)
+    // Draw diagonal snow streaks (like wind-swept powder) - cyan and pink hints
+    const time = gameState.animationTime || 0;
+    const scrollOffset = (gameState.camera.y * 0.2) % 80;
+
+    // Cyan streaks (subtle)
+    ctx.strokeStyle = 'rgba(0, 200, 220, 0.08)';
+    ctx.lineWidth = 2;
+    for (let y = -scrollOffset - 40; y < CANVAS_HEIGHT + 80; y += 60) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(CANVAS_WIDTH, y + CANVAS_WIDTH * 0.15);
+        ctx.stroke();
+    }
+
+    // Pink streaks (even more subtle)
+    ctx.strokeStyle = 'rgba(255, 180, 200, 0.06)';
+    ctx.lineWidth = 3;
+    for (let y = -scrollOffset - 20; y < CANVAS_HEIGHT + 80; y += 90) {
+        ctx.beginPath();
+        ctx.moveTo(0, y + 30);
+        ctx.lineTo(CANVAS_WIDTH, y + 30 + CANVAS_WIDTH * 0.12);
+        ctx.stroke();
+    }
+
+    // Snow texture lines (parallax) - subtle gray for depth
+    ctx.strokeStyle = 'rgba(150, 180, 200, 0.12)';
+    ctx.lineWidth = 1;
+    const textureOffset = (gameState.camera.y * 0.3) % 40;
+    for (let y = -textureOffset; y < CANVAS_HEIGHT + 40; y += 40) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(CANVAS_WIDTH, y + 20);
+        ctx.stroke();
+    }
+
+    // Draw side margins for landscape mode (snowy mountain scenery)
     const res = RESOLUTIONS[displaySettings.currentResolution];
     if (res && res.orientation === 'landscape') {
         const slopeWidth = getTerrainSlopeWidth();
         const marginWidth = (CANVAS_WIDTH - slopeWidth) / 2;
 
         if (marginWidth > 10) {
-            // Left mountain margin
-            ctx.fillStyle = 'rgba(10, 5, 20, 0.7)';
+            // Left mountain margin - snowy with cyan shadow
+            ctx.fillStyle = 'rgba(180, 210, 230, 0.6)';
             ctx.fillRect(0, 0, marginWidth - 5, CANVAS_HEIGHT);
 
             // Right mountain margin
             ctx.fillRect(CANVAS_WIDTH - marginWidth + 5, 0, marginWidth - 5, CANVAS_HEIGHT);
 
-            // Mountain silhouette effect on sides
+            // Mountain silhouette effect on sides - cooler, snowy tones
             const mountainGrad = ctx.createLinearGradient(0, 0, marginWidth, 0);
-            mountainGrad.addColorStop(0, 'rgba(20, 10, 40, 0.9)');
-            mountainGrad.addColorStop(0.7, 'rgba(30, 15, 60, 0.6)');
+            mountainGrad.addColorStop(0, 'rgba(160, 190, 210, 0.8)');
+            mountainGrad.addColorStop(0.5, 'rgba(180, 210, 230, 0.5)');
             mountainGrad.addColorStop(1, 'transparent');
             ctx.fillStyle = mountainGrad;
             ctx.fillRect(0, 0, marginWidth, CANVAS_HEIGHT);
 
             const mountainGradR = ctx.createLinearGradient(CANVAS_WIDTH, 0, CANVAS_WIDTH - marginWidth, 0);
-            mountainGradR.addColorStop(0, 'rgba(20, 10, 40, 0.9)');
-            mountainGradR.addColorStop(0.7, 'rgba(30, 15, 60, 0.6)');
+            mountainGradR.addColorStop(0, 'rgba(160, 190, 210, 0.8)');
+            mountainGradR.addColorStop(0.5, 'rgba(180, 210, 230, 0.5)');
             mountainGradR.addColorStop(1, 'transparent');
             ctx.fillStyle = mountainGradR;
             ctx.fillRect(CANVAS_WIDTH - marginWidth, 0, marginWidth, CANVAS_HEIGHT);
         }
-    }
-
-    // Snow texture lines (parallax)
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-    ctx.lineWidth = 1;
-    const scrollOffset = (gameState.camera.y * 0.3) % 40;
-    for (let y = -scrollOffset; y < CANVAS_HEIGHT + 40; y += 40) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(CANVAS_WIDTH, y + 20);
-        ctx.stroke();
     }
 }
 
@@ -1839,73 +2222,110 @@ function drawJumps() {
         if (jump.y < camera.y - 50 || jump.y > camera.y + CANVAS_HEIGHT + 50) continue;
 
         const screen = worldToScreen(jump.x, jump.y);
-        const jumpColor = COLORS[jump.color] || COLORS.electricBlue;
 
-        // Shadow
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+        // ===== SNOW JUMP DESIGN (Red Bull tournament style) =====
+
+        // Shadow - subtle blue-gray for snow shadows
+        ctx.fillStyle = 'rgba(100, 130, 160, 0.35)';
         ctx.beginPath();
-        ctx.ellipse(screen.x, screen.y + 5, jump.width * 0.4, 6, 0, 0, Math.PI * 2);
+        ctx.ellipse(screen.x + 4, screen.y + 6, jump.width * 0.45, 8, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // Pulsing glow for large/mega jumps
+        // Subtle ambient glow for large/mega jumps - white/cyan, not neon
         if (jump.glow) {
-            const glowPulse = 0.4 + Math.sin(time * 4 + jump.x) * 0.2;
-            const glowGrad = ctx.createRadialGradient(screen.x, screen.y - jump.height/2, 5, screen.x, screen.y, jump.width);
-            glowGrad.addColorStop(0, `rgba(${jumpColor === COLORS.yellow ? '255,255,0' : '0,255,0'}, ${glowPulse})`);
-            glowGrad.addColorStop(1, 'rgba(0,0,0,0)');
+            const glowPulse = 0.15 + Math.sin(time * 2 + jump.x * 0.01) * 0.08;
+            const glowGrad = ctx.createRadialGradient(
+                screen.x, screen.y - jump.height * 0.4,
+                jump.width * 0.2,
+                screen.x, screen.y - jump.height * 0.3,
+                jump.width * 0.9
+            );
+            glowGrad.addColorStop(0, `rgba(220, 240, 255, ${glowPulse})`);
+            glowGrad.addColorStop(1, 'rgba(200, 230, 250, 0)');
             ctx.fillStyle = glowGrad;
             ctx.beginPath();
-            ctx.arc(screen.x, screen.y - jump.height/2, jump.width * 0.8, 0, Math.PI * 2);
+            ctx.ellipse(screen.x, screen.y - jump.height * 0.3, jump.width * 0.7, jump.height * 0.6, 0, 0, Math.PI * 2);
             ctx.fill();
         }
 
-        // Multi-point ramp shape (more interesting than simple triangle)
-        const rampGrad = ctx.createLinearGradient(screen.x - jump.width/2, screen.y, screen.x + jump.width/2, screen.y - jump.height);
-        rampGrad.addColorStop(0, jumpColor);
-        rampGrad.addColorStop(0.5, '#ffffff');
-        rampGrad.addColorStop(1, jumpColor);
+        // Main snow mound shape - smooth curved profile like packed snow kicker
+        const snowGrad = ctx.createLinearGradient(
+            screen.x - jump.width/2, screen.y,
+            screen.x + jump.width/3, screen.y - jump.height
+        );
+        snowGrad.addColorStop(0, '#e8f0f4');      // Slightly shadowed base
+        snowGrad.addColorStop(0.3, '#f4f8fc');    // Mid-tone snow
+        snowGrad.addColorStop(0.6, '#ffffff');    // Bright top
+        snowGrad.addColorStop(1, '#f0f6fa');      // Slight cyan tint at lip
 
-        ctx.fillStyle = rampGrad;
+        ctx.fillStyle = snowGrad;
         ctx.beginPath();
+        // Curved mound shape (bezier curves for natural snow look)
         ctx.moveTo(screen.x - jump.width/2, screen.y);
-        ctx.lineTo(screen.x - jump.width/4, screen.y - jump.height * 0.3);
-        ctx.lineTo(screen.x, screen.y - jump.height);
-        ctx.lineTo(screen.x + jump.width/4, screen.y - jump.height * 0.3);
-        ctx.lineTo(screen.x + jump.width/2, screen.y);
+        ctx.quadraticCurveTo(
+            screen.x - jump.width/3, screen.y - jump.height * 0.2,
+            screen.x - jump.width/6, screen.y - jump.height * 0.6
+        );
+        ctx.quadraticCurveTo(
+            screen.x, screen.y - jump.height * 1.05,
+            screen.x + jump.width/6, screen.y - jump.height * 0.7
+        );
+        ctx.quadraticCurveTo(
+            screen.x + jump.width/3, screen.y - jump.height * 0.3,
+            screen.x + jump.width/2, screen.y
+        );
         ctx.closePath();
         ctx.fill();
 
-        // Snow cap on top
-        ctx.fillStyle = COLORS.snow;
-        ctx.beginPath();
-        ctx.moveTo(screen.x - jump.width/6, screen.y - jump.height * 0.7);
-        ctx.lineTo(screen.x, screen.y - jump.height + 2);
-        ctx.lineTo(screen.x + jump.width/6, screen.y - jump.height * 0.7);
-        ctx.closePath();
-        ctx.fill();
-
-        // Neon edge with stronger glow for bigger jumps
-        ctx.strokeStyle = jumpColor;
-        ctx.lineWidth = jump.glow ? 3 : 2;
-        ctx.shadowColor = jumpColor;
-        ctx.shadowBlur = jump.glow ? 15 : 8;
-        ctx.beginPath();
-        ctx.moveTo(screen.x - jump.width/2, screen.y);
-        ctx.lineTo(screen.x, screen.y - jump.height);
-        ctx.lineTo(screen.x + jump.width/2, screen.y);
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-
-        // Size indicator for mega jumps
-        if (jump.type === 'mega') {
-            ctx.font = 'bold 10px "Press Start 2P", monospace';
-            ctx.textAlign = 'center';
-            ctx.fillStyle = COLORS.yellow;
-            ctx.shadowColor = COLORS.yellow;
-            ctx.shadowBlur = 8;
-            ctx.fillText('MEGA', screen.x, screen.y - jump.height - 10);
-            ctx.shadowBlur = 0;
+        // Snow texture ridges (packed snow lines)
+        ctx.strokeStyle = 'rgba(180, 200, 220, 0.3)';
+        ctx.lineWidth = 1;
+        for (let i = 1; i <= 3; i++) {
+            const ridgeY = screen.y - jump.height * (i * 0.22);
+            const ridgeWidth = jump.width * (0.9 - i * 0.15);
+            ctx.beginPath();
+            ctx.moveTo(screen.x - ridgeWidth/2, ridgeY + i * 2);
+            ctx.quadraticCurveTo(
+                screen.x, ridgeY - 3,
+                screen.x + ridgeWidth/2, ridgeY + i * 2
+            );
+            ctx.stroke();
         }
+
+        // Highlight on the lip (where light catches the edge)
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(screen.x - jump.width/5, screen.y - jump.height * 0.65);
+        ctx.quadraticCurveTo(
+            screen.x, screen.y - jump.height - 2,
+            screen.x + jump.width/5, screen.y - jump.height * 0.7
+        );
+        ctx.stroke();
+
+        // Subtle cyan shadow on the right side (ambient occlusion)
+        ctx.fillStyle = 'rgba(160, 200, 220, 0.2)';
+        ctx.beginPath();
+        ctx.moveTo(screen.x + jump.width/6, screen.y - jump.height * 0.7);
+        ctx.quadraticCurveTo(
+            screen.x + jump.width/3, screen.y - jump.height * 0.3,
+            screen.x + jump.width/2, screen.y
+        );
+        ctx.lineTo(screen.x + jump.width/3, screen.y);
+        ctx.closePath();
+        ctx.fill();
+
+        // Pink highlight on left side (subtle, matching palette)
+        ctx.fillStyle = 'rgba(255, 210, 220, 0.15)';
+        ctx.beginPath();
+        ctx.moveTo(screen.x - jump.width/2, screen.y);
+        ctx.quadraticCurveTo(
+            screen.x - jump.width/3, screen.y - jump.height * 0.15,
+            screen.x - jump.width/4, screen.y - jump.height * 0.4
+        );
+        ctx.lineTo(screen.x - jump.width/3, screen.y);
+        ctx.closePath();
+        ctx.fill();
     }
 }
 
@@ -1939,6 +2359,408 @@ function drawRails() {
     }
 
     ctx.shadowBlur = 0;
+}
+
+function drawLodges() {
+    const camera = gameState.camera;
+    const time = gameState.animationTime;
+
+    for (const lodge of gameState.lodges) {
+        if (lodge.y < camera.y - 100 || lodge.y > camera.y + CANVAS_HEIGHT + 200) continue;
+
+        const screen = worldToScreen(lodge.x, lodge.y);
+        const w = lodge.width;
+        const h = lodge.height;
+
+        // ===== SHADOW =====
+        ctx.fillStyle = 'rgba(60, 80, 100, 0.4)';
+        ctx.beginPath();
+        ctx.ellipse(screen.x + 10, screen.y + h + 15, w * 0.5, 20, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // ===== STAIRS (in front of lodge) =====
+        const stairsW = lodge.stairsWidth;
+        const stairsH = lodge.stairsHeight;
+        // Stair steps
+        ctx.fillStyle = '#8b7355';
+        for (let i = 0; i < 3; i++) {
+            const stepY = screen.y + h + i * (stairsH / 3);
+            const stepW = stairsW - i * 8;
+            ctx.fillRect(screen.x - stepW / 2, stepY, stepW, stairsH / 3 + 2);
+        }
+        // Stair shadows
+        ctx.fillStyle = 'rgba(60, 40, 30, 0.3)';
+        for (let i = 0; i < 3; i++) {
+            const stepY = screen.y + h + i * (stairsH / 3);
+            const stepW = stairsW - i * 8;
+            ctx.fillRect(screen.x - stepW / 2, stepY, stepW, 3);
+        }
+
+        // ===== MAIN BUILDING BODY =====
+        // Base/foundation
+        ctx.fillStyle = '#5a4a3a';
+        ctx.fillRect(screen.x - w / 2, screen.y + h * 0.7, w, h * 0.3);
+
+        // Main wall
+        const wallGrad = ctx.createLinearGradient(screen.x - w / 2, screen.y, screen.x + w / 2, screen.y);
+        wallGrad.addColorStop(0, '#6b5a4a');
+        wallGrad.addColorStop(0.5, '#7a6a5a');
+        wallGrad.addColorStop(1, '#5a4a3a');
+        ctx.fillStyle = wallGrad;
+        ctx.fillRect(screen.x - w / 2, screen.y + h * 0.3, w, h * 0.4);
+
+        // ===== A-FRAME ROOF =====
+        const roofPeakY = screen.y - h * 0.15;
+        const roofBaseY = screen.y + h * 0.35;
+        const roofOverhang = 15;
+
+        // Roof shadow side
+        ctx.fillStyle = '#4a3a2a';
+        ctx.beginPath();
+        ctx.moveTo(screen.x, roofPeakY);
+        ctx.lineTo(screen.x + w / 2 + roofOverhang, roofBaseY);
+        ctx.lineTo(screen.x, roofBaseY);
+        ctx.closePath();
+        ctx.fill();
+
+        // Roof lit side
+        ctx.fillStyle = '#6a4a3a';
+        ctx.beginPath();
+        ctx.moveTo(screen.x, roofPeakY);
+        ctx.lineTo(screen.x - w / 2 - roofOverhang, roofBaseY);
+        ctx.lineTo(screen.x, roofBaseY);
+        ctx.closePath();
+        ctx.fill();
+
+        // Snow on roof
+        ctx.fillStyle = '#f0f8ff';
+        ctx.beginPath();
+        ctx.moveTo(screen.x, roofPeakY - 5);
+        ctx.lineTo(screen.x - w / 2 - roofOverhang + 5, roofBaseY - 8);
+        ctx.quadraticCurveTo(screen.x - w / 4, roofBaseY - 15, screen.x, roofPeakY - 5);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(screen.x, roofPeakY - 5);
+        ctx.lineTo(screen.x + w / 2 + roofOverhang - 5, roofBaseY - 8);
+        ctx.quadraticCurveTo(screen.x + w / 4, roofBaseY - 15, screen.x, roofPeakY - 5);
+        ctx.fill();
+
+        // ===== CHIMNEY =====
+        const chimneyX = screen.x + w * 0.25;
+        const chimneyY = roofPeakY + h * 0.15;
+        ctx.fillStyle = '#8a6a5a';
+        ctx.fillRect(chimneyX - 8, chimneyY, 16, 30);
+        ctx.fillStyle = '#5a3a2a';
+        ctx.fillRect(chimneyX - 10, chimneyY - 4, 20, 6);
+        // Snow on chimney
+        ctx.fillStyle = '#f0f8ff';
+        ctx.fillRect(chimneyX - 10, chimneyY - 6, 20, 4);
+
+        // Smoke particles (subtle)
+        ctx.fillStyle = 'rgba(200, 200, 210, 0.3)';
+        for (let i = 0; i < 3; i++) {
+            const smokeY = chimneyY - 15 - i * 12 - Math.sin(time * 2 + i) * 5;
+            const smokeX = chimneyX + Math.sin(time * 1.5 + i * 2) * 8;
+            const smokeSize = 6 + i * 3;
+            ctx.beginPath();
+            ctx.arc(smokeX, smokeY, smokeSize, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // ===== WINDOWS =====
+        // Window glow (warm light from inside)
+        const windowGlow = 0.6 + Math.sin(time * 0.5) * 0.1;
+
+        // Left window
+        ctx.fillStyle = `rgba(255, 200, 100, ${windowGlow})`;
+        ctx.fillRect(screen.x - w * 0.3 - 15, screen.y + h * 0.4, 30, 25);
+        ctx.strokeStyle = '#3a2a1a';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(screen.x - w * 0.3 - 15, screen.y + h * 0.4, 30, 25);
+        // Window cross
+        ctx.beginPath();
+        ctx.moveTo(screen.x - w * 0.3, screen.y + h * 0.4);
+        ctx.lineTo(screen.x - w * 0.3, screen.y + h * 0.4 + 25);
+        ctx.moveTo(screen.x - w * 0.3 - 15, screen.y + h * 0.4 + 12);
+        ctx.lineTo(screen.x - w * 0.3 + 15, screen.y + h * 0.4 + 12);
+        ctx.stroke();
+
+        // Right window
+        ctx.fillStyle = `rgba(255, 200, 100, ${windowGlow})`;
+        ctx.fillRect(screen.x + w * 0.3 - 15, screen.y + h * 0.4, 30, 25);
+        ctx.strokeStyle = '#3a2a1a';
+        ctx.strokeRect(screen.x + w * 0.3 - 15, screen.y + h * 0.4, 30, 25);
+        // Window cross
+        ctx.beginPath();
+        ctx.moveTo(screen.x + w * 0.3, screen.y + h * 0.4);
+        ctx.lineTo(screen.x + w * 0.3, screen.y + h * 0.4 + 25);
+        ctx.moveTo(screen.x + w * 0.3 - 15, screen.y + h * 0.4 + 12);
+        ctx.lineTo(screen.x + w * 0.3 + 15, screen.y + h * 0.4 + 12);
+        ctx.stroke();
+
+        // ===== FRONT DOOR =====
+        const doorX = screen.x;
+        const doorY = screen.y + h * 0.55;
+        const doorW = lodge.doorWidth;
+        const doorH = lodge.doorHeight;
+
+        // Door frame
+        ctx.fillStyle = '#3a2a1a';
+        ctx.fillRect(doorX - doorW / 2 - 4, doorY - 4, doorW + 8, doorH + 4);
+
+        // Door
+        ctx.fillStyle = '#5a3a2a';
+        ctx.fillRect(doorX - doorW / 2, doorY, doorW, doorH);
+
+        // Door window (small)
+        ctx.fillStyle = `rgba(255, 220, 150, ${windowGlow * 0.8})`;
+        ctx.fillRect(doorX - 8, doorY + 8, 16, 20);
+        ctx.strokeStyle = '#3a2a1a';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(doorX - 8, doorY + 8, 16, 20);
+
+        // Door handle
+        ctx.fillStyle = '#c0a060';
+        ctx.beginPath();
+        ctx.arc(doorX + doorW / 2 - 8, doorY + doorH / 2, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        // ===== WELCOME SIGN =====
+        ctx.fillStyle = '#4a3020';
+        ctx.fillRect(screen.x - 35, screen.y + h * 0.25, 70, 18);
+        ctx.fillStyle = '#f0e8d0';
+        ctx.font = '8px "Press Start 2P", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('SKI LODGE', screen.x, screen.y + h * 0.25 + 13);
+
+        // ===== ENTRANCE INDICATOR (pulsing) =====
+        if (Math.sin(time * 4) > 0) {
+            ctx.fillStyle = 'rgba(0, 255, 200, 0.3)';
+            ctx.beginPath();
+            ctx.arc(doorX, doorY + doorH + stairsH / 2, 25, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+}
+
+function drawLodgeInterior() {
+    const lodge = gameState.lodge;
+    const time = gameState.animationTime;
+    const w = LODGE.interiorWidth;
+    const h = LODGE.interiorHeight;
+
+    // Center the interior on screen
+    const offsetX = (CANVAS_WIDTH - w) / 2;
+    const offsetY = (CANVAS_HEIGHT - h) / 2;
+
+    // ===== BACKGROUND (wooden floor) =====
+    const floorGrad = ctx.createLinearGradient(offsetX, offsetY, offsetX + w, offsetY + h);
+    floorGrad.addColorStop(0, '#5a4030');
+    floorGrad.addColorStop(0.5, '#6a5040');
+    floorGrad.addColorStop(1, '#4a3020');
+    ctx.fillStyle = floorGrad;
+    ctx.fillRect(offsetX, offsetY, w, h);
+
+    // Floor planks
+    ctx.strokeStyle = '#3a2015';
+    ctx.lineWidth = 1;
+    for (let y = 0; y < h; y += 30) {
+        ctx.beginPath();
+        ctx.moveTo(offsetX, offsetY + y);
+        ctx.lineTo(offsetX + w, offsetY + y);
+        ctx.stroke();
+    }
+
+    // ===== WALLS =====
+    // Back wall
+    ctx.fillStyle = '#7a6050';
+    ctx.fillRect(offsetX, offsetY, w, 60);
+
+    // Wood paneling on back wall
+    ctx.strokeStyle = '#5a4030';
+    ctx.lineWidth = 2;
+    for (let x = 0; x < w; x += 40) {
+        ctx.beginPath();
+        ctx.moveTo(offsetX + x, offsetY);
+        ctx.lineTo(offsetX + x, offsetY + 60);
+        ctx.stroke();
+    }
+
+    // ===== FIREPLACE (left side) =====
+    const fpX = offsetX + 50;
+    const fpY = offsetY + 10;
+
+    // Fireplace stone surround
+    ctx.fillStyle = '#6a6a7a';
+    ctx.fillRect(fpX - 10, fpY, 80, 70);
+    ctx.fillStyle = '#5a5a6a';
+    ctx.fillRect(fpX, fpY + 10, 60, 50);
+
+    // Fire glow
+    const fireGlow = 0.6 + Math.sin(time * 8) * 0.2;
+    const fireGrad = ctx.createRadialGradient(fpX + 30, fpY + 45, 5, fpX + 30, fpY + 45, 35);
+    fireGrad.addColorStop(0, `rgba(255, 150, 50, ${fireGlow})`);
+    fireGrad.addColorStop(0.5, `rgba(255, 100, 30, ${fireGlow * 0.6})`);
+    fireGrad.addColorStop(1, 'rgba(100, 30, 10, 0)');
+    ctx.fillStyle = fireGrad;
+    ctx.fillRect(fpX + 5, fpY + 25, 50, 30);
+
+    // Fire flames
+    ctx.fillStyle = `rgba(255, 200, 50, ${fireGlow})`;
+    for (let i = 0; i < 5; i++) {
+        const flameX = fpX + 15 + i * 10 + Math.sin(time * 10 + i) * 3;
+        const flameH = 15 + Math.sin(time * 12 + i * 2) * 8;
+        ctx.beginPath();
+        ctx.moveTo(flameX, fpY + 55);
+        ctx.quadraticCurveTo(flameX - 5, fpY + 55 - flameH / 2, flameX, fpY + 55 - flameH);
+        ctx.quadraticCurveTo(flameX + 5, fpY + 55 - flameH / 2, flameX, fpY + 55);
+        ctx.fill();
+    }
+
+    // Mantle
+    ctx.fillStyle = '#4a3020';
+    ctx.fillRect(fpX - 15, fpY - 5, 90, 12);
+
+    // ===== WINDOWS (back wall) =====
+    // Window showing snowy exterior
+    const winX = offsetX + w - 100;
+    const winY = offsetY + 15;
+
+    ctx.fillStyle = '#c0d8e8'; // Snowy sky
+    ctx.fillRect(winX, winY, 70, 40);
+
+    // Snow falling outside
+    ctx.fillStyle = '#ffffff';
+    for (let i = 0; i < 8; i++) {
+        const snowX = winX + 5 + (i * 9 + time * 20) % 60;
+        const snowY = winY + 5 + (i * 7 + time * 30) % 30;
+        ctx.beginPath();
+        ctx.arc(snowX, snowY, 2, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Window frame
+    ctx.strokeStyle = '#3a2015';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(winX, winY, 70, 40);
+    ctx.beginPath();
+    ctx.moveTo(winX + 35, winY);
+    ctx.lineTo(winX + 35, winY + 40);
+    ctx.moveTo(winX, winY + 20);
+    ctx.lineTo(winX + 70, winY + 20);
+    ctx.stroke();
+
+    // ===== VENDOR SPOTS (empty for now) =====
+    // Counter on right side
+    ctx.fillStyle = '#5a4030';
+    ctx.fillRect(offsetX + w - 80, offsetY + 100, 60, 80);
+    ctx.fillStyle = '#6a5040';
+    ctx.fillRect(offsetX + w - 85, offsetY + 95, 70, 10);
+
+    // "Coming Soon" sign
+    ctx.fillStyle = '#3a2010';
+    ctx.fillRect(offsetX + w - 75, offsetY + 110, 50, 25);
+    ctx.fillStyle = '#d0c0a0';
+    ctx.font = '6px "Press Start 2P", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('SHOP', offsetX + w - 50, offsetY + 125);
+    ctx.fillText('SOON', offsetX + w - 50, offsetY + 132);
+
+    // ===== EXIT DOOR (bottom) =====
+    const exitX = offsetX + w / 2;
+    const exitY = offsetY + h - 20;
+
+    // Door mat
+    ctx.fillStyle = '#4a6040';
+    ctx.fillRect(exitX - 30, exitY - 5, 60, 20);
+
+    // Exit door
+    ctx.fillStyle = '#5a3a2a';
+    ctx.fillRect(exitX - 25, exitY - 60, 50, 60);
+    ctx.strokeStyle = '#3a2015';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(exitX - 25, exitY - 60, 50, 60);
+
+    // Door sign
+    ctx.fillStyle = '#d0c0a0';
+    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('EXIT', exitX, exitY - 35);
+
+    // Exit indicator (pulsing)
+    if (Math.sin(time * 3) > 0) {
+        ctx.fillStyle = 'rgba(255, 255, 0, 0.3)';
+        ctx.beginPath();
+        ctx.arc(exitX, exitY - 30, 35, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // ===== PLAYER (walking sprite, simplified) =====
+    const px = offsetX + lodge.playerX;
+    const py = offsetY + lodge.playerY;
+
+    // Player shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+    ctx.beginPath();
+    ctx.ellipse(px, py + 15, 15, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Player body (simple walking figure)
+    ctx.fillStyle = COLORS.sunsetOrange;
+    ctx.fillRect(px - 10, py - 20, 20, 25);
+
+    // Player head
+    ctx.fillStyle = '#ffcc99';
+    ctx.beginPath();
+    ctx.arc(px, py - 28, 10, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Beanie
+    ctx.fillStyle = COLORS.magenta;
+    ctx.beginPath();
+    ctx.arc(px, py - 32, 10, Math.PI, 0);
+    ctx.fill();
+
+    // ===== UI ELEMENTS =====
+    // Timer bar
+    const timeLeft = LODGE.maxStayTime - lodge.timeInside;
+    const timerWidth = 200;
+    const timerHeight = 20;
+    const timerX = (CANVAS_WIDTH - timerWidth) / 2;
+    const timerY = 30;
+
+    // Timer background
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(timerX - 5, timerY - 5, timerWidth + 10, timerHeight + 10);
+
+    // Timer fill
+    const timerPercent = timeLeft / LODGE.maxStayTime;
+    const timerColor = timerPercent > 0.3 ? COLORS.cyan : COLORS.warning;
+    ctx.fillStyle = timerColor;
+    ctx.fillRect(timerX, timerY, timerWidth * timerPercent, timerHeight);
+
+    // Timer border
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(timerX, timerY, timerWidth, timerHeight);
+
+    // Timer text
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(`TIME: ${Math.ceil(timeLeft)}s`, CANVAS_WIDTH / 2, timerY + 15);
+
+    // Warning message when time is low
+    if (timeLeft <= LODGE.warningTime) {
+        ctx.fillStyle = COLORS.warning;
+        ctx.font = '14px "Press Start 2P", monospace';
+        ctx.fillText('THE BEAST IS COMING!', CANVAS_WIDTH / 2, timerY + 50);
+    }
+
+    // Instructions
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.fillText('ARROWS/WASD TO MOVE - WALK TO EXIT DOOR', CANVAS_WIDTH / 2, CANVAS_HEIGHT - 20);
 }
 
 function drawPlayer() {
@@ -2797,12 +3619,14 @@ function startGame() {
     gameState.terrain = {
         chunks: [],
         nextChunkY: 0,
-        seed: Math.floor(Math.random() * 100000)
+        seed: Math.floor(Math.random() * 100000),
+        lastLodgeY: -9999
     };
 
     gameState.obstacles = [];
     gameState.jumps = [];
     gameState.rails = [];
+    gameState.lodges = [];
 
     gameState.chase = {
         fogY: CHASE.fogStartOffset,
@@ -2832,6 +3656,15 @@ function startGame() {
     gameState.particles = [];
     gameState.celebrations = [];
     gameState.screenShake = { x: 0, y: 0, intensity: 0, decay: 0.9 };
+
+    gameState.lodge = {
+        active: false,
+        timeInside: 0,
+        playerX: 0,
+        playerY: 0,
+        currentLodge: null,
+        warningShown: false
+    };
 
     gameState.dangerLevel = 0;
     gameState.deathCause = null;
@@ -2915,6 +3748,12 @@ function update(dt) {
     }
     input._lastSpace = input.space;
 
+    // Handle lodge state
+    if (gameState.screen === 'lodge') {
+        updateLodge(dt);
+        return;
+    }
+
     if (gameState.screen !== 'playing') return;
 
     // Update game systems
@@ -2931,6 +3770,55 @@ function update(dt) {
     // Update sprite animations
     if (sprites.player) sprites.player.update(dt);
     if (sprites.beast) sprites.beast.update(dt);
+}
+
+function updateLodge(dt) {
+    const lodge = gameState.lodge;
+
+    // Update time inside
+    lodge.timeInside += dt;
+
+    // Check for forced exit
+    if (lodge.timeInside >= LODGE.maxStayTime) {
+        exitLodge();
+        addCelebration('TIME\'S UP!', COLORS.warning);
+        return;
+    }
+
+    // Show warning when time is running low
+    if (lodge.timeInside >= LODGE.maxStayTime - LODGE.warningTime && !lodge.warningShown) {
+        lodge.warningShown = true;
+        addCelebration('BEAST APPROACHES!', COLORS.warning);
+    }
+
+    // Handle walking movement
+    const speed = LODGE.walkSpeed * dt;
+    const margin = 30;
+
+    if (input.left) {
+        lodge.playerX = Math.max(margin, lodge.playerX - speed);
+    }
+    if (input.right) {
+        lodge.playerX = Math.min(LODGE.interiorWidth - margin, lodge.playerX + speed);
+    }
+    if (input.up) {
+        lodge.playerY = Math.max(margin + 60, lodge.playerY - speed); // Can't walk into back wall
+    }
+    if (input.down) {
+        lodge.playerY = Math.min(LODGE.interiorHeight - margin, lodge.playerY + speed);
+    }
+
+    // Check if player reached exit door
+    const exitX = LODGE.interiorWidth / 2;
+    const exitY = LODGE.interiorHeight - 20;
+    const distToExit = Math.sqrt(
+        Math.pow(lodge.playerX - exitX, 2) +
+        Math.pow(lodge.playerY - exitY, 2)
+    );
+
+    if (distToExit < 40) {
+        exitLodge();
+    }
 }
 
 function gameLoop(timestamp) {
