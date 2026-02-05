@@ -15,9 +15,9 @@ const BASE_HEIGHT = 640;
 // PERFORMANCE SETTINGS
 // ============================================
 const performanceSettings = {
-    shadowQuality: 'low',     // 'high', 'medium', 'low', 'off' - low for smooth performance
-    particleMultiplier: 0.7,  // Reduce particle spawn rate
-    maxParticles: 50,         // Cap particle count for performance
+    shadowQuality: 'off',     // 'high', 'medium', 'low', 'off' - off for 60fps performance
+    particleMultiplier: 0.5,  // Reduce particle spawn rate
+    maxParticles: 30,         // Cap particle count for performance
     skipFrameThreshold: 0.05  // Skip rendering if dt > this (lag spike recovery)
 };
 
@@ -994,6 +994,16 @@ function getInputDirection() {
 // UTILITY FUNCTIONS
 // ===================
 
+// PERFORMANCE: In-place array culling using swap-and-pop (O(1) removal, no allocation)
+function cullArrayInPlace(arr, shouldRemove) {
+    for (let i = arr.length - 1; i >= 0; i--) {
+        if (shouldRemove(arr[i])) {
+            arr[i] = arr[arr.length - 1];
+            arr.pop();
+        }
+    }
+}
+
 function seededRandom(seed) {
     const x = Math.sin(seed) * 10000;
     return x - Math.floor(x);
@@ -1688,12 +1698,13 @@ function updateTerrain() {
     }
 
     const cullY = camera.y - CANVAS_HEIGHT;
-    terrain.chunks = terrain.chunks.filter(c => c.y + TERRAIN.chunkHeight > cullY);
-    gameState.obstacles = gameState.obstacles.filter(o => o.y > cullY);
-    gameState.jumps = gameState.jumps.filter(j => j.y > cullY);
-    gameState.rails = gameState.rails.filter(r => r.endY > cullY);
-    gameState.lodges = gameState.lodges.filter(l => l.y + l.height > cullY);
-    gameState.collectibles = gameState.collectibles.filter(c => c.y > cullY && !c.collected);
+    // PERFORMANCE: Use in-place culling instead of .filter() to avoid allocations
+    cullArrayInPlace(terrain.chunks, c => c.y + TERRAIN.chunkHeight <= cullY);
+    cullArrayInPlace(gameState.obstacles, o => o.y <= cullY);
+    cullArrayInPlace(gameState.jumps, j => j.y <= cullY);
+    cullArrayInPlace(gameState.rails, r => r.endY <= cullY);
+    cullArrayInPlace(gameState.lodges, l => l.y + l.height <= cullY);
+    cullArrayInPlace(gameState.collectibles, c => c.y <= cullY || c.collected);
 }
 
 // ===================
@@ -3012,40 +3023,8 @@ function drawBackground() {
     ctx.fillStyle = gradientCache.background;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    // Draw diagonal snow streaks (like wind-swept powder) - cyan and pink hints
-    const time = gameState.animationTime || 0;
-    const scrollOffset = (gameState.camera.y * 0.2) % 80;
-
-    // Cyan streaks (subtle)
-    ctx.strokeStyle = 'rgba(0, 200, 220, 0.08)';
-    ctx.lineWidth = 2;
-    for (let y = -scrollOffset - 40; y < CANVAS_HEIGHT + 80; y += 60) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(CANVAS_WIDTH, y + CANVAS_WIDTH * 0.15);
-        ctx.stroke();
-    }
-
-    // Pink streaks (even more subtle)
-    ctx.strokeStyle = 'rgba(255, 180, 200, 0.06)';
-    ctx.lineWidth = 3;
-    for (let y = -scrollOffset - 20; y < CANVAS_HEIGHT + 80; y += 90) {
-        ctx.beginPath();
-        ctx.moveTo(0, y + 30);
-        ctx.lineTo(CANVAS_WIDTH, y + 30 + CANVAS_WIDTH * 0.12);
-        ctx.stroke();
-    }
-
-    // Snow texture lines (parallax) - subtle gray for depth
-    ctx.strokeStyle = 'rgba(150, 180, 200, 0.12)';
-    ctx.lineWidth = 1;
-    const textureOffset = (gameState.camera.y * 0.3) % 40;
-    for (let y = -textureOffset; y < CANVAS_HEIGHT + 40; y += 40) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(CANVAS_WIDTH, y + 20);
-        ctx.stroke();
-    }
+    // PERFORMANCE: Removed decorative background line loops (was ~40 stroke calls per frame)
+    // The gradient background provides sufficient visual appeal
 
     // Draw side margins for landscape mode (snowy mountain scenery)
     const res = RESOLUTIONS[displaySettings.currentResolution];
@@ -6205,7 +6184,12 @@ function gameLoop(timestamp) {
 
 function init() {
     canvas = document.getElementById('gameCanvas');
-    ctx = canvas.getContext('2d');
+    // PERFORMANCE: Canvas optimization hints
+    ctx = canvas.getContext('2d', {
+        alpha: false,          // No transparency needed - solid background
+        desynchronized: true   // Reduce latency, allow GPU to work independently
+    });
+    ctx.imageSmoothingEnabled = false; // Pixel art doesn't need anti-aliasing
 
     // Detect iOS/mobile and enable fullscreen-like mode automatically
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ||
