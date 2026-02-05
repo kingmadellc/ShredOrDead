@@ -2369,7 +2369,7 @@ function checkNearMisses(player) {
                     });
                 }
             }
-        } else if (dist > nearMissThreshold + 20) {
+        } else if (distSq > 3025) {  // (35 + 20)^2 = 55^2 = 3025
             // Reset near-miss flag when far enough away
             obs.nearMissTriggered = false;
         }
@@ -2705,9 +2705,6 @@ function draw() {
     // Refresh gradient cache if needed
     gradientCache.refreshDimensions(CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    // Initialize static gradients once (cheap no-op after first call)
-    gradientCache.initStaticGradients(ctx);
-
     ctx.fillStyle = COLORS.bgDark;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
@@ -2921,12 +2918,9 @@ function drawObstacles() {
         ctx.fill();
 
         if (obs.type === 'tree') {
-            // Tree trunk with cached gradient (translate to position)
-            ctx.save();
-            ctx.translate(screen.x, screen.y);
-            ctx.fillStyle = gradientCache.static.treeTrunk;
-            ctx.fillRect(-5, -12, 10, 22);
-            ctx.restore();
+            // Tree trunk - simplified solid color for performance
+            ctx.fillStyle = '#4a3728';
+            ctx.fillRect(screen.x - 5, screen.y - 12, 10, 22);
 
             // Trunk texture lines
             ctx.strokeStyle = '#2a1a0a';
@@ -3213,22 +3207,20 @@ function drawMetalRail(startScreen, endScreen, rail) {
         ctx.fill();
     }
 
-    // Draw support posts using cached gradient
+    // Draw support posts - simplified solid color for performance
+    ctx.fillStyle = '#888';
     for (let i = 0; i < numSupports; i++) {
         const t = i / (numSupports - 1);
         const x = lerp(startScreen.x, endScreen.x, t);
         const y = lerp(startScreen.y, endScreen.y, t);
 
-        // Support post with cached gradient (translate to position)
-        ctx.save();
-        ctx.translate(x - 3, y);
-        ctx.fillStyle = gradientCache.static.supportPost;
-        ctx.fillRect(0, 0, 6, railHeight);
-        ctx.restore();
+        // Support post
+        ctx.fillRect(x - 3, y, 6, railHeight);
 
         // Support base plate
         ctx.fillStyle = '#555';
         ctx.fillRect(x - 5, y + railHeight - 2, 10, 4);
+        ctx.fillStyle = '#888';  // Reset for next post
     }
 
     // Main rail - metallic with shine
@@ -5309,13 +5301,9 @@ function drawHUD() {
         ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
         ctx.fillRect(15, flowY, flowBarWidth, 10);
 
-        // Flow bar fill with gradient
-        // Flow bar fill with cached gradient (translate to position)
-        ctx.save();
-        ctx.translate(15, flowY);
-        ctx.fillStyle = gradientCache.static.flowMeter;
-        ctx.fillRect(0, 0, flowBarWidth * flowFill, 10);
-        ctx.restore();
+        // Flow bar fill - simplified solid color for performance
+        ctx.fillStyle = COLORS.cyan;
+        ctx.fillRect(15, flowY, flowBarWidth * flowFill, 10);
 
         // Flow label
         ctx.font = FONTS.pressStart8;
