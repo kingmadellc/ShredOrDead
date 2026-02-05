@@ -1204,19 +1204,26 @@ function generateTerrainChunk(chunkIndex) {
         });
     }
 
-    // Mark rail endpoints as used (prevents obstacles from spawning at dismount points)
+    // Mark rail zones as used (prevents obstacles from spawning along and below rails)
     for (let railIdx = 0; railIdx < tempRails.length; railIdx++) {
         const rail = tempRails[railIdx];
+        const startRow = Math.floor((rail.y - chunk.y) / 80);
         const endRow = Math.floor((rail.endY - chunk.y) / 80);
+        const startCol = Math.round((rail.x / TERRAIN.laneWidth) + gridCols / 2);
         const endCol = Math.round(rail.endColApprox);
 
-        // Mark rail endpoint zone (±1 lane for safety margin, 2 rows deep)
-        for (let dx = -1; dx <= 1; dx++) {
-            for (let dy = 0; dy <= 2; dy++) {
-                const cellRow = endRow + dy;
-                const cellCol = endCol + dx;
-                if (cellRow >= 0 && cellRow < gridRows && cellCol >= 0 && cellCol < gridCols) {
-                    usedCells.add(`${cellRow},${cellCol}`);
+        // Mark the entire rail path plus landing zone below (±2 lanes for maneuvering room)
+        // Mark from rail start to 3 rows past rail end for safe dismount
+        for (let row = Math.max(0, startRow - 1); row <= Math.min(gridRows - 1, endRow + 3); row++) {
+            // Interpolate column position along the rail
+            const t = (row - startRow) / Math.max(1, endRow - startRow);
+            const midCol = Math.round(startCol + (endCol - startCol) * Math.min(1, Math.max(0, t)));
+
+            // Mark ±2 lanes around the rail path for maneuvering room
+            for (let dx = -2; dx <= 2; dx++) {
+                const cellCol = midCol + dx;
+                if (cellCol >= 0 && cellCol < gridCols) {
+                    usedCells.add(`${row},${cellCol}`);
                 }
             }
         }
@@ -2911,11 +2918,21 @@ function drawObstacles() {
 
         const screen = worldToScreen(obs.x, obs.y);
 
-        // Shadow
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-        ctx.beginPath();
-        ctx.ellipse(screen.x + 3, screen.y + obs.height * 0.5, obs.width * 0.45, 8, 0, 0, Math.PI * 2);
-        ctx.fill();
+        // Shadow - light source from upper-left, so shadow falls to bottom-right
+        // Shadow is cast on the ground at the base of the object
+        if (obs.type === 'tree') {
+            // Tree shadow - elongated to the right, at ground level (screen.y is base of trunk)
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+            ctx.beginPath();
+            ctx.ellipse(screen.x + 12, screen.y + 8, obs.width * 0.4, 6, 0.3, 0, Math.PI * 2);
+            ctx.fill();
+        } else if (obs.type === 'rock' || obs.type === 'mogul') {
+            // Rock/mogul shadow - at base, offset to bottom-right
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+            ctx.beginPath();
+            ctx.ellipse(screen.x + 8, screen.y + 4, obs.width * 0.5, 6, 0.2, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
 
         if (obs.type === 'tree') {
             // Tree trunk - simplified solid color for performance
@@ -3550,74 +3567,6 @@ function drawLodges() {
         ctx.beginPath();
         ctx.ellipse(screen.x + 10, screen.y + h + 15, w * 0.5, 20, 0, 0, Math.PI * 2);
         ctx.fill();
-
-        // ===== ENTRANCE RAMP (above lodge, pointing UP the mountain) =====
-        // This is the main entry - player snowboards down and hits this ramp to enter
-        const rampW = lodge.rampWidth;
-        const rampL = lodge.rampLength;
-        const rampScreen = worldToScreen(lodge.rampX, lodge.rampY);
-
-        // Ramp shadow
-        ctx.fillStyle = 'rgba(60, 80, 100, 0.3)';
-        ctx.beginPath();
-        ctx.ellipse(rampScreen.x + 5, rampScreen.y + rampL + 10, rampW * 0.4, 10, 0, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Snow ramp base (packed snow)
-        const rampGrad = ctx.createLinearGradient(rampScreen.x, rampScreen.y, rampScreen.x, rampScreen.y + rampL);
-        rampGrad.addColorStop(0, '#e8f4f8');     // Light snow at top
-        rampGrad.addColorStop(0.5, '#d0e8f0');   // Mid tone
-        rampGrad.addColorStop(1, '#c8dce8');     // Slightly darker at bottom (shadow)
-        ctx.fillStyle = rampGrad;
-
-        // Draw tapered ramp shape (narrower at top, wider at bottom connecting to lodge)
-        ctx.beginPath();
-        ctx.moveTo(rampScreen.x - rampW * 0.3, rampScreen.y);           // Top left (narrower)
-        ctx.lineTo(rampScreen.x + rampW * 0.3, rampScreen.y);           // Top right (narrower)
-        ctx.lineTo(rampScreen.x + rampW * 0.5, rampScreen.y + rampL);   // Bottom right (wider)
-        ctx.lineTo(rampScreen.x - rampW * 0.5, rampScreen.y + rampL);   // Bottom left (wider)
-        ctx.closePath();
-        ctx.fill();
-
-        // Ramp side edges (darker for depth)
-        ctx.strokeStyle = '#a0c0d0';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(rampScreen.x - rampW * 0.3, rampScreen.y);
-        ctx.lineTo(rampScreen.x - rampW * 0.5, rampScreen.y + rampL);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(rampScreen.x + rampW * 0.3, rampScreen.y);
-        ctx.lineTo(rampScreen.x + rampW * 0.5, rampScreen.y + rampL);
-        ctx.stroke();
-
-        // Ramp surface lines (ski grooves pointing up the mountain)
-        ctx.strokeStyle = 'rgba(160, 190, 210, 0.4)';
-        ctx.lineWidth = 1;
-        for (let i = 0; i < 5; i++) {
-            const t = (i + 1) / 6;
-            const topX = rampScreen.x + (t - 0.5) * rampW * 0.6;
-            const bottomX = rampScreen.x + (t - 0.5) * rampW;
-            ctx.beginPath();
-            ctx.moveTo(topX, rampScreen.y + 5);
-            ctx.lineTo(bottomX, rampScreen.y + rampL - 5);
-            ctx.stroke();
-        }
-
-        // "ENTER" text on ramp
-        ctx.fillStyle = '#4a7a9a';
-        ctx.font = 'bold 10px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('▲ ENTER ▲', rampScreen.x, rampScreen.y + rampL * 0.4);
-
-        // Glow effect around ramp entrance
-        const glowIntensity = 0.3 + Math.sin(time * 3) * 0.1;
-        ctx.strokeStyle = `rgba(100, 200, 255, ${glowIntensity})`;
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(rampScreen.x - rampW * 0.3, rampScreen.y);
-        ctx.lineTo(rampScreen.x + rampW * 0.3, rampScreen.y);
-        ctx.stroke();
 
         // ===== BACK STAIRS (behind lodge - secondary exit) =====
         const stairsW = lodge.stairsWidth;
