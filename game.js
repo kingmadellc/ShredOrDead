@@ -561,6 +561,9 @@ let gameState = {
         airTime: 0,
         grinding: false,
         grindProgress: 0,
+        grindStartTime: 0,
+        grindImmunity: 0,
+        lastRail: null,
         currentRail: null,
         currentGrindable: null, // For varied grindable objects
         crashed: false,
@@ -1458,6 +1461,15 @@ function updatePlayer(dt) {
         player.invincible -= dt;
     }
 
+    // Update grind immunity (prevents immediate re-entry to rails)
+    if (player.grindImmunity > 0) {
+        player.grindImmunity -= dt;
+        // Clear last rail reference after immunity expires
+        if (player.grindImmunity <= 0) {
+            player.lastRail = null;
+        }
+    }
+
     // Handle crash state
     if (player.crashed) {
         player.crashTimer -= dt;
@@ -1653,13 +1665,17 @@ function updateGrindingPhysics(player, dt) {
     if (!rail || !rail.length || rail.length <= 0) {
         player.grinding = false;
         player.currentRail = null;
+        player.grindImmunity = 0.5; // Brief immunity to prevent re-triggering
         return;
     }
 
-    // Ensure minimum grind speed to prevent getting stuck
-    const minGrindSpeed = 100;
+    // Force minimum speed during grind - use high minimum to ensure progress
+    const minGrindSpeed = 200;
     const grindSpeed = Math.max(player.speed * 0.85, minGrindSpeed);
-    player.grindProgress += (grindSpeed * dt) / rail.length;
+
+    // Ensure progress always advances significantly
+    const progressIncrement = Math.max((grindSpeed * dt) / rail.length, 0.02 * dt * 60);
+    player.grindProgress += progressIncrement;
 
     player.x = lerp(rail.x, rail.endX, player.grindProgress);
     player.y = lerp(rail.y, rail.endY, player.grindProgress);
@@ -1668,14 +1684,14 @@ function updateGrindingPhysics(player, dt) {
     gameState.chase.distanceTraveled += grindSpeed * dt / 100;
     gameState.distance = Math.floor(gameState.chase.distanceTraveled);
 
-    // Sparks - reduced frequency for performance
-    if (Math.random() < 0.25) {
+    // Sparks - very low frequency for performance
+    if (Math.random() < 0.15) {
         spawnGrindSparks(player.x, player.y);
     }
 
-    // End grind - also add timeout safety (max 4 seconds on any rail)
+    // End grind - hard timeout of 2 seconds max
     const grindDuration = gameState.animationTime - (player.grindStartTime || 0);
-    if (player.grindProgress >= 1.0 || grindDuration > 4.0) {
+    if (player.grindProgress >= 1.0 || grindDuration > 2.0) {
         endGrind(player);
     }
 
@@ -1878,11 +1894,15 @@ function startGrindingAtProgress(player, rail, entryProgress) {
 function endGrind(player) {
     const rail = player.currentRail;
 
-    // Safety check - if rail is invalid, just reset grind state
+    // Always reset grind state first to prevent getting stuck
+    player.grinding = false;
+    player.lastRail = rail; // Track last rail to prevent immediate re-entry
+    player.grindImmunity = 0.3; // 0.3 second immunity after grinding
+    player.currentRail = null;
+    player.currentGrindable = null;
+
+    // Safety check - if rail is invalid, just return after resetting state
     if (!rail || !rail.length) {
-        player.grinding = false;
-        player.currentRail = null;
-        player.currentGrindable = null;
         return;
     }
 
@@ -1898,65 +1918,36 @@ function endGrind(player) {
 
     // Bonus points for different grindable types
     let typeBonus = 1.0;
-    let typeName = '';
     switch (grindableType) {
-        case 'funbox':
-            typeBonus = 1.2;
-            typeName = 'Box ';
-            break;
-        case 'log':
-            typeBonus = 1.3;
-            typeName = 'Log ';
-            break;
-        case 'bench':
-            typeBonus = 1.15;
-            typeName = 'Bench ';
-            break;
-        case 'kinked':
-            typeBonus = 1.4;
-            typeName = 'Kink ';
-            break;
+        case 'funbox': typeBonus = 1.2; break;
+        case 'log': typeBonus = 1.3; break;
+        case 'bench': typeBonus = 1.15; break;
+        case 'kinked': typeBonus = 1.4; break;
     }
 
-    // Chain bonus: if we just landed from a jump (combo timer still high), extra points
+    // Calculate points
     const chainBonus = gameState.trickComboTimer > 1.5 ? 1.5 : 1.0;
-    const chainText = chainBonus > 1 ? ' CHAIN!' : '';
-
     const basePoints = Math.floor(trick.points * typeBonus);
     const points = Math.floor(basePoints * gameState.trickMultiplier * chainBonus);
     gameState.score += points;
 
-    // Track combo chain length
+    // Track combo
     if (!gameState.comboChainLength) gameState.comboChainLength = 0;
     gameState.comboChainLength++;
 
-    // Special celebration for long chains
-    let celebrationText = typeName + trick.name;
-    let celebrationColor = COLORS.cyan;
-    if (gameState.comboChainLength >= 5) {
-        celebrationText = 'LEGENDARY ' + typeName + trick.name;
-        celebrationColor = COLORS.gold;
-    } else if (gameState.comboChainLength >= 3) {
-        celebrationText = 'SICK ' + typeName + trick.name;
-        celebrationColor = COLORS.limeGreen;
-    }
-
+    // Simple, small celebration - no giant text
     gameState.celebrations.push({
-        text: celebrationText + chainText,
+        text: trick.name,
         subtext: `+${points}`,
-        color: celebrationColor,
-        timer: 1.2,
-        scale: Math.min(1.3, 1.0 + (gameState.comboChainLength - 1) * 0.05) // Cap scale at 1.3x
+        color: COLORS.cyan,
+        timer: 0.8, // Short duration
+        scale: 1.0  // No scaling - fixed small size
     });
 
-    // Grind adds to multiplier - more for special types
+    // Update multiplier
     const multiplierGain = 0.3 + (typeBonus - 1) * 0.5;
     gameState.trickMultiplier = Math.min(gameState.trickMultiplier + multiplierGain, 5);
-    gameState.trickComboTimer = 2.5; // Slightly longer window for chaining
-
-    player.grinding = false;
-    player.currentRail = null;
-    player.currentGrindable = null;
+    gameState.trickComboTimer = 2.5;
 }
 
 function triggerCrash(player) {
@@ -2068,8 +2059,12 @@ function checkCollisions() {
     }
 
     // Check rails - allow entry anywhere along the rail, not just at the top
-    if (!player.grinding) {
+    // Respect grind immunity timer to prevent re-triggering
+    if (!player.grinding && (!player.grindImmunity || player.grindImmunity <= 0)) {
         for (const rail of gameState.rails) {
+            // Skip the last rail we were on to prevent immediate re-entry
+            if (rail === player.lastRail) continue;
+
             // Check if player is within the rail's Y span (top to bottom)
             if (player.y < rail.y - 20 || player.y > rail.endY + 20) continue;
 
@@ -5186,18 +5181,19 @@ function drawCelebrations() {
 
         ctx.globalAlpha = fade * 0.9;
 
-        // Main text - smaller font (12px instead of 20px)
-        ctx.font = `bold ${Math.floor(12 * c.scale)}px "Press Start 2P", monospace`;
+        // Main text - fixed small font (ignore scale to prevent giant text)
+        const fontSize = Math.min(12, Math.floor(10 * Math.min(c.scale, 1.1)));
+        ctx.font = `bold ${fontSize}px "Press Start 2P", monospace`;
         ctx.shadowColor = c.color;
         ctx.shadowBlur = 1;
         ctx.fillStyle = c.color;
         ctx.fillText(c.text, baseX, baseY + verticalOffset);
 
-        // Subtext (points) - even smaller (9px instead of 14px)
+        // Subtext (points) - even smaller, fixed size
         if (c.subtext) {
-            ctx.font = `bold ${Math.floor(9 * c.scale)}px "Press Start 2P", monospace`;
+            ctx.font = `bold 8px "Press Start 2P", monospace`;
             ctx.fillStyle = '#fff';
-            ctx.fillText(c.subtext, baseX, baseY + 14 + verticalOffset);
+            ctx.fillText(c.subtext, baseX, baseY + 12 + verticalOffset);
         }
 
         ctx.shadowBlur = 0;
@@ -5507,6 +5503,9 @@ function startGame() {
         airTime: 0,
         grinding: false,
         grindProgress: 0,
+        grindStartTime: 0,
+        grindImmunity: 0,
+        lastRail: null,
         currentRail: null,
         currentGrindable: null,
         crashed: false,
