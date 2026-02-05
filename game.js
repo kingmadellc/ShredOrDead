@@ -652,11 +652,10 @@ function setupInput() {
             case 'KeyW':
                 input.up = true;
                 break;
-            // DOWN/S disabled - does nothing
-            // case 'ArrowDown':
-            // case 'KeyS':
-            //     input.down = true;
-            //     break;
+            case 'ArrowDown':
+            case 'KeyS':
+                input.down = true;
+                break;
             case 'Space':
                 input.space = true;
                 break;
@@ -677,11 +676,10 @@ function setupInput() {
             case 'KeyW':
                 input.up = false;
                 break;
-            // DOWN/S disabled - does nothing
-            // case 'ArrowDown':
-            // case 'KeyS':
-            //     input.down = false;
-            //     break;
+            case 'ArrowDown':
+            case 'KeyS':
+                input.down = false;
+                break;
             case 'Space':
                 input.space = false;
                 break;
@@ -4080,7 +4078,9 @@ function drawPlayer() {
     }
 
     // Crouch factor - increases as we approach a jump, also applies in air for grabs
-    const crouchFactor = player.preloadCrouch || 0;
+    // Also applies when pressing DOWN/S to crouch for speed
+    const manualCrouch = (!player.airborne && input.down) ? 0.8 : 0;
+    const crouchFactor = Math.max(player.preloadCrouch || 0, manualCrouch);
     const airCrouch = player.airborne && player.autoTrick && player.autoTrick.type === 'grab' ? player.grabPhase * 0.4 : 0;
 
     // Stance direction: regular = left foot forward, goofy = right foot forward
