@@ -3958,11 +3958,19 @@ function drawPlayer() {
     ctx.save();
     ctx.translate(screen.x, drawY);
 
-    // Determine if player should be in "straight" pose
-    // This includes: going straight, airborne without spinning, and approaching jumps
+    // Determine player pose based on input and state
     const isSpinning = player.airborne && player.spinDirection !== 0 && Math.abs(player.trickRotation) > 30;
-    const goingStraight = !player.crashed && (
-        // On ground and going straight
+
+    // BRAKING (UP pressed) - board turns perpendicular to slope, facing UP the mountain
+    const isBraking = !player.airborne && !player.crashed && input.up;
+
+    // TUCKING (DOWN pressed) - stay facing down mountain but crouch for speed
+    const isTuckingDown = !player.airborne && !player.crashed && input.down;
+
+    // Going straight down the mountain (side profile view)
+    // This is the default when not braking, and also when tucking
+    const goingStraight = !player.crashed && !isBraking && (
+        // On ground and going straight (including tucking)
         (!player.airborne && Math.abs(player.angle) < 5) ||
         // Airborne but NOT spinning (maintains straight orientation)
         (player.airborne && !isSpinning)
@@ -3976,7 +3984,7 @@ function drawPlayer() {
             const flipScale = Math.cos(player.flipRotation * Math.PI / 180);
             ctx.scale(1, flipScale);
         }
-    } else if (!player.airborne && !goingStraight) {
+    } else if (!player.airborne && !goingStraight && !isBraking) {
         ctx.rotate(player.angle * Math.PI / 180 * 0.3);
     }
 
@@ -3992,12 +4000,9 @@ function drawPlayer() {
 
     // Crouch factor - increases as we approach a jump, also applies in air for grabs
     // Also applies when player is pressing DOWN to tuck for speed
-    const manualTuck = (!player.airborne && input.down) ? 0.8 : 0;  // Tucking when pressing down
+    const manualTuck = isTuckingDown ? 0.8 : 0;  // Tucking when pressing down
     const crouchFactor = Math.max(player.preloadCrouch || 0, manualTuck);
     const airCrouch = player.airborne && player.autoTrick && player.autoTrick.type === 'grab' ? player.grabPhase * 0.4 : 0;
-
-    // Track if we're in active tuck mode (pressing down for speed)
-    const isTucking = !player.airborne && input.down;
 
     // Stance direction: regular = left foot forward, goofy = right foot forward
     // This affects which way the rider faces when going straight
@@ -4008,7 +4013,144 @@ function drawPlayer() {
     const grabOffset = player.grabPhase * 6;
     const boardY = 8 - grabOffset;
 
-    if (goingStraight) {
+    if (isBraking) {
+        // ===== BRAKING POSE - BOARD AND BODY FACING UP THE MOUNTAIN =====
+        // Player presses UP to slow down - board turns perpendicular, scraping snow
+        // This is like a hockey stop - board sideways to the direction of travel
+
+        // Shadow - horizontal for sideways board
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+        ctx.beginPath();
+        ctx.ellipse(0, 18 + shadowOffset, 22, 8, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Board - HORIZONTAL, perpendicular to slope (facing up mountain)
+        const boardGrad = ctx.createLinearGradient(-20, 0, 20, 0);
+        boardGrad.addColorStop(0, COLORS.hotPink);
+        boardGrad.addColorStop(0.5, '#ff69b4');
+        boardGrad.addColorStop(1, COLORS.magenta);
+        ctx.fillStyle = boardGrad;
+        ctx.shadowColor = COLORS.hotPink;
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        ctx.roundRect(-22, 6, 44, 8, 4);
+        ctx.fill();
+
+        // Board edge highlight
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(-20, 7);
+        ctx.lineTo(20, 7);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        // Bindings - on the horizontal board
+        ctx.fillStyle = '#333';
+        ctx.fillRect(-12, 5, 8, 10);   // Left binding
+        ctx.fillRect(4, 5, 8, 10);     // Right binding
+
+        // Legs - front view, bent for braking stance
+        const legGrad = ctx.createLinearGradient(0, -10, 0, 15);
+        legGrad.addColorStop(0, '#7744bb');
+        legGrad.addColorStop(1, '#553399');
+        ctx.strokeStyle = legGrad;
+        ctx.lineWidth = 7;
+        ctx.lineCap = 'round';
+
+        // Left leg
+        ctx.beginPath();
+        ctx.moveTo(-6, -8);
+        ctx.quadraticCurveTo(-10, 0, -8, 8);
+        ctx.stroke();
+
+        // Right leg
+        ctx.beginPath();
+        ctx.moveTo(6, -8);
+        ctx.quadraticCurveTo(10, 0, 8, 8);
+        ctx.stroke();
+
+        // Body/torso - front view, slightly leaned back for braking
+        const jacketGrad = ctx.createLinearGradient(-10, -30, 10, -5);
+        jacketGrad.addColorStop(0, COLORS.cyan);
+        jacketGrad.addColorStop(0.5, COLORS.electricBlue);
+        jacketGrad.addColorStop(1, '#0099cc');
+        ctx.fillStyle = jacketGrad;
+        ctx.shadowColor = COLORS.cyan;
+        ctx.shadowBlur = 6;
+        ctx.beginPath();
+        ctx.ellipse(0, -18, 10, 14, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Jacket stripe
+        ctx.fillStyle = COLORS.magenta;
+        ctx.beginPath();
+        ctx.ellipse(0, -18, 10, 2, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Arms - spread wide for balance/drag during braking
+        ctx.strokeStyle = jacketGrad;
+        ctx.lineWidth = 5;
+        ctx.lineCap = 'round';
+
+        // Left arm - out to the side
+        ctx.beginPath();
+        ctx.moveTo(-8, -20);
+        ctx.quadraticCurveTo(-15, -18, -22, -12);
+        ctx.stroke();
+
+        // Right arm - out to the side
+        ctx.beginPath();
+        ctx.moveTo(8, -20);
+        ctx.quadraticCurveTo(15, -18, 22, -12);
+        ctx.stroke();
+
+        // Gloves
+        ctx.fillStyle = '#2244aa';
+        ctx.beginPath();
+        ctx.arc(-22, -12, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(22, -12, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Head - looking up the mountain
+        ctx.fillStyle = '#ffcc99';
+        ctx.beginPath();
+        ctx.arc(0, -34, 8, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Helmet/goggles
+        ctx.fillStyle = '#222';
+        ctx.beginPath();
+        ctx.ellipse(0, -36, 9, 6, 0, Math.PI, Math.PI * 2);
+        ctx.fill();
+
+        // Goggles
+        ctx.fillStyle = COLORS.cyan;
+        ctx.shadowColor = COLORS.cyan;
+        ctx.shadowBlur = 4;
+        ctx.beginPath();
+        ctx.ellipse(0, -35, 7, 3, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Snow spray effect from braking
+        if (player.speed > 100) {
+            const sprayIntensity = Math.min(1, player.speed / 400);
+            ctx.fillStyle = `rgba(255, 255, 255, ${0.3 * sprayIntensity})`;
+            for (let i = 0; i < 5; i++) {
+                const sprayX = (Math.random() - 0.5) * 50;
+                const sprayY = 15 + Math.random() * 10;
+                const spraySize = 3 + Math.random() * 4;
+                ctx.beginPath();
+                ctx.arc(sprayX, sprayY, spraySize, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+    } else if (goingStraight) {
         // STRAIGHT DOWN THE MOUNTAIN - SIDE PROFILE VIEW
         // Board points down, rider's body is SIDEWAYS on board (perpendicular to board direction)
         // We see the rider's side profile - one shoulder toward camera, one away
@@ -4157,20 +4299,13 @@ function drawPlayer() {
             leadArmEndY = -12;
             trailArmEndX = faceDir * -10;
             trailArmEndY = -10;
-        } else if (isTucking) {
+        } else if (isTuckingDown) {
             // TUCK POSE - pressing DOWN to go faster
             // Arms tucked in close to body, very aerodynamic
             leadArmEndX = faceDir * 6;
             leadArmEndY = crouchY - 2;  // Arms low and forward
             trailArmEndX = faceDir * -3;
             trailArmEndY = crouchY - 1;  // Arms tucked behind
-        } else if (input.up && !player.airborne) {
-            // BRAKING POSE - pressing UP to slow down
-            // Arms out wide for wind resistance, body more upright
-            leadArmEndX = faceDir * 16;
-            leadArmEndY = -15;  // Arms spread out
-            trailArmEndX = faceDir * -14;
-            trailArmEndY = -12;
         } else if (totalCrouch > 0.3) {
             // Pre-jump crouch - arms come down and forward for balance
             leadArmEndX = faceDir * (12 - totalCrouch * 4);
