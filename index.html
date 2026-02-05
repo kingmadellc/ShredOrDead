@@ -1237,6 +1237,13 @@
                     <label>Controller Haptics:</label>
                     <input type="checkbox" id="hapticsToggle" checked onchange="toggleHapticsSetting(this.checked)">
                 </div>
+                <div class="setting-row">
+                    <label>Stance:</label>
+                    <select id="stanceSelect" onchange="setStance(this.value)">
+                        <option value="regular">Regular (left foot forward)</option>
+                        <option value="goofy">Goofy (right foot forward)</option>
+                    </select>
+                </div>
             </div>
 
             <div class="settings-section">

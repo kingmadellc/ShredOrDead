@@ -79,7 +79,8 @@ const displaySettings = {
     autoDetect: true,
     screenShakeEnabled: true,
     hapticsEnabled: true,
-    fillScreen: true  // When true, canvas will fill the entire screen in fullscreen mode
+    fillScreen: true,  // When true, canvas will fill the entire screen in fullscreen mode
+    stance: 'regular'  // 'regular' (left foot forward) or 'goofy' (right foot forward)
 };
 
 // Available resolutions with aspect ratio info
@@ -2881,25 +2882,31 @@ function drawPlayer() {
     // Check if going straight down (not carving) - angle threshold of 5 degrees
     const goingStraight = !player.airborne && !player.crashed && Math.abs(player.angle) < 5;
 
-    // Shadow (moves down when airborne)
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
-    ctx.beginPath();
-    if (goingStraight) {
-        // Elongated shadow for vertical board pointing downhill
-        ctx.ellipse(0, 18 + shadowOffset, 6, 14, 0, 0, Math.PI * 2);
-    } else {
-        ctx.ellipse(0, 15 + shadowOffset, 18 - shadowOffset * 0.05, 6, 0, 0, Math.PI * 2);
-    }
-    ctx.fill();
+    // Stance direction: regular = left foot forward, goofy = right foot forward
+    // This affects which way the rider faces when going straight
+    const isGoofy = displaySettings.stance === 'goofy';
+    const stanceRotation = isGoofy ? -Math.PI / 2 : Math.PI / 2; // 90 degrees left or right
 
     // Determine grab offset for board (moves toward body during grabs)
     const grabOffset = player.grabPhase * 6;
     const boardY = 8 - grabOffset;
 
     if (goingStraight) {
-        // STRAIGHT DOWN THE MOUNTAIN - board is VERTICAL (pointing downhill)
-        // Board vertical - 6 wide, 44 tall
-        const boardGrad = ctx.createLinearGradient(0, -12, 0, 28);
+        // STRAIGHT DOWN THE MOUNTAIN
+        // Rotate the entire character 90 degrees so board points downhill
+        ctx.rotate(stanceRotation);
+
+        // Shadow (rotated with character)
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+        ctx.beginPath();
+        ctx.ellipse(0, 15 + shadowOffset, 18, 6, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Now draw the normal carving pose (board horizontal in local coords)
+        // which will appear vertical after the 90-degree rotation
+
+        // Snowboard with gradient
+        const boardGrad = ctx.createLinearGradient(-20, boardY, 20, boardY + 6);
         boardGrad.addColorStop(0, COLORS.hotPink);
         boardGrad.addColorStop(0.5, '#ff69b4');
         boardGrad.addColorStop(1, COLORS.magenta);
@@ -2907,25 +2914,25 @@ function drawPlayer() {
         ctx.shadowColor = COLORS.hotPink;
         ctx.shadowBlur = 10;
         ctx.beginPath();
-        ctx.roundRect(-3, -8, 6, 40, 3);
+        ctx.roundRect(-22, boardY, 44, 6, 3);
         ctx.fill();
 
-        // Board edge highlight (vertical)
+        // Board edge highlight
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.moveTo(-2, -6);
-        ctx.lineTo(-2, 28);
+        ctx.moveTo(-20, boardY + 1);
+        ctx.lineTo(20, boardY + 1);
         ctx.stroke();
 
-        // Bindings (horizontal on vertical board)
+        // Bindings
         ctx.fillStyle = '#333';
-        ctx.fillRect(-5, 0, 10, 4);
-        ctx.fillRect(-5, 16, 10, 4);
+        ctx.fillRect(-10, boardY - 1, 6, 8);
+        ctx.fillRect(4, boardY - 1, 6, 8);
         ctx.shadowBlur = 0;
 
-        // Body - viewed from behind, slightly hunched forward for speed
-        const jacketGrad = ctx.createLinearGradient(-10, -28, 10, -4);
+        // Body/jacket
+        const jacketGrad = ctx.createLinearGradient(-12, -20, 12, 10);
         jacketGrad.addColorStop(0, COLORS.cyan);
         jacketGrad.addColorStop(0.5, COLORS.electricBlue);
         jacketGrad.addColorStop(1, '#0099cc');
@@ -2933,39 +2940,51 @@ function drawPlayer() {
         ctx.shadowColor = COLORS.cyan;
         ctx.shadowBlur = 8;
         ctx.beginPath();
-        ctx.ellipse(0, -16, 10, 14, 0, 0, Math.PI * 2);
+        ctx.ellipse(0, -5, 12, 16, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // Back stripe on jacket (vertical center stripe)
+        // Magenta stripe on jacket
         ctx.fillStyle = COLORS.magenta;
-        ctx.fillRect(-2, -28, 4, 18);
+        ctx.fillRect(-12, -8, 24, 4);
 
-        // Arms out for balance (symmetric)
-        ctx.fillStyle = COLORS.cyan;
-        ctx.shadowBlur = 4;
-        // Left arm
+        // Arms out for balance
+        ctx.strokeStyle = jacketGrad;
+        ctx.lineWidth = 5;
+        ctx.lineCap = 'round';
         ctx.beginPath();
-        ctx.ellipse(-16, -14, 4, 4, 0, 0, Math.PI * 2);
-        ctx.fill();
-        // Right arm
+        ctx.moveTo(-10, -5);
+        ctx.lineTo(-18, -12);
+        ctx.stroke();
         ctx.beginPath();
-        ctx.ellipse(16, -14, 4, 4, 0, 0, Math.PI * 2);
+        ctx.moveTo(10, -5);
+        ctx.lineTo(18, -12);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        // Head
+        ctx.fillStyle = '#ffcc99';
+        ctx.beginPath();
+        ctx.arc(0, -24, 9, 0, Math.PI * 2);
         ctx.fill();
 
-        // Helmet (back of head visible)
-        ctx.fillStyle = COLORS.hotPink;
-        ctx.shadowColor = COLORS.hotPink;
+        // Helmet
+        ctx.fillStyle = '#222';
+        ctx.beginPath();
+        ctx.arc(0, -26, 10, Math.PI, 0);
+        ctx.fill();
+
+        // Goggles
+        const goggleGrad = ctx.createLinearGradient(-8, -28, 8, -22);
+        goggleGrad.addColorStop(0, COLORS.magenta);
+        goggleGrad.addColorStop(0.3, '#ff66cc');
+        goggleGrad.addColorStop(0.7, COLORS.cyan);
+        goggleGrad.addColorStop(1, COLORS.electricBlue);
+        ctx.fillStyle = goggleGrad;
+        ctx.shadowColor = COLORS.magenta;
         ctx.shadowBlur = 6;
         ctx.beginPath();
-        ctx.arc(0, -32, 7, 0, Math.PI * 2);
+        ctx.roundRect(-9, -28, 18, 7, 2);
         ctx.fill();
-
-        // Goggle strap on back of helmet
-        ctx.strokeStyle = '#333';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(0, -32, 6, 0.3, Math.PI - 0.3);
-        ctx.stroke();
         ctx.shadowBlur = 0;
     } else {
         // CARVING - board is HORIZONTAL (original drawing)
@@ -3938,6 +3957,7 @@ function init() {
 
     setupInput();
     loadHighScore();
+    loadStance();
     updateSettingsUI();
 
     // Load sprites asynchronously (game works without them)
@@ -3996,6 +4016,10 @@ function updateSettingsUI() {
     // Fill screen toggle
     const fillScreenToggle = document.getElementById('fillScreenToggle');
     if (fillScreenToggle) fillScreenToggle.checked = displaySettings.fillScreen;
+
+    // Stance select (regular/goofy)
+    const stanceSelect = document.getElementById('stanceSelect');
+    if (stanceSelect) stanceSelect.value = displaySettings.stance;
 
     // Gamepad status
     const gamepadStatus = document.getElementById('gamepadStatus');
@@ -4328,15 +4352,34 @@ function toggleFillScreen(enabled) {
     }
 }
 
+function setStance(stance) {
+    displaySettings.stance = stance;
+    try {
+        localStorage.setItem('shredordead_stance', stance);
+    } catch (e) {}
+    updateSettingsUI();
+}
+
+function loadStance() {
+    try {
+        const saved = localStorage.getItem('shredordead_stance');
+        if (saved && (saved === 'regular' || saved === 'goofy')) {
+            displaySettings.stance = saved;
+        }
+    } catch (e) {}
+}
+
 function resetAllSettings() {
     displaySettings.autoDetect = true;
     displaySettings.screenShakeEnabled = true;
     displaySettings.fillScreen = true;
+    displaySettings.stance = 'regular';
     try {
         localStorage.removeItem('shredordead_resolution');
         localStorage.removeItem('shredordead_autodetect');
         localStorage.removeItem('shredordead_screenshake');
         localStorage.removeItem('shredordead_fillscreen');
+        localStorage.removeItem('shredordead_stance');
     } catch (e) {}
     setResolution(autoDetectResolution());
     updateSettingsUI();
