@@ -854,7 +854,6 @@ function setupTouchInput() {
     document.body.style.webkitTouchCallout = 'none';
     document.body.style.webkitUserSelect = 'none';
 
-    console.log('Touch input initialized');
 }
 
 function handleTouchStart(e) {
@@ -878,7 +877,6 @@ function handleTouchStart(e) {
     input.up = false;
     input.down = false;
 
-    console.log('Touch start:', touch.clientX, touch.clientY);
 }
 
 function handleTouchMove(e) {
@@ -928,7 +926,6 @@ function handleTouchMove(e) {
         input.down = false;
     }
 
-    console.log('Touch move - deltaX:', deltaX, 'deltaY:', deltaY, 'left:', input.left, 'right:', input.right);
 }
 
 function handleTouchEnd(e) {
@@ -953,13 +950,10 @@ function handleTouchEnd(e) {
         touchState.currentY - touchState.startY
     );
 
-    console.log('Touch end - duration:', duration, 'distance:', distance);
-
     if (duration < TOUCH_THRESHOLDS.tapMaxDuration && distance < TOUCH_THRESHOLDS.tapMaxDistance) {
         // Fire momentary space input for tap
         input.space = true;
         setTimeout(() => { input.space = false; }, 100);
-        console.log('Tap detected!');
     }
 
     // Reset touch state
