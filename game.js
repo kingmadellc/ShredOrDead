@@ -629,6 +629,8 @@ let gameState = {
         grindStartTime: 0,
         grindFrames: 0,
         grindImmunity: 0,
+        grindTrick: null,              // Current grind trick type
+        grindTrickDisplayTimer: 0,     // Timer for showing trick name
         lastRail: null,
         currentRail: null,
         currentGrindable: null, // For varied grindable objects
@@ -709,7 +711,6 @@ let gameState = {
 
     // Collectibles
     collectibles: [],
-    boostPads: [],
     collectiblesCollected: 0,
 
     // Flow state - reward consistent good play
@@ -1488,24 +1489,6 @@ function generateTerrainChunk(chunkIndex) {
         }
     }
 
-    // ===== PHASE 7: Generate boost pads =====
-    chunk.boostPads = [];
-    if (seededRandom(baseSeed + 3000) < 0.3) { // 30% chance per chunk
-        const boostX = (seededRandom(baseSeed + 3001) - 0.5) * (TERRAIN.slopeWidth - 100);
-        const boostY = chunk.y + 200 + seededRandom(baseSeed + 3002) * (TERRAIN.chunkHeight - 300);
-        const cellKey = `${Math.floor((boostY - chunk.y) / 80)},${Math.floor((boostX / TERRAIN.laneWidth) + gridCols / 2)}`;
-
-        if (!usedCells.has(cellKey)) {
-            chunk.boostPads.push({
-                x: boostX,
-                y: boostY,
-                width: 60,
-                height: 25,
-                boostAmount: 200 + seededRandom(baseSeed + 3003) * 100 // 200-300 speed boost
-            });
-        }
-    }
-
     return chunk;
 }
 
@@ -1524,7 +1507,6 @@ function updateTerrain() {
         Array.prototype.push.apply(gameState.rails, newChunk.rails);
         Array.prototype.push.apply(gameState.lodges, newChunk.lodges);
         if (newChunk.collectibles) Array.prototype.push.apply(gameState.collectibles, newChunk.collectibles);
-        if (newChunk.boostPads) Array.prototype.push.apply(gameState.boostPads, newChunk.boostPads);
 
         terrain.nextChunkY += TERRAIN.chunkHeight;
     }
@@ -1536,7 +1518,6 @@ function updateTerrain() {
     gameState.rails = gameState.rails.filter(r => r.endY > cullY);
     gameState.lodges = gameState.lodges.filter(l => l.y + l.height > cullY);
     gameState.collectibles = gameState.collectibles.filter(c => c.y > cullY && !c.collected);
-    gameState.boostPads = gameState.boostPads.filter(b => b.y > cullY);
 }
 
 // ===================
@@ -1965,6 +1946,25 @@ function landFromJump(player) {
     spawnLandingParticles(player.x, player.y);
 }
 
+// Grind trick types with display names
+const GRIND_TRICKS = [
+    { id: '50-50', name: '50-50', weight: 25 },
+    { id: 'boardslide', name: 'BOARDSLIDE', weight: 25 },
+    { id: 'noseslide', name: 'NOSESLIDE', weight: 25 },
+    { id: 'tailslide', name: 'TAILSLIDE', weight: 25 }
+];
+
+function selectGrindTrick() {
+    // Weighted random selection
+    const totalWeight = GRIND_TRICKS.reduce((sum, t) => sum + t.weight, 0);
+    let rand = Math.random() * totalWeight;
+    for (const trick of GRIND_TRICKS) {
+        rand -= trick.weight;
+        if (rand <= 0) return trick;
+    }
+    return GRIND_TRICKS[0]; // Default to 50-50
+}
+
 function startGrinding(player, rail) {
     // Safety check
     if (!rail || !rail.length || rail.length <= 0) return;
@@ -1972,9 +1972,21 @@ function startGrinding(player, rail) {
     player.grinding = true;
     player.currentRail = rail;
     player.grindProgress = 0;
-    player.grindStartTime = gameState.animationTime; // Track when grind started
+    player.grindStartTime = gameState.animationTime;
     player.x = rail.x;
     player.y = rail.y;
+
+    // Select random grind trick
+    player.grindTrick = selectGrindTrick();
+
+    // Show grind trick celebration
+    gameState.celebrations.push({
+        text: player.grindTrick.name,
+        subtext: '',
+        color: COLORS.cyan,
+        timer: 0.8,
+        scale: 0.9
+    });
 }
 
 function startGrindingAtProgress(player, rail, entryProgress) {
@@ -1983,12 +1995,23 @@ function startGrindingAtProgress(player, rail, entryProgress) {
 
     player.grinding = true;
     player.currentRail = rail;
-    player.grindStartTime = gameState.animationTime; // Track when grind started
-    player.grindFrames = 0; // Reset frame counter
-    // Clamp entry progress to avoid starting too close to the end
+    player.grindStartTime = gameState.animationTime;
+    player.grindFrames = 0;
     player.grindProgress = Math.max(0, Math.min(0.9, entryProgress));
     player.x = lerp(rail.x, rail.endX, player.grindProgress);
     player.y = lerp(rail.y, rail.endY, player.grindProgress);
+
+    // Select random grind trick
+    player.grindTrick = selectGrindTrick();
+
+    // Show grind trick celebration
+    gameState.celebrations.push({
+        text: player.grindTrick.name,
+        subtext: '',
+        color: COLORS.cyan,
+        timer: 0.8,
+        scale: 0.9
+    });
 }
 
 function endGrind(player) {
@@ -2254,14 +2277,6 @@ function checkCollisions() {
         collectItem(col);
     }
 
-    // Check boost pads
-    for (const boost of gameState.boostPads) {
-        if (Math.abs(boost.y - player.y) > 20) continue;
-        if (Math.abs(boost.x - player.x) > boost.width / 2) continue;
-
-        triggerBoost(player, boost);
-    }
-
     // Check near-misses with obstacles
     checkNearMisses(player);
 }
@@ -2304,43 +2319,6 @@ function collectItem(collectible) {
             scale: 1.0
         });
     }
-}
-
-function triggerBoost(player, boost) {
-    // Only trigger once per pad (use cooldown)
-    if (boost.lastTriggered && gameState.animationTime - boost.lastTriggered < 1.0) return;
-    boost.lastTriggered = gameState.animationTime;
-
-    player.speed = Math.min(PHYSICS.maxSpeed * 1.2, player.speed + boost.boostAmount);
-
-    // Visual feedback
-    triggerScreenShake(5, 0.3);
-
-    // Spawn boost particles
-    for (let i = 0; i < 10; i++) {
-        gameState.particles.push({
-            x: player.x + (Math.random() - 0.5) * 30,
-            y: player.y + 20,
-            vx: (Math.random() - 0.5) * 100,
-            vy: -50 - Math.random() * 100,
-            size: 3,
-            color: COLORS.cyan,
-            alpha: 1,
-            type: 'spark',
-            life: 0.4
-        });
-    }
-
-    gameState.celebrations.push({
-        text: 'BOOST!',
-        subtext: '',
-        color: COLORS.cyan,
-        timer: 0.8,
-        scale: 1.0
-    });
-
-    // Small flow bonus
-    gameState.flowMeter = Math.min(100, gameState.flowMeter + 5);
 }
 
 function checkNearMisses(player) {
@@ -2737,7 +2715,6 @@ function draw() {
         drawTerrain();
         drawRails();
         drawJumps();
-        drawBoostPads();
         drawLodges();
         drawCollectibles();
         drawObstacles();
@@ -2759,9 +2736,6 @@ function draw() {
 
     // Draw jumps
     drawJumps();
-
-    // Draw boost pads (on ground)
-    drawBoostPads();
 
     // Draw lodges (behind obstacles, in front of jumps)
     drawLodges();
@@ -3646,11 +3620,11 @@ function drawLodges() {
         ctx.fillStyle = '#f0f8ff';
         ctx.fillRect(chimneyX - 10, chimneyY - 6, 20, 4);
 
-        // Smoke particles (subtle)
+        // Smoke particles (subtle) - use cached sin2
         ctx.fillStyle = 'rgba(200, 200, 210, 0.3)';
         for (let i = 0; i < 3; i++) {
-            const smokeY = chimneyY - 15 - i * 12 - Math.sin(time * 2 + i) * 5;
-            const smokeX = chimneyX + Math.sin(time * 1.5 + i * 2) * 8;
+            const smokeY = chimneyY - 15 - i * 12 - animCache.sin2 * 5;
+            const smokeX = chimneyX + animCache.sin2 * 8 * (i + 1) * 0.3;
             const smokeSize = 6 + i * 3;
             ctx.beginPath();
             ctx.arc(smokeX, smokeY, smokeSize, 0, Math.PI * 2);
@@ -3658,8 +3632,8 @@ function drawLodges() {
         }
 
         // ===== WINDOWS =====
-        // Window glow (warm light from inside)
-        const windowGlow = 0.6 + Math.sin(time * 0.5) * 0.1;
+        // Window glow (warm light from inside) - slow pulse, just use constant
+        const windowGlow = 0.65;
 
         // Left window
         ctx.fillStyle = `rgba(255, 200, 100, ${windowGlow})`;
@@ -3745,8 +3719,8 @@ function drawCollectibles() {
         const isBig = col.type === 'big';
         const size = isBig ? 16 : 10;
 
-        // Floating animation
-        const float = Math.sin(time * 4 + col.x * 0.1) * 5;
+        // Floating animation (use cached sin4 with offset)
+        const float = animCache.sin4 * 5 + Math.sin(col.x * 0.1) * 3;
         const rotation = time * 2;
 
         ctx.save();
@@ -3799,74 +3773,6 @@ function drawCollectibles() {
     }
 }
 
-function drawBoostPads() {
-    const camera = gameState.camera;
-    const time = gameState.animationTime;
-
-    for (const boost of gameState.boostPads) {
-        if (boost.y < camera.y - 50 || boost.y > camera.y + CANVAS_HEIGHT + 50) continue;
-
-        const screen = worldToScreen(boost.x, boost.y);
-        const w = boost.width;
-        const h = boost.height;
-
-        ctx.save();
-        ctx.translate(screen.x, screen.y);
-
-        // Pulsing glow
-        const pulse = 0.5 + Math.sin(time * 6) * 0.3;
-
-        // Shadow
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-        ctx.beginPath();
-        ctx.ellipse(0, h / 2 + 5, w / 2 + 5, 8, 0, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Boost pad base
-        const padGrad = ctx.createLinearGradient(-w / 2, -h / 2, w / 2, h / 2);
-        padGrad.addColorStop(0, '#1a3a4a');
-        padGrad.addColorStop(0.5, '#2a5a6a');
-        padGrad.addColorStop(1, '#1a3a4a');
-        ctx.fillStyle = padGrad;
-        ctx.beginPath();
-        ctx.ellipse(0, 0, w / 2, h / 2, 0, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Neon arrows
-        ctx.strokeStyle = COLORS.cyan;
-        ctx.lineWidth = 3;
-        ctx.shadowColor = COLORS.cyan;
-        ctx.shadowBlur = 2 * pulse;
-
-        // Draw chevrons pointing down (direction of travel)
-        for (let i = 0; i < 3; i++) {
-            const offset = (time * 80 + i * 15) % 30 - 15;
-            const arrowY = offset;
-            const alpha = 1 - Math.abs(offset) / 15;
-            ctx.globalAlpha = alpha * pulse;
-
-            ctx.beginPath();
-            ctx.moveTo(-15, arrowY - 8);
-            ctx.lineTo(0, arrowY + 2);
-            ctx.lineTo(15, arrowY - 8);
-            ctx.stroke();
-        }
-
-        ctx.globalAlpha = 1;
-
-        // Border ring
-        ctx.strokeStyle = COLORS.cyan;
-        ctx.lineWidth = 2;
-        ctx.shadowBlur = 2 * pulse;
-        ctx.beginPath();
-        ctx.ellipse(0, 0, w / 2 - 2, h / 2 - 2, 0, 0, Math.PI * 2);
-        ctx.stroke();
-
-        ctx.restore();
-        ctx.shadowBlur = 0;
-    }
-}
-
 function drawLodgeInterior() {
     const lodge = gameState.lodge;
     const time = gameState.animationTime;
@@ -3878,11 +3784,7 @@ function drawLodgeInterior() {
     const offsetY = (CANVAS_HEIGHT - h) / 2;
 
     // ===== BACKGROUND (wooden floor) =====
-    const floorGrad = ctx.createLinearGradient(offsetX, offsetY, offsetX + w, offsetY + h);
-    floorGrad.addColorStop(0, '#5a4030');
-    floorGrad.addColorStop(0.5, '#6a5040');
-    floorGrad.addColorStop(1, '#4a3020');
-    ctx.fillStyle = floorGrad;
+    ctx.fillStyle = '#5a4030';
     ctx.fillRect(offsetX, offsetY, w, h);
 
     // Floor planks
@@ -3920,20 +3822,17 @@ function drawLodgeInterior() {
     ctx.fillStyle = '#5a5a6a';
     ctx.fillRect(fpX, fpY + 10, 60, 50);
 
-    // Fire glow
-    const fireGlow = 0.6 + Math.sin(time * 8) * 0.2;
-    const fireGrad = ctx.createRadialGradient(fpX + 30, fpY + 45, 5, fpX + 30, fpY + 45, 35);
-    fireGrad.addColorStop(0, `rgba(255, 150, 50, ${fireGlow})`);
-    fireGrad.addColorStop(0.5, `rgba(255, 100, 30, ${fireGlow * 0.6})`);
-    fireGrad.addColorStop(1, 'rgba(100, 30, 10, 0)');
-    ctx.fillStyle = fireGrad;
+    // Fire glow (use cached sin8)
+    const fireGlow = 0.6 + animCache.sin8 * 0.2;
+    // Simplified fire - solid glow instead of gradient for performance
+    ctx.fillStyle = `rgba(255, 120, 40, ${fireGlow * 0.7})`;
     ctx.fillRect(fpX + 5, fpY + 25, 50, 30);
 
-    // Fire flames
+    // Fire flames (use cached sin10)
     ctx.fillStyle = `rgba(255, 200, 50, ${fireGlow})`;
     for (let i = 0; i < 5; i++) {
-        const flameX = fpX + 15 + i * 10 + Math.sin(time * 10 + i) * 3;
-        const flameH = 15 + Math.sin(time * 12 + i * 2) * 8;
+        const flameX = fpX + 15 + i * 10 + animCache.sin10 * 3;
+        const flameH = 15 + animCache.sin8 * 8;
         ctx.beginPath();
         ctx.moveTo(flameX, fpY + 55);
         ctx.quadraticCurveTo(flameX - 5, fpY + 55 - flameH / 2, flameX, fpY + 55 - flameH);
@@ -4206,6 +4105,17 @@ function drawPlayer() {
             const flipScale = Math.cos(player.flipRotation * Math.PI / 180);
             ctx.scale(1, flipScale);
         }
+    } else if (player.grinding && player.grindTrick) {
+        // Apply grind trick rotation based on trick type
+        const grindTrickId = player.grindTrick.id;
+        if (grindTrickId === 'boardslide') {
+            ctx.rotate(Math.PI / 2 * 0.7); // Board perpendicular (boardslide)
+        } else if (grindTrickId === 'noseslide') {
+            ctx.rotate(Math.PI / 4 * 0.5); // Slight forward lean
+        } else if (grindTrickId === 'tailslide') {
+            ctx.rotate(-Math.PI / 4 * 0.5); // Slight backward lean
+        }
+        // 50-50 has no rotation (default)
     } else if (!player.airborne && !goingStraight && !isBraking) {
         ctx.rotate(player.angle * Math.PI / 180 * 0.3);
     }
@@ -4245,11 +4155,7 @@ function drawPlayer() {
         ctx.fill();
 
         // Board - HORIZONTAL, perpendicular to slope (facing up mountain)
-        const boardGrad = ctx.createLinearGradient(-20, 0, 20, 0);
-        boardGrad.addColorStop(0, COLORS.hotPink);
-        boardGrad.addColorStop(0.5, '#ff69b4');
-        boardGrad.addColorStop(1, COLORS.magenta);
-        ctx.fillStyle = boardGrad;
+        ctx.fillStyle = COLORS.hotPink;
         ctx.shadowColor = COLORS.hotPink;
         ctx.shadowBlur = 2;
         ctx.beginPath();
@@ -4271,10 +4177,7 @@ function drawPlayer() {
         ctx.fillRect(4, 5, 8, 10);     // Right binding
 
         // Legs - front view, bent for braking stance
-        const legGrad = ctx.createLinearGradient(0, -10, 0, 15);
-        legGrad.addColorStop(0, '#7744bb');
-        legGrad.addColorStop(1, '#553399');
-        ctx.strokeStyle = legGrad;
+        ctx.strokeStyle = '#6644aa';
         ctx.lineWidth = 7;
         ctx.lineCap = 'round';
 
@@ -4291,11 +4194,7 @@ function drawPlayer() {
         ctx.stroke();
 
         // Body/torso - front view, slightly leaned back for braking
-        const jacketGrad = ctx.createLinearGradient(-10, -30, 10, -5);
-        jacketGrad.addColorStop(0, COLORS.cyan);
-        jacketGrad.addColorStop(0.5, COLORS.electricBlue);
-        jacketGrad.addColorStop(1, '#0099cc');
-        ctx.fillStyle = jacketGrad;
+        ctx.fillStyle = COLORS.electricBlue;
         ctx.shadowColor = COLORS.cyan;
         ctx.shadowBlur = 1;
         ctx.beginPath();
@@ -4310,7 +4209,7 @@ function drawPlayer() {
         ctx.shadowBlur = 0;
 
         // Arms - spread wide for balance/drag during braking
-        ctx.strokeStyle = jacketGrad;
+        ctx.strokeStyle = COLORS.electricBlue;
         ctx.lineWidth = 5;
         ctx.lineCap = 'round';
 
@@ -4390,11 +4289,7 @@ function drawPlayer() {
         // Board - VERTICAL, pointing straight down the mountain
         // When airborne, board can be brought up (for grabs)
         const boardLift = player.airborne ? player.grabPhase * 10 : 0;
-        const boardGrad = ctx.createLinearGradient(0, -8, 0, 28);
-        boardGrad.addColorStop(0, COLORS.hotPink);
-        boardGrad.addColorStop(0.5, '#ff69b4');
-        boardGrad.addColorStop(1, COLORS.magenta);
-        ctx.fillStyle = boardGrad;
+        ctx.fillStyle = COLORS.hotPink;
         ctx.shadowColor = COLORS.hotPink;
         ctx.shadowBlur = 2;
         ctx.beginPath();
@@ -4420,11 +4315,7 @@ function drawPlayer() {
         const faceDir = isGoofy ? 1 : -1;  // 1 = facing right, -1 = facing left
 
         // Legs - side view, bent knees in snowboard stance
-        // Crouch makes knees bend more
-        const legGrad = ctx.createLinearGradient(0, -10, 0, 20);
-        legGrad.addColorStop(0, '#7744bb');
-        legGrad.addColorStop(1, '#553399');
-        ctx.strokeStyle = legGrad;
+        ctx.strokeStyle = '#6644aa';
         ctx.lineWidth = 7;
         ctx.lineCap = 'round';
 
@@ -4441,11 +4332,7 @@ function drawPlayer() {
         ctx.stroke();
 
         // Body/torso - SIDE VIEW (thin profile) - lowers with crouch
-        const jacketGrad = ctx.createLinearGradient(faceDir * -8, -30, faceDir * 8, -5);
-        jacketGrad.addColorStop(0, COLORS.cyan);
-        jacketGrad.addColorStop(0.5, COLORS.electricBlue);
-        jacketGrad.addColorStop(1, '#0099cc');
-        ctx.fillStyle = jacketGrad;
+        ctx.fillStyle = COLORS.electricBlue;
         ctx.shadowColor = COLORS.cyan;
         ctx.shadowBlur = 1;
         ctx.beginPath();
@@ -4463,7 +4350,7 @@ function drawPlayer() {
         ctx.shadowBlur = 0;
 
         // Arms - side view, position depends on crouch/grab state
-        ctx.strokeStyle = jacketGrad;
+        ctx.strokeStyle = COLORS.electricBlue;
         ctx.lineWidth = 5;
         ctx.lineCap = 'round';
 
@@ -4609,13 +4496,8 @@ function drawPlayer() {
         ctx.ellipse(faceDir * 7, goggleY, 7, 4.5, faceDir * 0.2, 0, Math.PI * 2);
         ctx.fill();
 
-        // Goggle lens with reflective gradient
-        const goggleGrad = ctx.createLinearGradient(faceDir * 2, goggleY - 3, faceDir * 12, goggleY + 3);
-        goggleGrad.addColorStop(0, COLORS.magenta);
-        goggleGrad.addColorStop(0.4, '#ff66cc');
-        goggleGrad.addColorStop(0.8, COLORS.cyan);
-        goggleGrad.addColorStop(1, COLORS.electricBlue);
-        ctx.fillStyle = goggleGrad;
+        // Goggle lens
+        ctx.fillStyle = COLORS.magenta;
         ctx.shadowColor = COLORS.magenta;
         ctx.shadowBlur = 3;
         ctx.beginPath();
@@ -4630,12 +4512,7 @@ function drawPlayer() {
         ctx.shadowBlur = 0;
     } else {
         // CARVING - board is HORIZONTAL (original drawing)
-        // Snowboard with gradient and edge highlights
-        const boardGrad = ctx.createLinearGradient(-20, boardY, 20, boardY + 6);
-        boardGrad.addColorStop(0, COLORS.hotPink);
-        boardGrad.addColorStop(0.5, '#ff69b4');
-        boardGrad.addColorStop(1, COLORS.magenta);
-        ctx.fillStyle = boardGrad;
+        ctx.fillStyle = COLORS.hotPink;
         ctx.shadowColor = COLORS.hotPink;
         ctx.shadowBlur = 2;
         ctx.beginPath();
@@ -4656,12 +4533,8 @@ function drawPlayer() {
         ctx.fillRect(4, boardY - 1, 6, 8);
         ctx.shadowBlur = 0;
 
-        // Body/jacket with gradient and stripe
-        const jacketGrad = ctx.createLinearGradient(-12, -20, 12, 10);
-        jacketGrad.addColorStop(0, COLORS.cyan);
-        jacketGrad.addColorStop(0.5, COLORS.electricBlue);
-        jacketGrad.addColorStop(1, '#0099cc');
-        ctx.fillStyle = jacketGrad;
+        // Body/jacket
+        ctx.fillStyle = COLORS.electricBlue;
         ctx.shadowColor = COLORS.cyan;
         ctx.shadowBlur = 2;
         ctx.beginPath();
@@ -4711,12 +4584,8 @@ function drawPlayer() {
             rightArmX = 20; rightArmY = -8;
         }
 
-        // Need to recreate jacketGrad for arms since it was in the else block
-        const armGrad = ctx.createLinearGradient(-12, -20, 12, 10);
-        armGrad.addColorStop(0, COLORS.cyan);
-        armGrad.addColorStop(0.5, COLORS.electricBlue);
-        armGrad.addColorStop(1, '#0099cc');
-        ctx.strokeStyle = armGrad;
+        // Arms
+        ctx.strokeStyle = COLORS.electricBlue;
         ctx.lineWidth = 5;
         ctx.lineCap = 'round';
         ctx.beginPath();
@@ -4790,13 +4659,8 @@ function drawPlayer() {
         ctx.roundRect(-11, -28, 22, 9, 3);
         ctx.fill();
 
-        // Goggles with reflective gradient lens
-        const goggleGrad = ctx.createLinearGradient(-9, -27, 9, -21);
-        goggleGrad.addColorStop(0, COLORS.magenta);
-        goggleGrad.addColorStop(0.3, '#ff66cc');
-        goggleGrad.addColorStop(0.6, COLORS.cyan);
-        goggleGrad.addColorStop(1, COLORS.electricBlue);
-        ctx.fillStyle = goggleGrad;
+        // Goggles lens
+        ctx.fillStyle = COLORS.magenta;
         ctx.shadowColor = COLORS.magenta;
         ctx.shadowBlur = 4;
         ctx.beginPath();
@@ -4962,44 +4826,39 @@ function drawBeast() {
     }
     ctx.scale(scale, scale);
 
-    // Breathing animation
-    const breathe = Math.sin(time * 3) * 0.05 + 1;
+    // Breathing animation (use cached sin3)
+    const breathe = animCache.sin3 * 0.05 + 1;
     ctx.scale(breathe, 1 / breathe);
 
-    // Dark purple/magenta energy aura
-    const pulseIntensity = 0.4 + Math.sin(time * 3) * 0.2;
-    const auraGrad = ctx.createRadialGradient(0, 0, 20, 0, 0, 85);
-    auraGrad.addColorStop(0, `rgba(120, 0, 180, ${pulseIntensity * 0.4})`);
-    auraGrad.addColorStop(0.4, `rgba(60, 0, 100, ${pulseIntensity * 0.3})`);
-    auraGrad.addColorStop(0.7, `rgba(30, 0, 50, ${pulseIntensity * 0.15})`);
-    auraGrad.addColorStop(1, 'rgba(10, 0, 20, 0)');
-    ctx.fillStyle = auraGrad;
+    // Dark purple/magenta energy aura (simplified for performance)
+    const pulseIntensity = 0.4 + animCache.sin3 * 0.2;
+    ctx.fillStyle = `rgba(60, 0, 100, ${pulseIntensity * 0.25})`;
     ctx.beginPath();
     ctx.arc(0, 0, 85, 0, Math.PI * 2);
     ctx.fill();
 
-    // Floating dark energy particles
+    // Floating dark energy particles (use cached sin2, sin3)
     for (let i = 0; i < 8; i++) {
         const angle = (i / 8) * Math.PI * 2 + time * 0.8;
-        const dist = 55 + Math.sin(time * 2 + i * 1.2) * 12;
-        const particleAlpha = 0.4 + Math.sin(time * 3 + i) * 0.2;
+        const dist = 55 + animCache.sin2 * 12;
+        const particleAlpha = 0.4 + animCache.sin3 * 0.2;
         ctx.fillStyle = `rgba(150, 0, 220, ${particleAlpha})`;
         ctx.beginPath();
-        ctx.arc(Math.cos(angle) * dist, Math.sin(angle) * dist, 3 + Math.sin(time + i) * 1, 0, Math.PI * 2);
+        ctx.arc(Math.cos(angle) * dist, Math.sin(angle) * dist, 3.5, 0, Math.PI * 2);
         ctx.fill();
     }
 
-    // Animated shadow tendrils around body (dark, wispy)
+    // Animated shadow tendrils around body (dark, wispy) - reduce count for perf
     const tendrilColors = ['#1a0a2a', '#2a1a3a', '#0a0515', '#15052a'];
     ctx.lineWidth = 4;
-    for (let i = 0; i < 14; i++) {
-        const angle = (i / 14) * Math.PI * 2 + time * 0.4;
-        const len = 50 + Math.sin(time * 1.5 + i * 0.7) * 15;
+    for (let i = 0; i < 10; i++) {
+        const angle = (i / 10) * Math.PI * 2 + time * 0.4;
+        const len = 50 + animCache.sin2 * 15;
         ctx.strokeStyle = tendrilColors[i % tendrilColors.length];
         ctx.beginPath();
         ctx.moveTo(Math.cos(angle) * 35, Math.sin(angle) * 45);
         ctx.quadraticCurveTo(
-            Math.cos(angle + 0.3) * 55 + Math.sin(time * 2 + i) * 8,
+            Math.cos(angle + 0.3) * 55 + animCache.sin2 * 8,
             Math.sin(angle + 0.3) * 60,
             Math.cos(angle) * len,
             Math.sin(angle) * (len + 12)
@@ -5007,26 +4866,20 @@ function drawBeast() {
         ctx.stroke();
     }
 
-    // Main body - DARK purple/black gradient (menacing shadow)
-    const bodyGrad = ctx.createRadialGradient(0, -5, 10, 0, 15, 60);
-    bodyGrad.addColorStop(0, '#2a1a3a');    // Dark purple center
-    bodyGrad.addColorStop(0.3, '#1a0a2a');  // Darker purple
-    bodyGrad.addColorStop(0.6, '#0a0515');  // Very dark
-    bodyGrad.addColorStop(0.85, '#050210'); // Near black
-    bodyGrad.addColorStop(1, '#020108');    // Pure dark edge
-    ctx.fillStyle = bodyGrad;
+    // Main body - solid dark purple (simplified for performance)
+    ctx.fillStyle = '#1a0a2a';
     ctx.shadowColor = 'rgba(100, 0, 150, 0.5)';
     ctx.shadowBlur = 4;
     ctx.beginPath();
     ctx.ellipse(0, 0, 45, 55, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Dark fur texture lines
+    // Dark fur texture lines (reduced count)
     ctx.strokeStyle = 'rgba(40, 20, 60, 0.4)';
     ctx.lineWidth = 2;
-    for (let i = 0; i < 12; i++) {
-        const fx = -35 + i * 6;
-        const wave = Math.sin(time * 1.5 + i) * 4;
+    for (let i = 0; i < 8; i++) {
+        const fx = -28 + i * 8;
+        const wave = animCache.sin2 * 4;
         ctx.beginPath();
         ctx.moveTo(fx, -45);
         ctx.quadraticCurveTo(fx + wave, 0, fx + wave * 0.5, 40);
@@ -5573,9 +5426,8 @@ function startGame() {
     gameState.maxCombo = 1;
     gameState.comboChainLength = 0;
 
-    // Collectibles and boosts
+    // Collectibles
     gameState.collectibles = [];
-    gameState.boostPads = [];
     gameState.collectiblesCollected = 0;
 
     // Flow state
@@ -5654,37 +5506,49 @@ function updateDeathAnimation(dt) {
 
     anim.timer += dt;
 
-    // Phase timing
-    const grabDuration = 0.4;
-    const chompDuration = 1.2;
-    const fadeDuration = 0.5;
+    // Improved phase timing - slower, more impactful
+    const grabDuration = 0.5;    // Beast grabs player
+    const windUpDuration = 0.3;  // NEW: Wind-up before chomp
+    const chompDuration = 1.2;   // Slower chomps (3 total)
+    const swallowDuration = 0.3; // NEW: Gulp animation
+    const fadeDuration = 0.4;
 
     if (anim.phase === 0) {
-        // Phase 0: Beast grabs player (0-0.4s)
-        // Move beast to player position
-        anim.beastX = lerp(anim.beastX, anim.playerX, 10 * dt);
-        anim.beastY = lerp(anim.beastY, anim.playerY, 10 * dt);
+        // Phase 0: Beast grabs player with dramatic lunge
+        anim.beastX = lerp(anim.beastX, anim.playerX, 8 * dt);
+        anim.beastY = lerp(anim.beastY, anim.playerY, 8 * dt);
 
         if (anim.timer >= grabDuration) {
             anim.phase = 1;
             anim.timer = 0;
         }
     } else if (anim.phase === 1) {
-        // Phase 1: Chomp animation (0-1.2s)
-        // Shake the player position as beast "chomps"
-        const chompCycle = Math.floor(anim.timer * 6); // 6 chomps per second
-        if (chompCycle > anim.chompCount) {
-            anim.chompCount = chompCycle;
-            // Shake effect on each chomp
-            gameState.screenShake.intensity = 8;
-        }
-
-        if (anim.timer >= chompDuration) {
+        // Phase 1: Wind-up - jaw opens wide (anticipation)
+        if (anim.timer >= windUpDuration) {
             anim.phase = 2;
             anim.timer = 0;
         }
     } else if (anim.phase === 2) {
-        // Phase 2: Fade out (0-0.5s)
+        // Phase 2: Chomp animation - 3 slower, impactful chomps
+        const chompCycle = Math.floor(anim.timer * 2.5); // 2.5 chomps per second = ~3 chomps in 1.2s
+        if (chompCycle > anim.chompCount) {
+            anim.chompCount = chompCycle;
+            // Stronger shake on each chomp for impact
+            gameState.screenShake.intensity = 12;
+        }
+
+        if (anim.timer >= chompDuration) {
+            anim.phase = 3;
+            anim.timer = 0;
+        }
+    } else if (anim.phase === 3) {
+        // Phase 3: Swallow - final gulp
+        if (anim.timer >= swallowDuration) {
+            anim.phase = 4;
+            anim.timer = 0;
+        }
+    } else if (anim.phase === 4) {
+        // Phase 4: Fade out
         if (anim.timer >= fadeDuration) {
             anim.active = false;
             triggerGameOver(anim.type);
@@ -5698,92 +5562,94 @@ function drawDeathAnimation() {
 
     const screen = worldToScreen(anim.playerX, anim.playerY);
 
-    // Draw beast grabbing/chomping
     ctx.save();
     ctx.translate(screen.x, screen.y);
 
     const time = gameState.animationTime;
 
-    if (anim.phase === 0) {
-        // Grab phase - beast lunging toward player
-        const grabProgress = anim.timer / 0.4;
-        const beastScale = 1 + grabProgress * 0.3;
+    // Easing function for smoother motion
+    const easeInOutQuad = t => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 
-        // Draw player being grabbed (shrinking/flinching)
-        ctx.globalAlpha = 1;
+    if (anim.phase === 0) {
+        // Phase 0: Grab - beast lunging with drama
+        const grabProgress = easeInOutQuad(Math.min(1, anim.timer / 0.5));
+
+        // Player shrinking/flinching with fear
         ctx.fillStyle = COLORS.hotPink;
         ctx.beginPath();
-        ctx.arc(0, -10 - grabProgress * 5, 10 * (1 - grabProgress * 0.3), 0, Math.PI * 2);
+        ctx.arc(0, -10 - grabProgress * 8, 10 * (1 - grabProgress * 0.4), 0, Math.PI * 2);
+        ctx.fill();
+
+        // Struggle animation
+        const struggle = Math.sin(anim.timer * 20) * (1 - grabProgress) * 3;
+        ctx.fillStyle = COLORS.electricBlue;
+        ctx.beginPath();
+        ctx.arc(struggle, -20 - grabProgress * 5, 6 * (1 - grabProgress * 0.3), 0, Math.PI * 2);
         ctx.fill();
 
     } else if (anim.phase === 1) {
-        // Chomp phase - beast mouth opening and closing
-        const chompPhase = (anim.timer * 6) % 1; // 0-1 repeating
-        const mouthOpen = Math.sin(chompPhase * Math.PI) * 0.8;
+        // Phase 1: Wind-up - jaw opens wide for anticipation
+        const windUpProgress = easeInOutQuad(Math.min(1, anim.timer / 0.3));
+        const mouthOpen = windUpProgress * 1.0; // Opens wide
 
-        // Draw beast head/mouth
-        ctx.fillStyle = '#e8e8f0';  // White/gray fur
+        drawBeastHead(ctx, mouthOpen, false, time);
+
+        // Player visible in mouth, trembling
+        const tremble = Math.sin(anim.timer * 25) * 2;
+        ctx.fillStyle = COLORS.hotPink;
+        ctx.globalAlpha = 0.8;
         ctx.beginPath();
-        ctx.arc(0, -15, 35, 0, Math.PI * 2);
+        ctx.arc(tremble, -15, 6, 0, Math.PI * 2);
         ctx.fill();
-
-        // Upper jaw
-        ctx.fillStyle = '#1a1a2e';
-        ctx.beginPath();
-        ctx.arc(0, -30 - mouthOpen * 15, 25, 0, Math.PI);
-        ctx.fill();
-
-        // Lower jaw
-        ctx.beginPath();
-        ctx.arc(0, -5 + mouthOpen * 10, 22, Math.PI, Math.PI * 2);
-        ctx.fill();
-
-        // Teeth (upper)
-        ctx.fillStyle = '#fff';
-        for (let i = -3; i <= 3; i++) {
-            ctx.beginPath();
-            ctx.moveTo(i * 6 - 2, -30 - mouthOpen * 10);
-            ctx.lineTo(i * 6, -20 - mouthOpen * 5);
-            ctx.lineTo(i * 6 + 2, -30 - mouthOpen * 10);
-            ctx.fill();
-        }
-
-        // Teeth (lower)
-        for (let i = -2; i <= 2; i++) {
-            ctx.beginPath();
-            ctx.moveTo(i * 7 - 2, -5 + mouthOpen * 8);
-            ctx.lineTo(i * 7, -12 + mouthOpen * 4);
-            ctx.lineTo(i * 7 + 2, -5 + mouthOpen * 8);
-            ctx.fill();
-        }
-
-        // Glowing eyes
-        ctx.fillStyle = COLORS.cyan;
-        ctx.shadowColor = COLORS.cyan;
-        ctx.shadowBlur = 3;
-        ctx.beginPath();
-        ctx.ellipse(-12, -40, 6, 4, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.ellipse(12, -40, 6, 4, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-
-        // Player fragments flying out (after first few chomps)
-        if (anim.chompCount > 2) {
-            ctx.fillStyle = COLORS.hotPink;
-            for (let i = 0; i < anim.chompCount - 2; i++) {
-                const angle = (i * 1.3 + time * 2) % (Math.PI * 2);
-                const dist = 30 + i * 8;
-                ctx.beginPath();
-                ctx.arc(Math.cos(angle) * dist, -15 + Math.sin(angle) * dist * 0.5, 3, 0, Math.PI * 2);
-                ctx.fill();
-            }
-        }
+        ctx.globalAlpha = 1;
 
     } else if (anim.phase === 2) {
-        // Fade phase
-        const fadeProgress = anim.timer / 0.5;
+        // Phase 2: Chomp - slower, more impactful bites with eased motion
+        const chompPhase = (anim.timer * 2.5) % 1; // Slower: 2.5 chomps/sec
+        // Eased chomp motion - snaps shut faster than it opens
+        const easedChomp = chompPhase < 0.3
+            ? chompPhase / 0.3  // Quick close (0-0.3)
+            : 1 - (chompPhase - 0.3) / 0.7; // Slower open (0.3-1.0)
+        const mouthOpen = easeInOutQuad(easedChomp) * 0.9;
+
+        // Player bounces with each chomp
+        const playerBounce = Math.sin(chompPhase * Math.PI) * 5;
+
+        drawBeastHead(ctx, mouthOpen, false, time);
+
+        // Player fragments after first chomp
+        if (anim.chompCount >= 1) {
+            ctx.fillStyle = COLORS.hotPink;
+            for (let i = 0; i < Math.min(anim.chompCount + 1, 4); i++) {
+                const angle = (i * 1.5 + time * 1.5) % (Math.PI * 2);
+                const dist = 25 + i * 12 + anim.timer * 15;
+                const size = 4 - i * 0.5;
+                ctx.globalAlpha = Math.max(0, 1 - dist / 80);
+                ctx.beginPath();
+                ctx.arc(Math.cos(angle) * dist, -15 + Math.sin(angle) * dist * 0.4, size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+        }
+
+    } else if (anim.phase === 3) {
+        // Phase 3: Swallow - gulp animation
+        const swallowProgress = easeInOutQuad(Math.min(1, anim.timer / 0.3));
+
+        // Throat bulge moving down
+        const bulgeY = -15 + swallowProgress * 40;
+
+        drawBeastHead(ctx, 0.1, true, time); // Mouth mostly closed
+
+        // Throat bulge effect
+        ctx.fillStyle = '#d8d8e0';
+        ctx.beginPath();
+        ctx.ellipse(0, bulgeY, 12 * (1 - swallowProgress * 0.5), 8 * (1 - swallowProgress * 0.3), 0, 0, Math.PI * 2);
+        ctx.fill();
+
+    } else if (anim.phase === 4) {
+        // Phase 4: Fade - satisfied beast
+        const fadeProgress = easeInOutQuad(Math.min(1, anim.timer / 0.4));
         ctx.globalAlpha = 1 - fadeProgress;
 
         // Beast satisfied expression
@@ -5792,25 +5658,99 @@ function drawDeathAnimation() {
         ctx.arc(0, -15, 35, 0, Math.PI * 2);
         ctx.fill();
 
-        // Closed eyes (satisfied)
+        // Happy closed eyes (satisfied)
         ctx.strokeStyle = COLORS.cyan;
         ctx.lineWidth = 3;
         ctx.beginPath();
-        ctx.arc(-12, -35, 6, Math.PI * 0.2, Math.PI * 0.8);
+        ctx.arc(-12, -35, 6, Math.PI * 0.15, Math.PI * 0.85);
         ctx.stroke();
         ctx.beginPath();
-        ctx.arc(12, -35, 6, Math.PI * 0.2, Math.PI * 0.8);
+        ctx.arc(12, -35, 6, Math.PI * 0.15, Math.PI * 0.85);
         ctx.stroke();
 
-        // Satisfied mouth (slight grin)
+        // Content smile
         ctx.strokeStyle = '#1a1a2e';
-        ctx.lineWidth = 4;
+        ctx.lineWidth = 3;
         ctx.beginPath();
-        ctx.arc(0, -10, 15, Math.PI * 0.1, Math.PI * 0.9);
+        ctx.arc(0, -8, 12, Math.PI * 0.15, Math.PI * 0.85);
         ctx.stroke();
+
+        // Belly pat (paw on stomach)
+        ctx.fillStyle = '#e8e8f0';
+        ctx.beginPath();
+        ctx.ellipse(8, 20 - fadeProgress * 10, 10, 8, 0.3, 0, Math.PI * 2);
+        ctx.fill();
     }
 
     ctx.restore();
+}
+
+// Helper function to draw beast head with mouth
+function drawBeastHead(ctx, mouthOpen, satisfied, time) {
+    // Head/fur
+    ctx.fillStyle = '#e8e8f0';
+    ctx.beginPath();
+    ctx.arc(0, -15, 35, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Dark muzzle
+    ctx.fillStyle = '#1a1a2e';
+
+    // Upper jaw
+    ctx.beginPath();
+    ctx.arc(0, -30 - mouthOpen * 18, 25, 0, Math.PI);
+    ctx.fill();
+
+    // Lower jaw
+    ctx.beginPath();
+    ctx.arc(0, -2 + mouthOpen * 12, 22, Math.PI, Math.PI * 2);
+    ctx.fill();
+
+    // Teeth (upper) - sharper, more menacing
+    ctx.fillStyle = '#fff';
+    for (let i = -3; i <= 3; i++) {
+        const toothH = (i === 0) ? 14 : 10; // Center fangs longer
+        ctx.beginPath();
+        ctx.moveTo(i * 6 - 2.5, -30 - mouthOpen * 12);
+        ctx.lineTo(i * 6, -30 - mouthOpen * 12 + toothH + mouthOpen * 4);
+        ctx.lineTo(i * 6 + 2.5, -30 - mouthOpen * 12);
+        ctx.fill();
+    }
+
+    // Teeth (lower)
+    for (let i = -2; i <= 2; i++) {
+        ctx.beginPath();
+        ctx.moveTo(i * 7 - 2, -2 + mouthOpen * 10);
+        ctx.lineTo(i * 7, -10 + mouthOpen * 5);
+        ctx.lineTo(i * 7 + 2, -2 + mouthOpen * 10);
+        ctx.fill();
+    }
+
+    // Eyes - glowing and menacing
+    if (!satisfied) {
+        ctx.fillStyle = COLORS.cyan;
+        ctx.shadowColor = COLORS.cyan;
+        ctx.shadowBlur = 5;
+        ctx.beginPath();
+        ctx.ellipse(-12, -42, 7, 5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(12, -42, 7, 5, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Angry eyebrows
+        ctx.strokeStyle = '#1a1a2e';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(-18, -50);
+        ctx.lineTo(-6, -47);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(18, -50);
+        ctx.lineTo(6, -47);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+    }
 }
 
 function saveHighScore() {
