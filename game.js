@@ -1649,7 +1649,16 @@ function updateAirbornePhysics(player, dt) {
 function updateGrindingPhysics(player, dt) {
     const rail = player.currentRail;
 
-    const grindSpeed = player.speed * 0.85;
+    // Safety check - if rail is invalid, end grind immediately
+    if (!rail || !rail.length || rail.length <= 0) {
+        player.grinding = false;
+        player.currentRail = null;
+        return;
+    }
+
+    // Ensure minimum grind speed to prevent getting stuck
+    const minGrindSpeed = 100;
+    const grindSpeed = Math.max(player.speed * 0.85, minGrindSpeed);
     player.grindProgress += (grindSpeed * dt) / rail.length;
 
     player.x = lerp(rail.x, rail.endX, player.grindProgress);
@@ -1659,13 +1668,14 @@ function updateGrindingPhysics(player, dt) {
     gameState.chase.distanceTraveled += grindSpeed * dt / 100;
     gameState.distance = Math.floor(gameState.chase.distanceTraveled);
 
-    // Sparks
-    if (Math.random() < 0.4) {
+    // Sparks - reduced frequency for performance
+    if (Math.random() < 0.25) {
         spawnGrindSparks(player.x, player.y);
     }
 
-    // End grind
-    if (player.grindProgress >= 1.0) {
+    // End grind - also add timeout safety (max 4 seconds on any rail)
+    const grindDuration = gameState.animationTime - (player.grindStartTime || 0);
+    if (player.grindProgress >= 1.0 || grindDuration > 4.0) {
         endGrind(player);
     }
 
@@ -1805,7 +1815,7 @@ function landFromJump(player) {
             subtext: `+${points}`,
             color: celebrationColor,
             timer: 1.5,
-            scale: 1.0 + (gameState.trickMultiplier - 1) * 0.15 + (gameState.comboChainLength - 1) * 0.05
+            scale: Math.min(1.3, 1.0 + (gameState.trickMultiplier - 1) * 0.1 + (gameState.comboChainLength - 1) * 0.03) // Cap scale at 1.3x
         });
 
         gameState.trickMultiplier = Math.min(gameState.trickMultiplier + 0.5, 5);
@@ -1841,16 +1851,24 @@ function landFromJump(player) {
 }
 
 function startGrinding(player, rail) {
+    // Safety check
+    if (!rail || !rail.length || rail.length <= 0) return;
+
     player.grinding = true;
     player.currentRail = rail;
     player.grindProgress = 0;
+    player.grindStartTime = gameState.animationTime; // Track when grind started
     player.x = rail.x;
     player.y = rail.y;
 }
 
 function startGrindingAtProgress(player, rail, entryProgress) {
+    // Safety check
+    if (!rail || !rail.length || rail.length <= 0) return;
+
     player.grinding = true;
     player.currentRail = rail;
+    player.grindStartTime = gameState.animationTime; // Track when grind started
     // Clamp entry progress to avoid starting too close to the end
     player.grindProgress = Math.max(0, Math.min(0.9, entryProgress));
     player.x = lerp(rail.x, rail.endX, player.grindProgress);
@@ -1859,6 +1877,15 @@ function startGrindingAtProgress(player, rail, entryProgress) {
 
 function endGrind(player) {
     const rail = player.currentRail;
+
+    // Safety check - if rail is invalid, just reset grind state
+    if (!rail || !rail.length) {
+        player.grinding = false;
+        player.currentRail = null;
+        player.currentGrindable = null;
+        return;
+    }
+
     const grindLength = rail.length * player.grindProgress;
     const grindableType = rail.grindableType || 'rail';
 
@@ -1919,7 +1946,7 @@ function endGrind(player) {
         subtext: `+${points}`,
         color: celebrationColor,
         timer: 1.2,
-        scale: 1.0 + (gameState.comboChainLength - 1) * 0.1
+        scale: Math.min(1.3, 1.0 + (gameState.comboChainLength - 1) * 0.05) // Cap scale at 1.3x
     });
 
     // Grind adds to multiplier - more for special types
