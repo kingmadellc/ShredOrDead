@@ -45,6 +45,14 @@ const gradientCache = {
     // Extended cache for frequently-used gradients
     railGradients: new Map(),
     obstacleGradients: new Map(),
+    // Static gradients (position-independent, created once)
+    static: {
+        treeTrunk: null,
+        supportPost: null,
+        railBody: null,
+        flowMeter: null,
+        railShadow: null
+    },
 
     invalidate() {
         this.background = null;
@@ -52,6 +60,11 @@ const gradientCache = {
         this.fogGradient = null;
         this.railGradients.clear();
         this.obstacleGradients.clear();
+        this.static.treeTrunk = null;
+        this.static.supportPost = null;
+        this.static.railBody = null;
+        this.static.flowMeter = null;
+        this.static.railShadow = null;
     },
 
     needsRefresh(w, h) {
@@ -72,6 +85,43 @@ const gradientCache = {
             this.railGradients.set(key, creator());
         }
         return this.railGradients.get(key);
+    },
+
+    // Initialize static gradients (call once when ctx is available)
+    initStaticGradients(ctx) {
+        // Tree trunk gradient (horizontal, 10px wide)
+        if (!this.static.treeTrunk) {
+            const trunkGrad = ctx.createLinearGradient(-5, 0, 5, 0);
+            trunkGrad.addColorStop(0, '#3a2718');
+            trunkGrad.addColorStop(0.5, '#5a4738');
+            trunkGrad.addColorStop(1, '#3a2718');
+            this.static.treeTrunk = trunkGrad;
+        }
+        // Support post gradient (vertical, 12px tall)
+        if (!this.static.supportPost) {
+            const supportGrad = ctx.createLinearGradient(0, 0, 0, 12);
+            supportGrad.addColorStop(0, '#888');
+            supportGrad.addColorStop(0.5, '#aaa');
+            supportGrad.addColorStop(1, '#666');
+            this.static.supportPost = supportGrad;
+        }
+        // Rail body gradient (vertical, 8px for cylindrical effect)
+        if (!this.static.railBody) {
+            const railGrad = ctx.createLinearGradient(0, -4, 0, 4);
+            railGrad.addColorStop(0, '#ddd');
+            railGrad.addColorStop(0.3, '#fff');
+            railGrad.addColorStop(0.5, '#ccc');
+            railGrad.addColorStop(1, '#888');
+            this.static.railBody = railGrad;
+        }
+        // Flow meter gradient (horizontal, 80px)
+        if (!this.static.flowMeter) {
+            const flowGrad = ctx.createLinearGradient(0, 0, 80, 0);
+            flowGrad.addColorStop(0, '#00ffff');  // COLORS.cyan
+            flowGrad.addColorStop(0.5, '#00ff00'); // COLORS.limeGreen
+            flowGrad.addColorStop(1, '#ffd700');  // COLORS.gold
+            this.static.flowMeter = flowGrad;
+        }
     }
 };
 
@@ -98,6 +148,21 @@ const animCache = {
         this.cos5 = Math.cos(animationTime * 5);
         this.cos6 = Math.cos(animationTime * 6);
     }
+};
+
+// ============================================
+// PERFORMANCE OPTIMIZATION: CACHED FONT STRINGS
+// ============================================
+// Pre-built font strings to avoid string concatenation every frame
+const FONTS = {
+    pressStart8: '8px "Press Start 2P", monospace',
+    pressStart10: '10px "Press Start 2P", monospace',
+    pressStart12: 'bold 12px "Press Start 2P", monospace',
+    pressStart14: 'bold 14px "Press Start 2P", monospace',
+    pressStart16: 'bold 16px "Press Start 2P", monospace',
+    pressStart20: 'bold 20px "Press Start 2P", monospace',
+    pressStart24: 'bold 24px "Press Start 2P", monospace',
+    pressStart32: 'bold 32px "Press Start 2P", monospace'
 };
 
 // ============================================
@@ -562,6 +627,7 @@ let gameState = {
         grinding: false,
         grindProgress: 0,
         grindStartTime: 0,
+        grindFrames: 0,
         grindImmunity: 0,
         lastRail: null,
         currentRail: null,
@@ -869,19 +935,26 @@ function spawnLandingParticles(x, y) {
 }
 
 function updateParticles(dt) {
-    // Enforce particle limit for performance
-    while (gameState.particles.length > performanceSettings.maxParticles) {
-        const oldest = gameState.particles.shift();
-        ParticlePool.release(oldest);
+    const particles = gameState.particles;
+    const maxParticles = performanceSettings.maxParticles;
+
+    // Enforce particle limit using swap-and-pop (O(1) per removal instead of O(n))
+    while (particles.length > maxParticles) {
+        ParticlePool.release(particles.pop());
     }
 
-    for (let i = gameState.particles.length - 1; i >= 0; i--) {
-        const p = gameState.particles[i];
+    // Update particles using swap-and-pop for removal (O(1) instead of O(n) splice)
+    let i = 0;
+    while (i < particles.length) {
+        const p = particles[i];
         p.age += dt;
 
         if (p.age >= p.lifetime) {
+            // Swap with last element and pop (O(1) removal)
             ParticlePool.release(p);
-            gameState.particles.splice(i, 1);
+            particles[i] = particles[particles.length - 1];
+            particles.pop();
+            // Don't increment i - need to check the swapped element
             continue;
         }
 
@@ -893,9 +966,12 @@ function updateParticles(dt) {
             p.alpha = 1 - (p.age / p.lifetime);
         } else if (p.type === 'spark') {
             p.vy += 500 * dt;
-            p.alpha = 1 - Math.pow(p.age / p.lifetime, 2);
+            // Simplified alpha calculation (avoid Math.pow)
+            const ratio = p.age / p.lifetime;
+            p.alpha = 1 - ratio * ratio;
             p.size *= 0.96;
         }
+        i++;
     }
 }
 
@@ -934,16 +1010,22 @@ function generateTerrainChunk(chunkIndex) {
     const tempRails = [];
 
     // Helper to check if position is too close to existing jumps/rails
+    // Uses squared distance comparison to avoid expensive sqrt calls
     function isTooCloseToJumpsOrRails(x, y, minDist = 150) {
+        const minDistSq = minDist * minDist;
         for (const jump of tempJumps) {
-            const dist = Math.sqrt(Math.pow(x - jump.x, 2) + Math.pow(y - jump.y, 2));
-            if (dist < minDist) return true;
+            const dx = x - jump.x;
+            const dy = y - jump.y;
+            if (dx * dx + dy * dy < minDistSq) return true;
         }
         for (const rail of tempRails) {
             // Check distance to rail start and end
-            const distStart = Math.sqrt(Math.pow(x - rail.x, 2) + Math.pow(y - rail.y, 2));
-            const distEnd = Math.sqrt(Math.pow(x - rail.endX, 2) + Math.pow(y - rail.endY, 2));
-            if (distStart < minDist || distEnd < minDist) return true;
+            const dxStart = x - rail.x;
+            const dyStart = y - rail.y;
+            const dxEnd = x - rail.endX;
+            const dyEnd = y - rail.endY;
+            if (dxStart * dxStart + dyStart * dyStart < minDistSq ||
+                dxEnd * dxEnd + dyEnd * dyEnd < minDistSq) return true;
         }
         return false;
     }
@@ -1429,12 +1511,13 @@ function updateTerrain() {
         const newChunk = generateTerrainChunk(chunkIndex);
         terrain.chunks.push(newChunk);
 
-        gameState.obstacles.push(...newChunk.obstacles);
-        gameState.jumps.push(...newChunk.jumps);
-        gameState.rails.push(...newChunk.rails);
-        gameState.lodges.push(...newChunk.lodges);
-        if (newChunk.collectibles) gameState.collectibles.push(...newChunk.collectibles);
-        if (newChunk.boostPads) gameState.boostPads.push(...newChunk.boostPads);
+        // Use push.apply instead of spread for better performance with arrays
+        Array.prototype.push.apply(gameState.obstacles, newChunk.obstacles);
+        Array.prototype.push.apply(gameState.jumps, newChunk.jumps);
+        Array.prototype.push.apply(gameState.rails, newChunk.rails);
+        Array.prototype.push.apply(gameState.lodges, newChunk.lodges);
+        if (newChunk.collectibles) Array.prototype.push.apply(gameState.collectibles, newChunk.collectibles);
+        if (newChunk.boostPads) Array.prototype.push.apply(gameState.boostPads, newChunk.boostPads);
 
         terrain.nextChunkY += TERRAIN.chunkHeight;
     }
@@ -1659,22 +1742,28 @@ function updateAirbornePhysics(player, dt) {
 }
 
 function updateGrindingPhysics(player, dt) {
+    // Guard: verify we're actually grinding
+    if (!player.grinding) return;
+
     const rail = player.currentRail;
 
     // Safety check - if rail is invalid, end grind immediately
     if (!rail || !rail.length || rail.length <= 0) {
         player.grinding = false;
         player.currentRail = null;
-        player.grindImmunity = 0.5; // Brief immunity to prevent re-triggering
+        player.grindImmunity = 0.5;
         return;
     }
 
-    // Force minimum speed during grind - use high minimum to ensure progress
-    const minGrindSpeed = 200;
+    // Increment frame counter for timeout safety
+    player.grindFrames = (player.grindFrames || 0) + 1;
+
+    // Force minimum speed during grind - increased for faster exit
+    const minGrindSpeed = 300;
     const grindSpeed = Math.max(player.speed * 0.85, minGrindSpeed);
 
-    // Ensure progress always advances significantly
-    const progressIncrement = Math.max((grindSpeed * dt) / rail.length, 0.02 * dt * 60);
+    // Ensure progress always advances - minimum 3% per frame
+    const progressIncrement = Math.max((grindSpeed * dt) / rail.length, 0.03);
     player.grindProgress += progressIncrement;
 
     player.x = lerp(rail.x, rail.endX, player.grindProgress);
@@ -1685,13 +1774,16 @@ function updateGrindingPhysics(player, dt) {
     gameState.distance = Math.floor(gameState.chase.distanceTraveled);
 
     // Sparks - very low frequency for performance
-    if (Math.random() < 0.15) {
+    if (Math.random() < 0.1) {
         spawnGrindSparks(player.x, player.y);
     }
 
-    // End grind - hard timeout of 2 seconds max
+    // Exit conditions - multiple safeguards:
+    // 1. Progress complete (>=100%)
+    // 2. Time-based timeout (1 second max)
+    // 3. Frame-based timeout (60 frames max ~1 second)
     const grindDuration = gameState.animationTime - (player.grindStartTime || 0);
-    if (player.grindProgress >= 1.0 || grindDuration > 2.0) {
+    if (player.grindProgress >= 1.0 || grindDuration > 1.0 || player.grindFrames > 60) {
         endGrind(player);
     }
 
@@ -1885,6 +1977,7 @@ function startGrindingAtProgress(player, rail, entryProgress) {
     player.grinding = true;
     player.currentRail = rail;
     player.grindStartTime = gameState.animationTime; // Track when grind started
+    player.grindFrames = 0; // Reset frame counter
     // Clamp entry progress to avoid starting too close to the end
     player.grindProgress = Math.max(0, Math.min(0.9, entryProgress));
     player.x = lerp(rail.x, rail.endX, player.grindProgress);
@@ -1892,12 +1985,16 @@ function startGrindingAtProgress(player, rail, entryProgress) {
 }
 
 function endGrind(player) {
+    // Guard: only end if actually grinding (prevent double calls)
+    if (!player.grinding) return;
+
     const rail = player.currentRail;
 
     // Always reset grind state first to prevent getting stuck
     player.grinding = false;
+    player.grindFrames = 0;
     player.lastRail = rail; // Track last rail to prevent immediate re-entry
-    player.grindImmunity = 0.3; // 0.3 second immunity after grinding
+    player.grindImmunity = 0.5; // 0.5 second immunity after grinding (increased)
     player.currentRail = null;
     player.currentGrindable = null;
 
@@ -1935,14 +2032,18 @@ function endGrind(player) {
     if (!gameState.comboChainLength) gameState.comboChainLength = 0;
     gameState.comboChainLength++;
 
-    // Simple, small celebration - no giant text
-    gameState.celebrations.push({
-        text: trick.name,
-        subtext: `+${points}`,
-        color: COLORS.cyan,
-        timer: 0.8, // Short duration
-        scale: 1.0  // No scaling - fixed small size
-    });
+    // Simple, small celebration - with duplicate prevention and cap
+    const celebrationText = trick.name;
+    const isDuplicate = gameState.celebrations.some(c => c.text === celebrationText);
+    if (!isDuplicate && gameState.celebrations.length < 5) {
+        gameState.celebrations.push({
+            text: celebrationText,
+            subtext: `+${points}`,
+            color: COLORS.cyan,
+            timer: 0.6, // Short duration
+            scale: 1.0  // No scaling - fixed small size
+        });
+    }
 
     // Update multiplier
     const multiplierGain = 0.3 + (typeBonus - 1) * 0.5;
@@ -2237,16 +2338,17 @@ function triggerBoost(player, boost) {
 
 function checkNearMisses(player) {
     // Check for near-misses with obstacles
-    const nearMissThreshold = 35; // Close but not colliding
+    // Use squared distances to avoid expensive sqrt (threshold^2 = 35^2 = 1225, min^2 = 20^2 = 400)
+    const nearMissThresholdSq = 1225;
+    const minDistSq = 400;
 
     for (const obs of gameState.obstacles) {
-        const dist = Math.sqrt(
-            Math.pow(obs.x - player.x, 2) +
-            Math.pow(obs.y - player.y, 2)
-        );
+        const dx = obs.x - player.x;
+        const dy = obs.y - player.y;
+        const distSq = dx * dx + dy * dy;
 
-        // Near miss: close but not crashed
-        if (dist < nearMissThreshold && dist > 20) {
+        // Near miss: close but not crashed (compare squared distances)
+        if (distSq < nearMissThresholdSq && distSq > minDistSq) {
             if (!obs.nearMissTriggered) {
                 obs.nearMissTriggered = true;
 
@@ -2449,12 +2551,13 @@ function updateBeast(dt) {
             chase.beastY = lerp(chase.beastY, chase.lungeTargetY, easeT);
 
             // Check catch - slightly larger catch radius with rage
+            // Use squared distance to avoid sqrt
             const catchRadius = 35 + chase.beastRage * 10;
-            const catchDist = Math.sqrt(
-                Math.pow(player.x - chase.beastX, 2) +
-                Math.pow(player.y - chase.beastY, 2)
-            );
-            if (catchDist < catchRadius && player.invincible <= 0 && !player.crashed && player.stunned <= 0) {
+            const catchRadiusSq = catchRadius * catchRadius;
+            const cdx = player.x - chase.beastX;
+            const cdy = player.y - chase.beastY;
+            const catchDistSq = cdx * cdx + cdy * cdy;
+            if (catchDistSq < catchRadiusSq && player.invincible <= 0 && !player.crashed && player.stunned <= 0) {
                 triggerGameOver('beast');
                 return;
             }
@@ -2601,6 +2704,9 @@ function draw() {
 
     // Refresh gradient cache if needed
     gradientCache.refreshDimensions(CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    // Initialize static gradients once (cheap no-op after first call)
+    gradientCache.initStaticGradients(ctx);
 
     ctx.fillStyle = COLORS.bgDark;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
@@ -2815,13 +2921,12 @@ function drawObstacles() {
         ctx.fill();
 
         if (obs.type === 'tree') {
-            // Tree trunk with gradient and texture
-            const trunkGrad = ctx.createLinearGradient(screen.x - 5, screen.y, screen.x + 5, screen.y);
-            trunkGrad.addColorStop(0, '#3a2718');
-            trunkGrad.addColorStop(0.5, '#5a4738');
-            trunkGrad.addColorStop(1, '#3a2718');
-            ctx.fillStyle = trunkGrad;
-            ctx.fillRect(screen.x - 5, screen.y - 12, 10, 22);
+            // Tree trunk with cached gradient (translate to position)
+            ctx.save();
+            ctx.translate(screen.x, screen.y);
+            ctx.fillStyle = gradientCache.static.treeTrunk;
+            ctx.fillRect(-5, -12, 10, 22);
+            ctx.restore();
 
             // Trunk texture lines
             ctx.strokeStyle = '#2a1a0a';
@@ -2867,18 +2972,9 @@ function drawObstacles() {
             ctx.fill();
 
         } else if (obs.type === 'rock') {
-            // Irregular curved rock shape with radial gradient
-            const rockGrad = ctx.createRadialGradient(
-                screen.x - obs.width/4, screen.y - obs.height/2 - 5,
-                2,
-                screen.x, screen.y - obs.height/3,
-                obs.width/1.5
-            );
-            rockGrad.addColorStop(0, '#8a8a9e');
-            rockGrad.addColorStop(0.4, '#6a6a7e');
-            rockGrad.addColorStop(1, '#3a3a4e');
-
-            ctx.fillStyle = rockGrad;
+            // Irregular curved rock shape with flat colors (no per-frame gradient)
+            // Base rock color
+            ctx.fillStyle = '#5a5a6e';
             ctx.beginPath();
             // Irregular rock shape
             ctx.moveTo(screen.x - obs.width/2, screen.y);
@@ -2888,8 +2984,16 @@ function drawObstacles() {
             ctx.closePath();
             ctx.fill();
 
-            // Rock highlight
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+            // Rock highlight (lighter top-left area for 3D effect)
+            ctx.fillStyle = '#8a8a9e';
+            ctx.beginPath();
+            ctx.moveTo(screen.x - obs.width/4, screen.y - obs.height);
+            ctx.quadraticCurveTo(screen.x - obs.width/3, screen.y - obs.height * 0.6, screen.x - obs.width/2, screen.y);
+            ctx.quadraticCurveTo(screen.x - obs.width/2 - 5, screen.y - obs.height/2, screen.x - obs.width/4, screen.y - obs.height);
+            ctx.fill();
+
+            // Rock specular highlight
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
             ctx.beginPath();
             ctx.ellipse(screen.x - 6, screen.y - obs.height/2 - 4, obs.width/5, obs.height/5, -0.3, 0, Math.PI * 2);
             ctx.fill();
@@ -2901,24 +3005,21 @@ function drawObstacles() {
             ctx.fill();
 
         } else if (obs.type === 'mogul') {
-            // Ice mogul with shimmer effect
-            const mogulGrad = ctx.createRadialGradient(
-                screen.x - 5, screen.y - obs.height/2 - 3,
-                2,
-                screen.x, screen.y - obs.height/3,
-                obs.width/1.5
-            );
-            mogulGrad.addColorStop(0, '#e0f0ff');
-            mogulGrad.addColorStop(0.3, COLORS.ice);
-            mogulGrad.addColorStop(1, '#90c0d6');
-
-            ctx.fillStyle = mogulGrad;
+            // Ice mogul with flat colors (no per-frame gradient)
+            // Base mogul color
+            ctx.fillStyle = '#a0d0e6';
             ctx.beginPath();
             ctx.ellipse(screen.x, screen.y - obs.height/3, obs.width/2, obs.height/2, 0, 0, Math.PI * 2);
             ctx.fill();
 
-            // Ice shimmer effect
-            const shimmer = Math.sin(time * 3 + obs.x * 0.1) * 0.3 + 0.5;
+            // Ice highlight (lighter center for 3D effect)
+            ctx.fillStyle = '#d0f0ff';
+            ctx.beginPath();
+            ctx.ellipse(screen.x - 4, screen.y - obs.height/2, obs.width/4, obs.height/3, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Ice shimmer effect - use cached sin value
+            const shimmer = animCache.sin3 * 0.15 + 0.55;
             ctx.fillStyle = `rgba(255, 255, 255, ${shimmer})`;
             ctx.beginPath();
             ctx.ellipse(screen.x - 8, screen.y - obs.height/2, 6, 3, -0.5, 0, Math.PI * 2);
@@ -3092,16 +3193,8 @@ function drawMetalRail(startScreen, endScreen, rail) {
     const shadowOffsetX = 4;
     const shadowOffsetY = 6;
 
-    // Draw main rail shadow first - elongated projection matching rail angle
-    const railShadowGrad = ctx.createLinearGradient(
-        startScreen.x + shadowOffsetX, startScreen.y + railHeight + shadowOffsetY,
-        endScreen.x + shadowOffsetX, endScreen.y + railHeight + shadowOffsetY
-    );
-    railShadowGrad.addColorStop(0, 'rgba(60, 80, 100, 0.25)');
-    railShadowGrad.addColorStop(0.5, 'rgba(60, 80, 100, 0.2)');
-    railShadowGrad.addColorStop(1, 'rgba(60, 80, 100, 0.15)');
-
-    ctx.strokeStyle = railShadowGrad;
+    // Draw main rail shadow first - simplified solid color for performance
+    ctx.strokeStyle = 'rgba(60, 80, 100, 0.2)';
     ctx.lineWidth = 10;
     ctx.lineCap = 'round';
     ctx.beginPath();
@@ -3120,20 +3213,18 @@ function drawMetalRail(startScreen, endScreen, rail) {
         ctx.fill();
     }
 
-    // Draw support posts
-    const supportGrad = ctx.createLinearGradient(0, 0, 0, railHeight);
-    supportGrad.addColorStop(0, '#888');
-    supportGrad.addColorStop(0.5, '#aaa');
-    supportGrad.addColorStop(1, '#666');
-
+    // Draw support posts using cached gradient
     for (let i = 0; i < numSupports; i++) {
         const t = i / (numSupports - 1);
         const x = lerp(startScreen.x, endScreen.x, t);
         const y = lerp(startScreen.y, endScreen.y, t);
 
-        // Support post
-        ctx.fillStyle = supportGrad;
-        ctx.fillRect(x - 3, y, 6, railHeight);
+        // Support post with cached gradient (translate to position)
+        ctx.save();
+        ctx.translate(x - 3, y);
+        ctx.fillStyle = gradientCache.static.supportPost;
+        ctx.fillRect(0, 0, 6, railHeight);
+        ctx.restore();
 
         // Support base plate
         ctx.fillStyle = '#555';
@@ -3143,17 +3234,8 @@ function drawMetalRail(startScreen, endScreen, rail) {
     // Main rail - metallic with shine
     ctx.save();
 
-    // Rail body (cylindrical appearance)
-    const railGrad = ctx.createLinearGradient(
-        startScreen.x, startScreen.y - 4,
-        startScreen.x, startScreen.y + 4
-    );
-    railGrad.addColorStop(0, '#ddd');
-    railGrad.addColorStop(0.3, '#fff');
-    railGrad.addColorStop(0.5, '#ccc');
-    railGrad.addColorStop(1, '#888');
-
-    ctx.strokeStyle = railGrad;
+    // Rail body - simplified solid metallic color for performance
+    ctx.strokeStyle = '#bbb';
     ctx.lineWidth = 8;
     ctx.lineCap = 'round';
     ctx.beginPath();
@@ -3218,13 +3300,8 @@ function drawFunbox(startScreen, endScreen, rail) {
     ctx.ellipse(3, boxHeight + 5, length / 2 + 5, 8, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Box body (wood texture)
-    const woodGrad = ctx.createLinearGradient(-length / 2, -boxHeight, length / 2, boxHeight);
-    woodGrad.addColorStop(0, '#8B6914');
-    woodGrad.addColorStop(0.5, '#A0522D');
-    woodGrad.addColorStop(1, '#6B4423');
-
-    ctx.fillStyle = woodGrad;
+    // Box body (wood texture) - simplified solid color for performance
+    ctx.fillStyle = '#8B5A2B';
     ctx.beginPath();
     ctx.moveTo(-length / 2, 0);
     ctx.lineTo(-length / 2 - 8, boxHeight);
@@ -3248,13 +3325,8 @@ function drawFunbox(startScreen, endScreen, rail) {
     ctx.fillStyle = '#9B7B14';
     ctx.fillRect(-length / 2, -3, length, 6);
 
-    // Metal coping on top edge
-    const copingGrad = ctx.createLinearGradient(0, -5, 0, 2);
-    copingGrad.addColorStop(0, '#ddd');
-    copingGrad.addColorStop(0.5, '#fff');
-    copingGrad.addColorStop(1, '#999');
-
-    ctx.fillStyle = copingGrad;
+    // Metal coping on top edge - simplified solid color for performance
+    ctx.fillStyle = '#ccc';
     ctx.fillRect(-length / 2, -5, length, 4);
 
     // Coping shine
@@ -3288,14 +3360,8 @@ function drawLog(startScreen, endScreen, rail) {
     ctx.ellipse(length / 2 + 3, 15, length / 2 + 5, 6, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Main log body
-    const logGrad = ctx.createLinearGradient(0, -8, 0, 8);
-    logGrad.addColorStop(0, '#5D4E37');
-    logGrad.addColorStop(0.3, '#8B7355');
-    logGrad.addColorStop(0.7, '#6B5344');
-    logGrad.addColorStop(1, '#4A3728');
-
-    ctx.fillStyle = logGrad;
+    // Main log body - simplified solid color for performance
+    ctx.fillStyle = '#6B5344';
     ctx.beginPath();
     ctx.ellipse(0, 0, 8, 10, 0, 0, Math.PI * 2);
     ctx.fill();
@@ -3363,13 +3429,8 @@ function drawBench(startScreen, endScreen, rail) {
     ctx.ellipse(3, 18, length / 2 + 8, 6, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Bench legs (metal)
-    const legGrad = ctx.createLinearGradient(0, -5, 0, 15);
-    legGrad.addColorStop(0, '#666');
-    legGrad.addColorStop(0.5, '#888');
-    legGrad.addColorStop(1, '#444');
-
-    ctx.fillStyle = legGrad;
+    // Bench legs (metal) - simplified solid color for performance
+    ctx.fillStyle = '#666';
     // Left leg frame
     ctx.fillRect(-length / 2 + 5, -2, 4, 18);
     ctx.fillRect(-length / 2 + 5, 12, 15, 4);
@@ -3377,13 +3438,8 @@ function drawBench(startScreen, endScreen, rail) {
     ctx.fillRect(length / 2 - 9, -2, 4, 18);
     ctx.fillRect(length / 2 - 20, 12, 15, 4);
 
-    // Seat slats (wood)
-    const woodGrad = ctx.createLinearGradient(-length / 2, 0, length / 2, 0);
-    woodGrad.addColorStop(0, '#A0522D');
-    woodGrad.addColorStop(0.5, '#CD853F');
-    woodGrad.addColorStop(1, '#8B4513');
-
-    ctx.fillStyle = woodGrad;
+    // Seat slats (wood) - simplified solid color for performance
+    ctx.fillStyle = '#A0522D';
     for (let i = 0; i < 3; i++) {
         const slatY = -5 + i * 4;
         ctx.fillRect(-length / 2 + 8, slatY, length - 16, 3);
@@ -3431,11 +3487,7 @@ function drawKinkedRail(startScreen, endScreen, rail) {
     const mid2X = startScreen.x + dx * 0.7;
     const mid2Y = startScreen.y + dy * 0.7;
 
-    // Draw support posts at kink points
-    const supportGrad = ctx.createLinearGradient(0, 0, 0, 15);
-    supportGrad.addColorStop(0, '#888');
-    supportGrad.addColorStop(1, '#555');
-
+    // Draw support posts at kink points - use solid color for performance
     const supports = [startScreen, {x: mid1X, y: mid1Y}, {x: mid2X, y: mid2Y}, endScreen];
     for (const pos of supports) {
         ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
@@ -3443,20 +3495,15 @@ function drawKinkedRail(startScreen, endScreen, rail) {
         ctx.ellipse(pos.x + 2, pos.y + 18, 5, 3, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.fillStyle = supportGrad;
+        ctx.fillStyle = '#777';
         ctx.fillRect(pos.x - 2, pos.y + 2, 4, 14);
     }
 
     // Draw rail segments
     ctx.save();
 
-    // Rail gradient
-    const railGrad = ctx.createLinearGradient(startScreen.x, startScreen.y - 3, startScreen.x, startScreen.y + 3);
-    railGrad.addColorStop(0, '#ddd');
-    railGrad.addColorStop(0.5, '#fff');
-    railGrad.addColorStop(1, '#999');
-
-    ctx.strokeStyle = railGrad;
+    // Rail - simplified solid color for performance
+    ctx.strokeStyle = '#ccc';
     ctx.lineWidth = 6;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
@@ -5141,24 +5188,34 @@ function drawBeast() {
 }
 
 function drawParticles() {
-    for (const p of gameState.particles) {
+    const particles = gameState.particles;
+
+    // Draw non-spark particles first (no shadow blur needed)
+    for (let i = 0; i < particles.length; i++) {
+        const p = particles[i];
+        if (p.type === 'spark') continue;
+
         const screen = worldToScreen(p.x, p.y);
-
         ctx.globalAlpha = p.alpha;
-
-        if (p.type === 'spark') {
-            ctx.fillStyle = p.color;
-            ctx.shadowColor = p.color;
-            ctx.shadowBlur = 1;
-            ctx.beginPath();
-            ctx.arc(screen.x, screen.y, p.size, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.shadowBlur = 0;
-        } else {
-            ctx.fillStyle = p.color;
-            ctx.fillRect(screen.x - p.size/2, screen.y - p.size/2, p.size, p.size);
-        }
+        ctx.fillStyle = p.color;
+        ctx.fillRect(screen.x - p.size/2, screen.y - p.size/2, p.size, p.size);
     }
+
+    // Draw spark particles with shadow (batch shadow state change)
+    ctx.shadowBlur = getShadowBlur(3);
+    for (let i = 0; i < particles.length; i++) {
+        const p = particles[i];
+        if (p.type !== 'spark') continue;
+
+        const screen = worldToScreen(p.x, p.y);
+        ctx.globalAlpha = p.alpha;
+        ctx.fillStyle = p.color;
+        ctx.shadowColor = p.color;
+        ctx.beginPath();
+        ctx.arc(screen.x, screen.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    ctx.shadowBlur = 0;
     ctx.globalAlpha = 1;
 }
 
@@ -5218,11 +5275,11 @@ function drawHUD() {
     // Combo (if active)
     if (gameState.trickMultiplier > 1) {
         const comboY = 50;
-        ctx.font = 'bold 14px "Press Start 2P", monospace';
+        ctx.font = FONTS.pressStart14;
         ctx.textAlign = 'center';
         ctx.fillStyle = COLORS.gold;
         ctx.shadowColor = COLORS.gold;
-        ctx.shadowBlur = 2;
+        ctx.shadowBlur = getShadowBlur(5);
         ctx.fillText(`x${gameState.trickMultiplier.toFixed(1)}`, CANVAS_WIDTH/2, comboY);
         ctx.shadowBlur = 0;
 
@@ -5236,7 +5293,7 @@ function drawHUD() {
 
         // Chain count
         if (gameState.comboChainLength > 1) {
-            ctx.font = '10px "Press Start 2P", monospace';
+            ctx.font = FONTS.pressStart10;
             ctx.fillStyle = COLORS.limeGreen;
             ctx.fillText(`${gameState.comboChainLength} chain`, CANVAS_WIDTH/2, comboY + 26);
         }
@@ -5253,15 +5310,15 @@ function drawHUD() {
         ctx.fillRect(15, flowY, flowBarWidth, 10);
 
         // Flow bar fill with gradient
-        const flowGrad = ctx.createLinearGradient(15, flowY, 15 + flowBarWidth, flowY);
-        flowGrad.addColorStop(0, COLORS.cyan);
-        flowGrad.addColorStop(0.5, COLORS.limeGreen);
-        flowGrad.addColorStop(1, COLORS.gold);
-        ctx.fillStyle = flowGrad;
-        ctx.fillRect(15, flowY, flowBarWidth * flowFill, 10);
+        // Flow bar fill with cached gradient (translate to position)
+        ctx.save();
+        ctx.translate(15, flowY);
+        ctx.fillStyle = gradientCache.static.flowMeter;
+        ctx.fillRect(0, 0, flowBarWidth * flowFill, 10);
+        ctx.restore();
 
         // Flow label
-        ctx.font = '8px "Press Start 2P", monospace';
+        ctx.font = FONTS.pressStart8;
         ctx.textAlign = 'left';
         ctx.fillStyle = COLORS.cyan;
         ctx.fillText('FLOW', 15, flowY - 12);
@@ -5275,24 +5332,24 @@ function drawHUD() {
 
     // Collectibles count (bottom right)
     if (gameState.collectiblesCollected > 0) {
-        ctx.font = '10px "Press Start 2P", monospace';
+        ctx.font = FONTS.pressStart10;
         ctx.textAlign = 'right';
         ctx.fillStyle = COLORS.gold;
         ctx.shadowColor = COLORS.gold;
-        ctx.shadowBlur = 5;
+        ctx.shadowBlur = getShadowBlur(8);
         ctx.fillText(`❄${gameState.collectiblesCollected}`, CANVAS_WIDTH - 15, CANVAS_HEIGHT - 35);
         ctx.shadowBlur = 0;
     }
 
     // Danger warning
     if (gameState.dangerLevel > 0.5) {
-        const pulse = Math.sin(gameState.animationTime * 10) * 0.3 + 0.7;
+        const pulse = animCache.sin10 * 0.3 + 0.7;  // Use cached sin value
         ctx.globalAlpha = gameState.dangerLevel * pulse;
-        ctx.font = 'bold 20px "Press Start 2P", monospace';
+        ctx.font = FONTS.pressStart20;
         ctx.textAlign = 'center';
         ctx.fillStyle = COLORS.danger;
         ctx.shadowColor = COLORS.danger;
-        ctx.shadowBlur = 3;
+        ctx.shadowBlur = getShadowBlur(6);
         ctx.fillText('SPEED UP!', CANVAS_WIDTH/2, CANVAS_HEIGHT - 60);
         ctx.shadowBlur = 0;
         ctx.globalAlpha = 1;
@@ -5300,10 +5357,12 @@ function drawHUD() {
 }
 
 function drawNeonText(text, x, y, color, size, align) {
-    ctx.font = `bold ${size}px "Press Start 2P", monospace`;
+    // Use cached font if available, otherwise build string
+    const fontKey = `pressStart${size}`;
+    ctx.font = FONTS[fontKey] || `bold ${size}px "Press Start 2P", monospace`;
     ctx.textAlign = align;
     ctx.shadowColor = color;
-    ctx.shadowBlur = 2;
+    ctx.shadowBlur = getShadowBlur(5);
     ctx.fillStyle = color;
     ctx.fillText(text, x, y);
     ctx.shadowBlur = 0;
@@ -5311,17 +5370,23 @@ function drawNeonText(text, x, y, color, size, align) {
 
 function drawDangerVignette() {
     const intensity = gameState.dangerLevel * 0.4;
-    const pulse = Math.sin(gameState.animationTime * 6) * 0.1;
+    const pulse = animCache.sin6 * 0.1;  // Use cached sin value
 
-    const gradient = ctx.createRadialGradient(
-        CANVAS_WIDTH/2, CANVAS_HEIGHT/2, CANVAS_HEIGHT * 0.3,
-        CANVAS_WIDTH/2, CANVAS_HEIGHT/2, CANVAS_HEIGHT * 0.7
-    );
-    gradient.addColorStop(0, 'rgba(255, 0, 50, 0)');
-    gradient.addColorStop(1, `rgba(255, 0, 50, ${intensity + pulse})`);
+    // Cache the danger vignette gradient (recreated only on canvas resize)
+    if (!gradientCache.dangerVignette) {
+        gradientCache.dangerVignette = ctx.createRadialGradient(
+            CANVAS_WIDTH/2, CANVAS_HEIGHT/2, CANVAS_HEIGHT * 0.3,
+            CANVAS_WIDTH/2, CANVAS_HEIGHT/2, CANVAS_HEIGHT * 0.7
+        );
+        gradientCache.dangerVignette.addColorStop(0, 'rgba(255, 0, 50, 0)');
+        gradientCache.dangerVignette.addColorStop(1, 'rgba(255, 0, 50, 1)');
+    }
 
-    ctx.fillStyle = gradient;
+    // Use globalAlpha to modulate intensity instead of recreating gradient
+    ctx.globalAlpha = intensity + pulse;
+    ctx.fillStyle = gradientCache.dangerVignette;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    ctx.globalAlpha = 1;
 }
 
 function drawSpeedLines() {
@@ -5504,6 +5569,7 @@ function startGame() {
         grinding: false,
         grindProgress: 0,
         grindStartTime: 0,
+        grindFrames: 0,
         grindImmunity: 0,
         lastRail: null,
         currentRail: null,
@@ -5939,15 +6005,14 @@ function updateLodge(dt) {
         lodge.playerY = Math.min(LODGE.interiorHeight - margin, lodge.playerY + speed);
     }
 
-    // Check if player reached exit door
+    // Check if player reached exit door (use squared distance, 40^2 = 1600)
     const exitX = LODGE.interiorWidth / 2;
     const exitY = LODGE.interiorHeight - 20;
-    const distToExit = Math.sqrt(
-        Math.pow(lodge.playerX - exitX, 2) +
-        Math.pow(lodge.playerY - exitY, 2)
-    );
+    const edx = lodge.playerX - exitX;
+    const edy = lodge.playerY - exitY;
+    const distToExitSq = edx * edx + edy * edy;
 
-    if (distToExit < 40) {
+    if (distToExitSq < 1600) {  // 40^2 = 1600
         exitLodge();
     }
 }
