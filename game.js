@@ -190,8 +190,9 @@ const TERRAIN = {
     baseDensity: 0.08,          // Fewer obstacles
     maxDensity: 0.18,           // Less cluttered
     densityRampDistance: 4000,
-    jumpChance: 0.20,           // Keep jumps plentiful
-    railChance: 0.04,           // Reduced - fewer rails
+    jumpChance: 0.08,           // Reduced - fewer jumps (was 0.20)
+    railChance: 0.06,           // Increased grindable objects (was 0.04)
+    treeClusterChance: 0.45,    // Higher tree cluster chance (was 0.25)
     clearPathWidth: 2
 };
 
@@ -255,17 +256,37 @@ const TRICKS = {
     epicGrind: { name: 'EPIC GRIND', minLen: 250, maxLen: 9999, points: 400 }
 };
 
-// Automatic trick animations when airborne
+// Automatic trick animations when airborne - expanded variety
 const AUTO_TRICKS = [
-    { name: '360 Spin', type: 'spin', rotSpeed: 720, points: 200 },
-    { name: 'Backflip', type: 'flip', flipSpeed: 500, points: 250 },
-    { name: 'Method Grab', type: 'grab', grabStyle: 'method', points: 150 },
-    { name: 'Indy Grab', type: 'grab', grabStyle: 'indy', points: 150 },
-    { name: 'Tail Grab', type: 'grab', grabStyle: 'tail', points: 125 },
-    { name: '540 Spin', type: 'spin', rotSpeed: 900, points: 350 },
-    { name: 'Front Flip', type: 'flip', flipSpeed: -500, points: 250 },
-    { name: 'Stalefish', type: 'grab', grabStyle: 'stale', points: 175 },
-    { name: 'Cork 720', type: 'combo', rotSpeed: 600, flipSpeed: 300, points: 500 }
+    // Grabs (most common - happen on any decent jump)
+    { name: 'Indy Grab', type: 'grab', grabStyle: 'indy', points: 100 },
+    { name: 'Method', type: 'grab', grabStyle: 'method', points: 125 },
+    { name: 'Melon', type: 'grab', grabStyle: 'melon', points: 125 },
+    { name: 'Tail Grab', type: 'grab', grabStyle: 'tail', points: 100 },
+    { name: 'Nose Grab', type: 'grab', grabStyle: 'nose', points: 100 },
+    { name: 'Stalefish', type: 'grab', grabStyle: 'stale', points: 150 },
+    { name: 'Mute', type: 'grab', grabStyle: 'mute', points: 125 },
+    { name: 'Roast Beef', type: 'grab', grabStyle: 'roastbeef', points: 175 },
+    { name: 'Japan Air', type: 'grab', grabStyle: 'japan', points: 175 },
+    { name: 'Crail', type: 'grab', grabStyle: 'crail', points: 150 },
+    // Tweaked grabs (stylized versions)
+    { name: 'Tweaked Method', type: 'grab', grabStyle: 'method', tweaked: true, points: 175 },
+    { name: 'Poked Tail', type: 'grab', grabStyle: 'tail', poked: true, points: 150 },
+    // Flips (medium jumps)
+    { name: 'Backflip', type: 'flip', flipSpeed: 500, points: 200 },
+    { name: 'Front Flip', type: 'flip', flipSpeed: -500, points: 200 },
+    { name: 'Wildcat', type: 'flip', flipSpeed: 450, backflip: true, points: 225 },
+    { name: 'Tamedog', type: 'flip', flipSpeed: -450, frontflip: true, points: 225 },
+    // Spins (only when player initiates direction)
+    { name: '360', type: 'spin', rotSpeed: 720, points: 150, requiresInput: true },
+    { name: '540', type: 'spin', rotSpeed: 900, points: 250, requiresInput: true },
+    { name: '720', type: 'spin', rotSpeed: 1080, points: 400, requiresInput: true },
+    // Combo tricks (big jumps only)
+    { name: 'Cork 540', type: 'combo', rotSpeed: 540, flipSpeed: 200, points: 350 },
+    { name: 'Cork 720', type: 'combo', rotSpeed: 720, flipSpeed: 250, points: 500 },
+    { name: 'Rodeo 540', type: 'combo', rotSpeed: 540, flipSpeed: -200, points: 375 },
+    { name: 'McTwist', type: 'combo', rotSpeed: 540, flipSpeed: 300, inverted: true, points: 450 },
+    { name: 'Double Cork', type: 'combo', rotSpeed: 720, flipSpeed: 400, points: 750 }
 ];
 
 const CHASE = {
@@ -493,6 +514,7 @@ let gameState = {
         grinding: false,
         grindProgress: 0,
         currentRail: null,
+        currentGrindable: null, // For varied grindable objects
         crashed: false,
         crashTimer: 0,
         stunned: 0,
@@ -502,7 +524,15 @@ let gameState = {
         autoTrick: null,
         autoTrickProgress: 0,
         flipRotation: 0,
-        grabPhase: 0
+        grabPhase: 0,
+        grabTweak: 0,      // Extra tweak extension for styled grabs
+        grabPoke: 0,       // Poked leg extension
+        // Jump animation state
+        spinDirection: 0,   // -1 = left, 0 = none, 1 = right
+        preJumpAngle: 0,    // Angle before jumping (to maintain orientation)
+        jumpLaunchPower: 0, // How big the jump is
+        preloadCrouch: 0,   // Crouch animation before launch (0-1)
+        approachingJump: null // Jump we're about to hit
     },
 
     camera: {
@@ -558,6 +588,21 @@ let gameState = {
     trickMultiplier: 1,
     trickComboTimer: 0,
     maxCombo: 1,
+    comboChainLength: 0,
+
+    // Collectibles
+    collectibles: [],
+    boostPads: [],
+    collectiblesCollected: 0,
+
+    // Flow state - reward consistent good play
+    flowMeter: 0,        // 0-100, builds with tricks/near-misses
+    flowMultiplier: 1,   // Extra score multiplier when in flow
+    nearMissStreak: 0,   // Consecutive near-misses
+
+    // Speed streak
+    speedStreak: 0,      // Time spent at high speed
+    speedBonus: 0,       // Accumulated speed bonus points
 
     particles: [],
     celebrations: [],
@@ -888,8 +933,8 @@ function generateTerrainChunk(chunkIndex) {
         }
     }
 
-    // 15% chance per chunk to spawn a jump sequence (2-4 consecutive jumps for combos)
-    if (seededRandom(baseSeed + 999) < 0.15) {
+    // 8% chance per chunk to spawn a jump sequence (2-3 consecutive jumps for combos)
+    if (seededRandom(baseSeed + 999) < 0.08) {
         const seqLane = Math.floor(seededRandom(baseSeed + 998) * (gridCols - 2)) + 1;
         const seqStart = chunk.y + 100 + seededRandom(baseSeed + 997) * 200;
         const seqCount = 2 + Math.floor(seededRandom(baseSeed + 996) * 3); // 2-4 jumps
@@ -955,7 +1000,8 @@ function generateTerrainChunk(chunkIndex) {
     }
 
     // Mark rail endpoints as used (prevents obstacles from spawning at dismount points)
-    for (const rail of tempRails) {
+    for (let railIdx = 0; railIdx < tempRails.length; railIdx++) {
+        const rail = tempRails[railIdx];
         const endRow = Math.floor((rail.endY - chunk.y) / 80);
         const endCol = Math.round(rail.endColApprox);
 
@@ -970,24 +1016,30 @@ function generateTerrainChunk(chunkIndex) {
             }
         }
 
+        // Randomly select grindable type with more variety
+        const grindableTypes = ['rail', 'rail', 'funbox', 'log', 'bench', 'kinked', 'rail'];
+        const typeIndex = Math.floor(seededRandom(baseSeed + railIdx * 100 + 50) * grindableTypes.length);
+        const grindableType = grindableTypes[typeIndex];
+
         // Add rail to chunk (remove temp properties)
         chunk.rails.push({
             x: rail.x,
             y: rail.y,
             endX: rail.endX,
             endY: rail.endY,
-            length: rail.length
+            length: rail.length,
+            grindableType: grindableType
         });
     }
 
-    // ===== PHASE 3: Generate tree clusters (larger clusters now) =====
+    // ===== PHASE 3: Generate tree clusters (larger and more frequent) =====
 
-    // 25% chance to spawn a PRIMARY tree cluster per chunk (6-12 trees, was 4-7)
-    if (seededRandom(baseSeed + 777) < 0.25) {
+    // 50% chance to spawn a PRIMARY tree cluster per chunk (8-15 trees)
+    if (seededRandom(baseSeed + 777) < 0.50) {
         const clusterSeed = baseSeed + 778;
         const clusterRow = 1 + Math.floor(seededRandom(clusterSeed) * (gridRows - 3));
         const clusterCol = 1 + Math.floor(seededRandom(clusterSeed + 1) * (gridCols - 2));
-        const clusterSize = 6 + Math.floor(seededRandom(clusterSeed + 2) * 7); // 6-12 trees (was 4-7)
+        const clusterSize = 8 + Math.floor(seededRandom(clusterSeed + 2) * 8); // 8-15 trees
 
         // Generate cluster pattern (tight group of trees with wider spread)
         for (let i = 0; i < clusterSize; i++) {
@@ -1015,12 +1067,12 @@ function generateTerrainChunk(chunkIndex) {
         }
     }
 
-    // 20% chance for SECONDARY tree cluster (5-8 trees, was 3-5)
-    if (seededRandom(baseSeed + 888) < 0.20) {
+    // 40% chance for SECONDARY tree cluster (6-10 trees)
+    if (seededRandom(baseSeed + 888) < 0.40) {
         const clusterSeed = baseSeed + 889;
         const clusterRow = Math.floor(gridRows / 2) + Math.floor(seededRandom(clusterSeed) * (gridRows / 2 - 1));
         const clusterCol = Math.floor(seededRandom(clusterSeed + 1) * (gridCols - 1));
-        const clusterSize = 5 + Math.floor(seededRandom(clusterSeed + 2) * 4); // 5-8 trees (was 3-5)
+        const clusterSize = 6 + Math.floor(seededRandom(clusterSeed + 2) * 5); // 6-10 trees
 
         for (let i = 0; i < clusterSize; i++) {
             const offsetX = (seededRandom(clusterSeed + 50 + i) - 0.5) * 2.5;
@@ -1046,12 +1098,12 @@ function generateTerrainChunk(chunkIndex) {
         }
     }
 
-    // 15% chance for TERTIARY tree cluster (4-6 trees) - NEW
-    if (seededRandom(baseSeed + 666) < 0.15) {
+    // 30% chance for TERTIARY tree cluster (5-8 trees)
+    if (seededRandom(baseSeed + 666) < 0.30) {
         const clusterSeed = baseSeed + 667;
         const clusterRow = Math.floor(seededRandom(clusterSeed) * (gridRows - 2)) + 1;
         const clusterCol = Math.floor(seededRandom(clusterSeed + 1) * (gridCols - 2)) + 1;
-        const clusterSize = 4 + Math.floor(seededRandom(clusterSeed + 2) * 3); // 4-6 trees
+        const clusterSize = 5 + Math.floor(seededRandom(clusterSeed + 2) * 4); // 5-8 trees
 
         for (let i = 0; i < clusterSize; i++) {
             const offsetX = (seededRandom(clusterSeed + 80 + i) - 0.5) * 2;
@@ -1180,6 +1232,43 @@ function generateTerrainChunk(chunkIndex) {
         gameState.terrain.lastLodgeY = lodgeY;
     }
 
+    // ===== PHASE 6: Generate collectibles (snowflakes) =====
+    chunk.collectibles = [];
+    const collectibleCount = 3 + Math.floor(seededRandom(baseSeed + 2000) * 5); // 3-7 per chunk
+    for (let i = 0; i < collectibleCount; i++) {
+        const colX = (seededRandom(baseSeed + 2001 + i) - 0.5) * (TERRAIN.slopeWidth - 40);
+        const colY = chunk.y + seededRandom(baseSeed + 2100 + i) * TERRAIN.chunkHeight;
+        const cellKey = `${Math.floor((colY - chunk.y) / 80)},${Math.floor((colX / TERRAIN.laneWidth) + gridCols / 2)}`;
+
+        // Don't spawn in used cells or too close to obstacles
+        if (!usedCells.has(cellKey)) {
+            chunk.collectibles.push({
+                x: colX,
+                y: colY,
+                type: seededRandom(baseSeed + 2200 + i) < 0.15 ? 'big' : 'normal', // 15% chance for big
+                collected: false
+            });
+        }
+    }
+
+    // ===== PHASE 7: Generate boost pads =====
+    chunk.boostPads = [];
+    if (seededRandom(baseSeed + 3000) < 0.3) { // 30% chance per chunk
+        const boostX = (seededRandom(baseSeed + 3001) - 0.5) * (TERRAIN.slopeWidth - 100);
+        const boostY = chunk.y + 200 + seededRandom(baseSeed + 3002) * (TERRAIN.chunkHeight - 300);
+        const cellKey = `${Math.floor((boostY - chunk.y) / 80)},${Math.floor((boostX / TERRAIN.laneWidth) + gridCols / 2)}`;
+
+        if (!usedCells.has(cellKey)) {
+            chunk.boostPads.push({
+                x: boostX,
+                y: boostY,
+                width: 60,
+                height: 25,
+                boostAmount: 200 + seededRandom(baseSeed + 3003) * 100 // 200-300 speed boost
+            });
+        }
+    }
+
     return chunk;
 }
 
@@ -1196,6 +1285,8 @@ function updateTerrain() {
         gameState.jumps.push(...newChunk.jumps);
         gameState.rails.push(...newChunk.rails);
         gameState.lodges.push(...newChunk.lodges);
+        if (newChunk.collectibles) gameState.collectibles.push(...newChunk.collectibles);
+        if (newChunk.boostPads) gameState.boostPads.push(...newChunk.boostPads);
 
         terrain.nextChunkY += TERRAIN.chunkHeight;
     }
@@ -1206,6 +1297,8 @@ function updateTerrain() {
     gameState.jumps = gameState.jumps.filter(j => j.y > cullY);
     gameState.rails = gameState.rails.filter(r => r.endY > cullY);
     gameState.lodges = gameState.lodges.filter(l => l.y + l.height > cullY);
+    gameState.collectibles = gameState.collectibles.filter(c => c.y > cullY && !c.collected);
+    gameState.boostPads = gameState.boostPads.filter(b => b.y > cullY);
 }
 
 // ===================
@@ -1273,8 +1366,13 @@ function updateGroundPhysics(player, dt) {
     const carving = Math.abs(player.angle) > 20;
     const speedMod = carving ? PHYSICS.carveSpeedBoost : 1.0;
 
-    // Tuck for extra speed
-    if (input.down) {
+    // Up = carve back up the mountain to slow down, Down = tuck for extra speed
+    if (input.up) {
+        // Slowing down - carving uphill
+        player.speed -= PHYSICS.downhillAccel * 0.5 * dt;
+        player.speed = Math.max(player.speed, PHYSICS.minSpeed);
+    } else if (input.down) {
+        // Tucking for speed
         player.speed += PHYSICS.downhillAccel * 1.5 * dt;
     } else {
         player.speed += PHYSICS.downhillAccel * speedMod * dt;
@@ -1316,8 +1414,13 @@ function updateAirbornePhysics(player, dt) {
     player.lateralSpeed += inputDir * 150 * PHYSICS.airControlFactor * dt;
     player.lateralSpeed *= PHYSICS.airFriction;
 
-    // Manual trick rotation (if no auto trick or player overriding)
-    if (inputDir !== 0 && !player.autoTrick) {
+    // Update spin direction if player presses direction mid-air
+    if (inputDir !== 0 && player.spinDirection === 0) {
+        player.spinDirection = inputDir;
+    }
+
+    // Manual trick rotation - only if player is actively spinning
+    if (inputDir !== 0 && (!player.autoTrick || player.autoTrick.type === 'grab')) {
         player.trickRotation += inputDir * 400 * dt;
     }
 
@@ -1327,16 +1430,28 @@ function updateAirbornePhysics(player, dt) {
         player.autoTrickProgress += dt * 1.5; // Complete trick over ~0.67 seconds
 
         if (trick.type === 'spin' || trick.type === 'combo') {
-            // Spin tricks - rotate around Y axis (shown as 2D rotation)
-            player.trickRotation += trick.rotSpeed * dt;
+            // Spin tricks - only spin if player has a spin direction
+            if (player.spinDirection !== 0) {
+                const spinDir = player.spinDirection;
+                player.trickRotation += spinDir * trick.rotSpeed * dt;
+            }
         }
         if (trick.type === 'flip' || trick.type === 'combo') {
             // Flip tricks - rotate around X axis (forward/back flip)
             player.flipRotation += (trick.flipSpeed || 0) * dt;
         }
         if (trick.type === 'grab') {
-            // Grab tricks - oscillate grab phase
-            player.grabPhase = Math.sin(player.autoTrickProgress * Math.PI);
+            // Grab tricks - oscillate grab phase (tweak/poke adds extra motion)
+            const basePhase = Math.sin(player.autoTrickProgress * Math.PI);
+            player.grabPhase = basePhase;
+            // Tweaked grabs have extra extension
+            if (trick.tweaked) {
+                player.grabTweak = Math.sin(player.autoTrickProgress * Math.PI * 0.8) * 0.3;
+            }
+            // Poked grabs extend the leg
+            if (trick.poked) {
+                player.grabPoke = Math.sin(player.autoTrickProgress * Math.PI * 0.9) * 0.4;
+            }
         }
     }
 
@@ -1397,21 +1512,55 @@ function updateVisualPosition(player, dt) {
 }
 
 function triggerJump(player, jump) {
+    const inputDir = getInputDirection();
+
     player.airborne = true;
     player.altitude = 1;
     player.verticalVelocity = PHYSICS.jumpLaunchPower * jump.launchPower * (player.speed / 400);
     player.trickRotation = 0;
     player.airTime = 0;
+    player.spinDirection = inputDir; // Store spin direction at launch (0 = no spin)
+    player.preJumpAngle = player.angle; // Remember orientation before jump
+    player.jumpLaunchPower = jump.launchPower; // Store for animation reference
 
-    // Auto-select a random trick for bigger jumps
+    // Select trick based on jump power and input direction
     if (jump.launchPower >= 1.0) {
-        const trickIndex = Math.floor(Math.random() * AUTO_TRICKS.length);
-        player.autoTrick = AUTO_TRICKS[trickIndex];
+        // Filter tricks by type based on input
+        let availableTricks;
+        if (inputDir !== 0) {
+            // Player is pressing direction - allow spin tricks
+            availableTricks = AUTO_TRICKS.filter(t =>
+                t.type === 'spin' || t.type === 'combo' || t.type === 'grab'
+            );
+        } else {
+            // No direction input - only grabs and flips (no spins)
+            availableTricks = AUTO_TRICKS.filter(t =>
+                t.type === 'grab' || t.type === 'flip' ||
+                (t.type === 'combo' && jump.launchPower >= 1.4) // Combos only on big jumps
+            );
+        }
+
+        // Weight selection toward grabs for smaller jumps
+        if (jump.launchPower < 1.2) {
+            availableTricks = availableTricks.filter(t => t.type === 'grab' || t.type === 'flip');
+        }
+
+        const trickIndex = Math.floor(Math.random() * availableTricks.length);
+        player.autoTrick = availableTricks[trickIndex] || AUTO_TRICKS[0];
         player.autoTrickProgress = 0;
         player.flipRotation = 0;
         player.grabPhase = 0;
     } else {
-        player.autoTrick = null;
+        // Small jumps - just a simple grab or nothing
+        if (Math.random() < 0.6) {
+            const grabs = AUTO_TRICKS.filter(t => t.type === 'grab');
+            player.autoTrick = grabs[Math.floor(Math.random() * grabs.length)];
+            player.autoTrickProgress = 0;
+            player.grabPhase = 0;
+        } else {
+            player.autoTrick = null;
+        }
+        player.flipRotation = 0;
     }
 }
 
@@ -1443,24 +1592,58 @@ function landFromJump(player) {
         }
     }
 
+    // Big air bonus for long hang time
+    const bigAirBonus = player.airTime > 1.5 ? 1.5 : (player.airTime > 1.0 ? 1.2 : 1.0);
+    const bigAirText = bigAirBonus > 1.2 ? ' BIG AIR!' : (bigAirBonus > 1 ? ' Air!' : '');
+
+    // Track combo chain length
+    if (!gameState.comboChainLength) gameState.comboChainLength = 0;
+    gameState.comboChainLength++;
+
     if (trickLanded) {
-        const points = Math.floor(trickPoints * gameState.trickMultiplier);
+        const basePoints = Math.floor(trickPoints * bigAirBonus);
+        const points = Math.floor(basePoints * gameState.trickMultiplier);
         gameState.score += points;
 
+        // Enhanced celebration for combos
+        let celebrationText = trickName + bigAirText;
+        let celebrationColor = getNeonColor();
+        if (gameState.comboChainLength >= 5) {
+            celebrationText = 'INSANE ' + trickName + bigAirText;
+            celebrationColor = COLORS.yellow;
+        } else if (gameState.comboChainLength >= 3) {
+            celebrationText = 'SICK ' + trickName + bigAirText;
+            celebrationColor = COLORS.limeGreen;
+        }
+
         gameState.celebrations.push({
-            text: trickName,
+            text: celebrationText,
             subtext: `+${points}`,
-            color: getNeonColor(),
+            color: celebrationColor,
             timer: 1.5,
-            scale: 1.0 + (gameState.trickMultiplier - 1) * 0.15
+            scale: 1.0 + (gameState.trickMultiplier - 1) * 0.15 + (gameState.comboChainLength - 1) * 0.05
         });
 
         gameState.trickMultiplier = Math.min(gameState.trickMultiplier + 0.5, 5);
-        gameState.trickComboTimer = 2.0;
+        gameState.trickComboTimer = 2.5; // Longer window for combos
         gameState.maxCombo = Math.max(gameState.maxCombo, gameState.trickMultiplier);
     } else if (player.airTime > 0.4) {
-        const airPoints = Math.floor(player.airTime * 25);
+        // Even without a trick, reward hang time
+        const airPoints = Math.floor(player.airTime * 25 * gameState.trickMultiplier);
         gameState.score += airPoints;
+
+        if (player.airTime > 0.8) {
+            gameState.celebrations.push({
+                text: 'AIR TIME',
+                subtext: `+${airPoints}`,
+                color: COLORS.electricBlue,
+                timer: 1.0,
+                scale: 0.8
+            });
+            // Small multiplier increase for big air even without tricks
+            gameState.trickMultiplier = Math.min(gameState.trickMultiplier + 0.1, 5);
+            gameState.trickComboTimer = 1.5;
+        }
     }
 
     player.trickRotation = 0;
@@ -1484,6 +1667,7 @@ function startGrinding(player, rail) {
 function endGrind(player) {
     const rail = player.currentRail;
     const grindLength = rail.length * player.grindProgress;
+    const grindableType = rail.grindableType || 'rail';
 
     let trick = TRICKS.shortGrind;
     for (const [id, t] of Object.entries(TRICKS)) {
@@ -1492,22 +1676,67 @@ function endGrind(player) {
         }
     }
 
-    const points = Math.floor(trick.points * gameState.trickMultiplier);
+    // Bonus points for different grindable types
+    let typeBonus = 1.0;
+    let typeName = '';
+    switch (grindableType) {
+        case 'funbox':
+            typeBonus = 1.2;
+            typeName = 'Box ';
+            break;
+        case 'log':
+            typeBonus = 1.3;
+            typeName = 'Log ';
+            break;
+        case 'bench':
+            typeBonus = 1.15;
+            typeName = 'Bench ';
+            break;
+        case 'kinked':
+            typeBonus = 1.4;
+            typeName = 'Kink ';
+            break;
+    }
+
+    // Chain bonus: if we just landed from a jump (combo timer still high), extra points
+    const chainBonus = gameState.trickComboTimer > 1.5 ? 1.5 : 1.0;
+    const chainText = chainBonus > 1 ? ' CHAIN!' : '';
+
+    const basePoints = Math.floor(trick.points * typeBonus);
+    const points = Math.floor(basePoints * gameState.trickMultiplier * chainBonus);
     gameState.score += points;
 
+    // Track combo chain length
+    if (!gameState.comboChainLength) gameState.comboChainLength = 0;
+    gameState.comboChainLength++;
+
+    // Special celebration for long chains
+    let celebrationText = typeName + trick.name;
+    let celebrationColor = COLORS.cyan;
+    if (gameState.comboChainLength >= 5) {
+        celebrationText = 'LEGENDARY ' + typeName + trick.name;
+        celebrationColor = COLORS.yellow;
+    } else if (gameState.comboChainLength >= 3) {
+        celebrationText = 'SICK ' + typeName + trick.name;
+        celebrationColor = COLORS.limeGreen;
+    }
+
     gameState.celebrations.push({
-        text: trick.name,
+        text: celebrationText + chainText,
         subtext: `+${points}`,
-        color: COLORS.cyan,
+        color: celebrationColor,
         timer: 1.2,
-        scale: 1.0
+        scale: 1.0 + (gameState.comboChainLength - 1) * 0.1
     });
 
-    gameState.trickMultiplier = Math.min(gameState.trickMultiplier + 0.3, 5);
-    gameState.trickComboTimer = 2.0;
+    // Grind adds to multiplier - more for special types
+    const multiplierGain = 0.3 + (typeBonus - 1) * 0.5;
+    gameState.trickMultiplier = Math.min(gameState.trickMultiplier + multiplierGain, 5);
+    gameState.trickComboTimer = 2.5; // Slightly longer window for chaining
 
     player.grinding = false;
     player.currentRail = null;
+    player.currentGrindable = null;
 }
 
 function triggerCrash(player) {
@@ -1520,9 +1749,10 @@ function triggerCrash(player) {
     spawnCrashParticles(player.x, player.y);
     triggerScreenShake(12, 0.85);
 
-    // Reset combo
+    // Reset combo and chain
     gameState.trickMultiplier = 1;
     gameState.trickComboTimer = 0;
+    gameState.comboChainLength = 0;
 
     // Track crash for beast trigger
     const now = gameState.animationTime;
@@ -1542,6 +1772,44 @@ function triggerCrash(player) {
 // ===================
 // COLLISION DETECTION
 // ===================
+
+// Check if player is approaching a jump (for crouch animation)
+function checkApproachingJump(player, dt) {
+    if (player.airborne || player.grinding || player.crashed) {
+        player.approachingJump = null;
+        player.preloadCrouch = 0;
+        return;
+    }
+
+    // Look for jumps ahead
+    const lookAheadDist = 80; // pixels ahead to start crouch
+    let nearestJump = null;
+    let nearestDist = Infinity;
+
+    for (const jump of gameState.jumps) {
+        // Only consider jumps ahead of us and within lane
+        const distY = jump.y - player.y;
+        if (distY < 0 || distY > lookAheadDist) continue;
+        if (Math.abs(jump.x - player.x) > jump.width * 0.8) continue;
+
+        if (distY < nearestDist) {
+            nearestDist = distY;
+            nearestJump = jump;
+        }
+    }
+
+    player.approachingJump = nearestJump;
+
+    // Animate crouch based on distance
+    if (nearestJump) {
+        // Crouch intensifies as we get closer
+        const crouchTarget = 1 - (nearestDist / lookAheadDist);
+        player.preloadCrouch = lerp(player.preloadCrouch, crouchTarget, 12 * dt);
+    } else {
+        // Smoothly release crouch
+        player.preloadCrouch = lerp(player.preloadCrouch, 0, 8 * dt);
+    }
+}
 
 function checkCollisions() {
     const player = gameState.player;
@@ -1627,6 +1895,142 @@ function checkCollisions() {
                 triggerCrash(player);
                 return;
             }
+        }
+    }
+
+    // Check collectibles
+    for (const col of gameState.collectibles) {
+        if (col.collected) continue;
+        if (Math.abs(col.y - player.y) > 30) continue;
+        if (Math.abs(col.x - player.x) > 25) continue;
+
+        collectItem(col);
+    }
+
+    // Check boost pads
+    for (const boost of gameState.boostPads) {
+        if (Math.abs(boost.y - player.y) > 20) continue;
+        if (Math.abs(boost.x - player.x) > boost.width / 2) continue;
+
+        triggerBoost(player, boost);
+    }
+
+    // Check near-misses with obstacles
+    checkNearMisses(player);
+}
+
+function collectItem(collectible) {
+    if (collectible.collected) return;
+    collectible.collected = true;
+
+    const isBig = collectible.type === 'big';
+    const basePoints = isBig ? 100 : 25;
+    const points = Math.floor(basePoints * gameState.flowMultiplier);
+
+    gameState.score += points;
+    gameState.collectiblesCollected++;
+
+    // Build flow meter
+    gameState.flowMeter = Math.min(100, gameState.flowMeter + (isBig ? 15 : 5));
+
+    // Spawn sparkle particles
+    for (let i = 0; i < (isBig ? 8 : 4); i++) {
+        gameState.particles.push({
+            x: collectible.x + (Math.random() - 0.5) * 20,
+            y: collectible.y + (Math.random() - 0.5) * 20,
+            vx: (Math.random() - 0.5) * 150,
+            vy: (Math.random() - 0.5) * 150 - 50,
+            size: isBig ? 4 : 2,
+            color: COLORS.yellow,
+            alpha: 1,
+            type: 'spark',
+            life: 0.5
+        });
+    }
+
+    if (isBig) {
+        gameState.celebrations.push({
+            text: 'BIG SNOWFLAKE!',
+            subtext: `+${points}`,
+            color: COLORS.yellow,
+            timer: 1.0,
+            scale: 1.0
+        });
+    }
+}
+
+function triggerBoost(player, boost) {
+    // Only trigger once per pad (use cooldown)
+    if (boost.lastTriggered && gameState.animationTime - boost.lastTriggered < 1.0) return;
+    boost.lastTriggered = gameState.animationTime;
+
+    player.speed = Math.min(PHYSICS.maxSpeed * 1.2, player.speed + boost.boostAmount);
+
+    // Visual feedback
+    triggerScreenShake(5, 0.3);
+
+    // Spawn boost particles
+    for (let i = 0; i < 10; i++) {
+        gameState.particles.push({
+            x: player.x + (Math.random() - 0.5) * 30,
+            y: player.y + 20,
+            vx: (Math.random() - 0.5) * 100,
+            vy: -50 - Math.random() * 100,
+            size: 3,
+            color: COLORS.cyan,
+            alpha: 1,
+            type: 'spark',
+            life: 0.4
+        });
+    }
+
+    gameState.celebrations.push({
+        text: 'BOOST!',
+        subtext: '',
+        color: COLORS.cyan,
+        timer: 0.8,
+        scale: 1.0
+    });
+
+    // Small flow bonus
+    gameState.flowMeter = Math.min(100, gameState.flowMeter + 5);
+}
+
+function checkNearMisses(player) {
+    // Check for near-misses with obstacles
+    const nearMissThreshold = 35; // Close but not colliding
+
+    for (const obs of gameState.obstacles) {
+        const dist = Math.sqrt(
+            Math.pow(obs.x - player.x, 2) +
+            Math.pow(obs.y - player.y, 2)
+        );
+
+        // Near miss: close but not crashed
+        if (dist < nearMissThreshold && dist > 20) {
+            if (!obs.nearMissTriggered) {
+                obs.nearMissTriggered = true;
+
+                gameState.nearMissStreak++;
+                const points = 25 * gameState.nearMissStreak;
+                gameState.score += points;
+
+                // Build flow meter
+                gameState.flowMeter = Math.min(100, gameState.flowMeter + 8);
+
+                if (gameState.nearMissStreak >= 3) {
+                    gameState.celebrations.push({
+                        text: `CLOSE CALL x${gameState.nearMissStreak}!`,
+                        subtext: `+${points}`,
+                        color: COLORS.limeGreen,
+                        timer: 0.8,
+                        scale: 0.9
+                    });
+                }
+            }
+        } else if (dist > nearMissThreshold + 20) {
+            // Reset near-miss flag when far enough away
+            obs.nearMissTriggered = false;
         }
     }
 }
@@ -1872,8 +2276,51 @@ function updateCombo(dt) {
     if (gameState.trickComboTimer > 0) {
         gameState.trickComboTimer -= dt;
         if (gameState.trickComboTimer <= 0) {
+            // Combo expired - celebrate if it was a good chain
+            if (gameState.comboChainLength >= 3 && gameState.trickMultiplier > 1) {
+                const chainBonus = Math.floor(gameState.comboChainLength * gameState.trickMultiplier * 50);
+                gameState.score += chainBonus;
+                gameState.celebrations.push({
+                    text: `${gameState.comboChainLength}x CHAIN COMPLETE`,
+                    subtext: `+${chainBonus} bonus`,
+                    color: COLORS.yellow,
+                    timer: 1.5,
+                    scale: 1.2
+                });
+            }
             gameState.trickMultiplier = 1;
+            gameState.comboChainLength = 0;
         }
+    }
+
+    // Flow meter decay
+    if (gameState.flowMeter > 0) {
+        gameState.flowMeter -= dt * 3; // Decays over time
+        if (gameState.flowMeter < 0) gameState.flowMeter = 0;
+    }
+
+    // Flow multiplier based on flow meter
+    gameState.flowMultiplier = 1 + (gameState.flowMeter / 100) * 0.5; // Up to 1.5x
+
+    // Speed streak - reward maintaining high speed
+    const player = gameState.player;
+    if (player.speed > PHYSICS.maxSpeed * 0.75 && !player.crashed && !player.airborne) {
+        gameState.speedStreak += dt;
+
+        // Every 3 seconds at high speed, bonus points
+        if (Math.floor(gameState.speedStreak) > Math.floor(gameState.speedStreak - dt) && gameState.speedStreak >= 3) {
+            const speedBonus = 50;
+            gameState.score += speedBonus;
+            gameState.speedBonus += speedBonus;
+            gameState.flowMeter = Math.min(100, gameState.flowMeter + 3);
+        }
+    } else if (player.speed < PHYSICS.maxSpeed * 0.5 || player.crashed) {
+        gameState.speedStreak = Math.max(0, gameState.speedStreak - dt * 2);
+    }
+
+    // Near-miss streak decay
+    if (gameState.nearMissStreak > 0 && gameState.trickComboTimer <= 0) {
+        gameState.nearMissStreak = 0;
     }
 }
 
@@ -1941,8 +2388,14 @@ function draw() {
     // Draw jumps
     drawJumps();
 
+    // Draw boost pads (on ground)
+    drawBoostPads();
+
     // Draw lodges (behind obstacles, in front of jumps)
     drawLodges();
+
+    // Draw collectibles
+    drawCollectibles();
 
     // Draw obstacles
     drawObstacles();
@@ -2333,32 +2786,419 @@ function drawJumps() {
 function drawRails() {
     const camera = gameState.camera;
 
-    ctx.strokeStyle = COLORS.magenta;
-    ctx.lineWidth = 4;
-    ctx.shadowColor = COLORS.magenta;
-    ctx.shadowBlur = 10;
-
     for (const rail of gameState.rails) {
         if (rail.endY < camera.y - 50 || rail.y > camera.y + CANVAS_HEIGHT + 50) continue;
 
         const startScreen = worldToScreen(rail.x, rail.y);
         const endScreen = worldToScreen(rail.endX, rail.endY);
+        const grindableType = rail.grindableType || 'rail';
 
-        ctx.beginPath();
-        ctx.moveTo(startScreen.x, startScreen.y);
-        ctx.lineTo(endScreen.x, endScreen.y);
-        ctx.stroke();
+        if (grindableType === 'rail') {
+            drawMetalRail(startScreen, endScreen, rail);
+        } else if (grindableType === 'funbox') {
+            drawFunbox(startScreen, endScreen, rail);
+        } else if (grindableType === 'log') {
+            drawLog(startScreen, endScreen, rail);
+        } else if (grindableType === 'bench') {
+            drawBench(startScreen, endScreen, rail);
+        } else if (grindableType === 'kinked') {
+            drawKinkedRail(startScreen, endScreen, rail);
+        } else {
+            // Default to metal rail
+            drawMetalRail(startScreen, endScreen, rail);
+        }
+    }
+}
 
-        // End caps
-        ctx.fillStyle = COLORS.magenta;
+function drawMetalRail(startScreen, endScreen, rail) {
+    const dx = endScreen.x - startScreen.x;
+    const dy = endScreen.y - startScreen.y;
+    const length = Math.sqrt(dx * dx + dy * dy);
+    const angle = Math.atan2(dy, dx);
+
+    // Rail height above ground
+    const railHeight = 12;
+
+    // Support posts every ~60 pixels
+    const numSupports = Math.max(2, Math.ceil(length / 60));
+
+    // Draw shadows first
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+    for (let i = 0; i < numSupports; i++) {
+        const t = i / (numSupports - 1);
+        const x = lerp(startScreen.x, endScreen.x, t);
+        const y = lerp(startScreen.y, endScreen.y, t);
         ctx.beginPath();
-        ctx.arc(startScreen.x, startScreen.y, 5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.arc(endScreen.x, endScreen.y, 5, 0, Math.PI * 2);
+        ctx.ellipse(x + 3, y + railHeight + 5, 6, 3, 0, 0, Math.PI * 2);
         ctx.fill();
     }
 
+    // Draw support posts
+    const supportGrad = ctx.createLinearGradient(0, 0, 0, railHeight);
+    supportGrad.addColorStop(0, '#888');
+    supportGrad.addColorStop(0.5, '#aaa');
+    supportGrad.addColorStop(1, '#666');
+
+    for (let i = 0; i < numSupports; i++) {
+        const t = i / (numSupports - 1);
+        const x = lerp(startScreen.x, endScreen.x, t);
+        const y = lerp(startScreen.y, endScreen.y, t);
+
+        // Support post
+        ctx.fillStyle = supportGrad;
+        ctx.fillRect(x - 3, y, 6, railHeight);
+
+        // Support base plate
+        ctx.fillStyle = '#555';
+        ctx.fillRect(x - 5, y + railHeight - 2, 10, 4);
+    }
+
+    // Main rail - metallic with shine
+    ctx.save();
+
+    // Rail body (cylindrical appearance)
+    const railGrad = ctx.createLinearGradient(
+        startScreen.x, startScreen.y - 4,
+        startScreen.x, startScreen.y + 4
+    );
+    railGrad.addColorStop(0, '#ddd');
+    railGrad.addColorStop(0.3, '#fff');
+    railGrad.addColorStop(0.5, '#ccc');
+    railGrad.addColorStop(1, '#888');
+
+    ctx.strokeStyle = railGrad;
+    ctx.lineWidth = 8;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(startScreen.x, startScreen.y);
+    ctx.lineTo(endScreen.x, endScreen.y);
+    ctx.stroke();
+
+    // Highlight shine on top
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(startScreen.x, startScreen.y - 2);
+    ctx.lineTo(endScreen.x, endScreen.y - 2);
+    ctx.stroke();
+
+    // Neon glow effect
+    ctx.shadowColor = COLORS.cyan;
+    ctx.shadowBlur = 8;
+    ctx.strokeStyle = 'rgba(0, 255, 255, 0.3)';
+    ctx.lineWidth = 10;
+    ctx.beginPath();
+    ctx.moveTo(startScreen.x, startScreen.y);
+    ctx.lineTo(endScreen.x, endScreen.y);
+    ctx.stroke();
+
+    ctx.restore();
+
+    // End caps (rounded metal)
+    ctx.fillStyle = '#bbb';
+    ctx.shadowColor = COLORS.cyan;
+    ctx.shadowBlur = 6;
+    ctx.beginPath();
+    ctx.arc(startScreen.x, startScreen.y, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(endScreen.x, endScreen.y, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+}
+
+function drawFunbox(startScreen, endScreen, rail) {
+    const dx = endScreen.x - startScreen.x;
+    const dy = endScreen.y - startScreen.y;
+    const length = Math.sqrt(dx * dx + dy * dy);
+
+    // Funbox is a rectangular box with metal coping on top
+    const boxWidth = 30;
+    const boxHeight = 15;
+
+    // Calculate midpoint and angle
+    const midX = (startScreen.x + endScreen.x) / 2;
+    const midY = (startScreen.y + endScreen.y) / 2;
+
+    ctx.save();
+    ctx.translate(midX, midY);
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+    ctx.beginPath();
+    ctx.ellipse(3, boxHeight + 5, length / 2 + 5, 8, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Box body (wood texture)
+    const woodGrad = ctx.createLinearGradient(-length / 2, -boxHeight, length / 2, boxHeight);
+    woodGrad.addColorStop(0, '#8B6914');
+    woodGrad.addColorStop(0.5, '#A0522D');
+    woodGrad.addColorStop(1, '#6B4423');
+
+    ctx.fillStyle = woodGrad;
+    ctx.beginPath();
+    ctx.moveTo(-length / 2, 0);
+    ctx.lineTo(-length / 2 - 8, boxHeight);
+    ctx.lineTo(length / 2 + 8, boxHeight);
+    ctx.lineTo(length / 2, 0);
+    ctx.closePath();
+    ctx.fill();
+
+    // Wood grain lines
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+    ctx.lineWidth = 1;
+    for (let i = -3; i <= 3; i++) {
+        const x = i * length / 7;
+        ctx.beginPath();
+        ctx.moveTo(x, 2);
+        ctx.lineTo(x - 2, boxHeight - 2);
+        ctx.stroke();
+    }
+
+    // Top surface
+    ctx.fillStyle = '#9B7B14';
+    ctx.fillRect(-length / 2, -3, length, 6);
+
+    // Metal coping on top edge
+    const copingGrad = ctx.createLinearGradient(0, -5, 0, 2);
+    copingGrad.addColorStop(0, '#ddd');
+    copingGrad.addColorStop(0.5, '#fff');
+    copingGrad.addColorStop(1, '#999');
+
+    ctx.fillStyle = copingGrad;
+    ctx.fillRect(-length / 2, -5, length, 4);
+
+    // Coping shine
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.fillRect(-length / 2, -5, length, 1);
+
+    // Neon accent
+    ctx.shadowColor = COLORS.magenta;
+    ctx.shadowBlur = 6;
+    ctx.strokeStyle = COLORS.magenta;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(-length / 2, -5, length, 4);
+    ctx.shadowBlur = 0;
+
+    ctx.restore();
+}
+
+function drawLog(startScreen, endScreen, rail) {
+    const dx = endScreen.x - startScreen.x;
+    const dy = endScreen.y - startScreen.y;
+    const length = Math.sqrt(dx * dx + dy * dy);
+    const angle = Math.atan2(dy, dx);
+
+    ctx.save();
+    ctx.translate(startScreen.x, startScreen.y);
+    ctx.rotate(angle);
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+    ctx.beginPath();
+    ctx.ellipse(length / 2 + 3, 15, length / 2 + 5, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Main log body
+    const logGrad = ctx.createLinearGradient(0, -8, 0, 8);
+    logGrad.addColorStop(0, '#5D4E37');
+    logGrad.addColorStop(0.3, '#8B7355');
+    logGrad.addColorStop(0.7, '#6B5344');
+    logGrad.addColorStop(1, '#4A3728');
+
+    ctx.fillStyle = logGrad;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 8, 10, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillRect(0, -8, length, 16);
+
+    ctx.beginPath();
+    ctx.ellipse(length, 0, 8, 10, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Bark texture lines
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < length; i += 15) {
+        ctx.beginPath();
+        ctx.moveTo(i, -7);
+        ctx.quadraticCurveTo(i + 5, 0, i, 7);
+        ctx.stroke();
+    }
+
+    // End grain rings
+    ctx.strokeStyle = '#4A3728';
+    ctx.lineWidth = 1;
+    for (let r = 2; r < 8; r += 2) {
+        ctx.beginPath();
+        ctx.ellipse(0, 0, r, r * 1.2, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.ellipse(length, 0, r, r * 1.2, 0, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+
+    // Snow on top
+    ctx.fillStyle = 'rgba(240, 248, 255, 0.6)';
+    ctx.beginPath();
+    ctx.moveTo(5, -8);
+    ctx.quadraticCurveTo(length / 4, -12, length / 2, -9);
+    ctx.quadraticCurveTo(length * 3 / 4, -11, length - 5, -8);
+    ctx.lineTo(length - 5, -6);
+    ctx.quadraticCurveTo(length / 2, -8, 5, -6);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.restore();
+}
+
+function drawBench(startScreen, endScreen, rail) {
+    const dx = endScreen.x - startScreen.x;
+    const dy = endScreen.y - startScreen.y;
+    const length = Math.sqrt(dx * dx + dy * dy);
+
+    const midX = (startScreen.x + endScreen.x) / 2;
+    const midY = (startScreen.y + endScreen.y) / 2;
+
+    ctx.save();
+    ctx.translate(midX, midY);
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+    ctx.beginPath();
+    ctx.ellipse(3, 18, length / 2 + 8, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Bench legs (metal)
+    const legGrad = ctx.createLinearGradient(0, -5, 0, 15);
+    legGrad.addColorStop(0, '#666');
+    legGrad.addColorStop(0.5, '#888');
+    legGrad.addColorStop(1, '#444');
+
+    ctx.fillStyle = legGrad;
+    // Left leg frame
+    ctx.fillRect(-length / 2 + 5, -2, 4, 18);
+    ctx.fillRect(-length / 2 + 5, 12, 15, 4);
+    // Right leg frame
+    ctx.fillRect(length / 2 - 9, -2, 4, 18);
+    ctx.fillRect(length / 2 - 20, 12, 15, 4);
+
+    // Seat slats (wood)
+    const woodGrad = ctx.createLinearGradient(-length / 2, 0, length / 2, 0);
+    woodGrad.addColorStop(0, '#A0522D');
+    woodGrad.addColorStop(0.5, '#CD853F');
+    woodGrad.addColorStop(1, '#8B4513');
+
+    ctx.fillStyle = woodGrad;
+    for (let i = 0; i < 3; i++) {
+        const slatY = -5 + i * 4;
+        ctx.fillRect(-length / 2 + 8, slatY, length - 16, 3);
+    }
+
+    // Wood grain on slats
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+    ctx.lineWidth = 0.5;
+    for (let i = 0; i < 3; i++) {
+        const slatY = -5 + i * 4 + 1.5;
+        ctx.beginPath();
+        ctx.moveTo(-length / 2 + 10, slatY);
+        ctx.lineTo(length / 2 - 10, slatY);
+        ctx.stroke();
+    }
+
+    // Metal edge coping (grindable surface)
+    ctx.fillStyle = '#999';
+    ctx.fillRect(-length / 2 + 8, -6, length - 16, 2);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.fillRect(-length / 2 + 8, -6, length - 16, 1);
+
+    // Neon highlight
+    ctx.shadowColor = COLORS.limeGreen;
+    ctx.shadowBlur = 5;
+    ctx.strokeStyle = COLORS.limeGreen;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(-length / 2 + 8, -6, length - 16, 2);
+    ctx.shadowBlur = 0;
+
+    ctx.restore();
+}
+
+function drawKinkedRail(startScreen, endScreen, rail) {
+    const dx = endScreen.x - startScreen.x;
+    const dy = endScreen.y - startScreen.y;
+    const length = Math.sqrt(dx * dx + dy * dy);
+
+    // Kinked rail has a down-flat-down pattern
+    const kinkHeight = 8;
+    const flatLength = length * 0.4;
+
+    const mid1X = startScreen.x + dx * 0.3;
+    const mid1Y = startScreen.y + dy * 0.3;
+    const mid2X = startScreen.x + dx * 0.7;
+    const mid2Y = startScreen.y + dy * 0.7;
+
+    // Draw support posts at kink points
+    const supportGrad = ctx.createLinearGradient(0, 0, 0, 15);
+    supportGrad.addColorStop(0, '#888');
+    supportGrad.addColorStop(1, '#555');
+
+    const supports = [startScreen, {x: mid1X, y: mid1Y}, {x: mid2X, y: mid2Y}, endScreen];
+    for (const pos of supports) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        ctx.beginPath();
+        ctx.ellipse(pos.x + 2, pos.y + 18, 5, 3, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = supportGrad;
+        ctx.fillRect(pos.x - 2, pos.y + 2, 4, 14);
+    }
+
+    // Draw rail segments
+    ctx.save();
+
+    // Rail gradient
+    const railGrad = ctx.createLinearGradient(startScreen.x, startScreen.y - 3, startScreen.x, startScreen.y + 3);
+    railGrad.addColorStop(0, '#ddd');
+    railGrad.addColorStop(0.5, '#fff');
+    railGrad.addColorStop(1, '#999');
+
+    ctx.strokeStyle = railGrad;
+    ctx.lineWidth = 6;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    // Draw the kinked path
+    ctx.beginPath();
+    ctx.moveTo(startScreen.x, startScreen.y);
+    ctx.lineTo(mid1X, mid1Y - kinkHeight);
+    ctx.lineTo(mid2X, mid2Y - kinkHeight);
+    ctx.lineTo(endScreen.x, endScreen.y);
+    ctx.stroke();
+
+    // Highlight
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(startScreen.x, startScreen.y - 2);
+    ctx.lineTo(mid1X, mid1Y - kinkHeight - 2);
+    ctx.lineTo(mid2X, mid2Y - kinkHeight - 2);
+    ctx.lineTo(endScreen.x, endScreen.y - 2);
+    ctx.stroke();
+
+    // Neon glow
+    ctx.shadowColor = COLORS.yellow;
+    ctx.shadowBlur = 8;
+    ctx.strokeStyle = 'rgba(255, 255, 0, 0.3)';
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.moveTo(startScreen.x, startScreen.y);
+    ctx.lineTo(mid1X, mid1Y - kinkHeight);
+    ctx.lineTo(mid2X, mid2Y - kinkHeight);
+    ctx.lineTo(endScreen.x, endScreen.y);
+    ctx.stroke();
+
+    ctx.restore();
     ctx.shadowBlur = 0;
 }
 
@@ -2541,6 +3381,140 @@ function drawLodges() {
             ctx.arc(doorX, doorY + doorH + stairsH / 2, 25, 0, Math.PI * 2);
             ctx.fill();
         }
+    }
+}
+
+function drawCollectibles() {
+    const camera = gameState.camera;
+    const time = gameState.animationTime;
+
+    for (const col of gameState.collectibles) {
+        if (col.collected) continue;
+        if (col.y < camera.y - 50 || col.y > camera.y + CANVAS_HEIGHT + 50) continue;
+
+        const screen = worldToScreen(col.x, col.y);
+        const isBig = col.type === 'big';
+        const size = isBig ? 16 : 10;
+
+        // Floating animation
+        const float = Math.sin(time * 4 + col.x * 0.1) * 5;
+        const rotation = time * 2;
+
+        ctx.save();
+        ctx.translate(screen.x, screen.y + float);
+        ctx.rotate(rotation);
+
+        // Glow
+        ctx.shadowColor = isBig ? COLORS.yellow : COLORS.cyan;
+        ctx.shadowBlur = isBig ? 15 : 8;
+
+        // Draw snowflake
+        ctx.strokeStyle = isBig ? COLORS.yellow : '#fff';
+        ctx.lineWidth = isBig ? 3 : 2;
+        ctx.lineCap = 'round';
+
+        // Six-pointed snowflake
+        for (let i = 0; i < 6; i++) {
+            const angle = (i / 6) * Math.PI * 2;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(Math.cos(angle) * size, Math.sin(angle) * size);
+            ctx.stroke();
+
+            // Small branches on each arm
+            const branchLen = size * 0.4;
+            const branchX = Math.cos(angle) * size * 0.6;
+            const branchY = Math.sin(angle) * size * 0.6;
+            ctx.beginPath();
+            ctx.moveTo(branchX, branchY);
+            ctx.lineTo(
+                branchX + Math.cos(angle + 0.5) * branchLen,
+                branchY + Math.sin(angle + 0.5) * branchLen
+            );
+            ctx.moveTo(branchX, branchY);
+            ctx.lineTo(
+                branchX + Math.cos(angle - 0.5) * branchLen,
+                branchY + Math.sin(angle - 0.5) * branchLen
+            );
+            ctx.stroke();
+        }
+
+        // Center dot
+        ctx.fillStyle = isBig ? COLORS.yellow : '#fff';
+        ctx.beginPath();
+        ctx.arc(0, 0, isBig ? 3 : 2, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+        ctx.shadowBlur = 0;
+    }
+}
+
+function drawBoostPads() {
+    const camera = gameState.camera;
+    const time = gameState.animationTime;
+
+    for (const boost of gameState.boostPads) {
+        if (boost.y < camera.y - 50 || boost.y > camera.y + CANVAS_HEIGHT + 50) continue;
+
+        const screen = worldToScreen(boost.x, boost.y);
+        const w = boost.width;
+        const h = boost.height;
+
+        ctx.save();
+        ctx.translate(screen.x, screen.y);
+
+        // Pulsing glow
+        const pulse = 0.5 + Math.sin(time * 6) * 0.3;
+
+        // Shadow
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        ctx.beginPath();
+        ctx.ellipse(0, h / 2 + 5, w / 2 + 5, 8, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Boost pad base
+        const padGrad = ctx.createLinearGradient(-w / 2, -h / 2, w / 2, h / 2);
+        padGrad.addColorStop(0, '#1a3a4a');
+        padGrad.addColorStop(0.5, '#2a5a6a');
+        padGrad.addColorStop(1, '#1a3a4a');
+        ctx.fillStyle = padGrad;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, w / 2, h / 2, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Neon arrows
+        ctx.strokeStyle = COLORS.cyan;
+        ctx.lineWidth = 3;
+        ctx.shadowColor = COLORS.cyan;
+        ctx.shadowBlur = 10 * pulse;
+
+        // Draw chevrons pointing down (direction of travel)
+        for (let i = 0; i < 3; i++) {
+            const offset = (time * 80 + i * 15) % 30 - 15;
+            const arrowY = offset;
+            const alpha = 1 - Math.abs(offset) / 15;
+            ctx.globalAlpha = alpha * pulse;
+
+            ctx.beginPath();
+            ctx.moveTo(-15, arrowY - 8);
+            ctx.lineTo(0, arrowY + 2);
+            ctx.lineTo(15, arrowY - 8);
+            ctx.stroke();
+        }
+
+        ctx.globalAlpha = 1;
+
+        // Border ring
+        ctx.strokeStyle = COLORS.cyan;
+        ctx.lineWidth = 2;
+        ctx.shadowBlur = 8 * pulse;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, w / 2 - 2, h / 2 - 2, 0, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.restore();
+        ctx.shadowBlur = 0;
     }
 }
 
@@ -2813,8 +3787,12 @@ function drawPlayer() {
             } else {
                 sprites.player.setAnimation('airborne');
             }
-        } else if (input.down && player.speed > 300) {
+        } else if (input.down && player.speed > 200) {
+            // Tucking for speed - crouch down
             sprites.player.setAnimation('tuck');
+        } else if (input.up) {
+            // Braking/slowing - use idle or carve animation
+            sprites.player.setAnimation('idle');
         } else if (player.angle < -5) {
             // Left carve - select frame based on angle intensity
             const intensity = Math.min(5, Math.floor(Math.abs(player.angle) / 13) + 1);
@@ -2857,15 +3835,25 @@ function drawPlayer() {
     ctx.save();
     ctx.translate(screen.x, drawY);
 
-    // Apply rotation for tricks
-    if (player.airborne) {
+    // Determine if player should be in "straight" pose
+    // This includes: going straight, airborne without spinning, and approaching jumps
+    const isSpinning = player.airborne && player.spinDirection !== 0 && Math.abs(player.trickRotation) > 30;
+    const goingStraight = !player.crashed && (
+        // On ground and going straight
+        (!player.airborne && Math.abs(player.angle) < 5) ||
+        // Airborne but NOT spinning (maintains straight orientation)
+        (player.airborne && !isSpinning)
+    );
+
+    // Apply rotation for tricks - only rotate when actually spinning
+    if (player.airborne && isSpinning) {
         ctx.rotate(player.trickRotation * Math.PI / 180);
         // Apply flip rotation (scale Y to simulate forward/backward flip)
         if (player.flipRotation !== 0) {
             const flipScale = Math.cos(player.flipRotation * Math.PI / 180);
             ctx.scale(1, flipScale);
         }
-    } else {
+    } else if (!player.airborne && !goingStraight) {
         ctx.rotate(player.angle * Math.PI / 180 * 0.3);
     }
 
@@ -2879,8 +3867,9 @@ function drawPlayer() {
         ctx.rotate(Math.sin(gameState.animationTime * 15) * 0.5);
     }
 
-    // Check if going straight down (not carving) - angle threshold of 5 degrees
-    const goingStraight = !player.airborne && !player.crashed && Math.abs(player.angle) < 5;
+    // Crouch factor - increases as we approach a jump, also applies in air for grabs
+    const crouchFactor = player.preloadCrouch || 0;
+    const airCrouch = player.airborne && player.autoTrick && player.autoTrick.type === 'grab' ? player.grabPhase * 0.4 : 0;
 
     // Stance direction: regular = left foot forward, goofy = right foot forward
     // This affects which way the rider faces when going straight
@@ -2897,6 +3886,11 @@ function drawPlayer() {
         // We see the rider's side profile - one shoulder toward camera, one away
         // Regular stance: left foot forward (rider faces left), Goofy: right foot forward (rider faces right)
 
+        // Calculate crouch compression
+        const totalCrouch = Math.min(1, crouchFactor + airCrouch);
+        const crouchY = totalCrouch * 8; // How much to compress down
+        const kneeBend = totalCrouch * 6; // Extra knee bend
+
         // Shadow - elongated vertically for the vertical board
         ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
         ctx.beginPath();
@@ -2904,6 +3898,8 @@ function drawPlayer() {
         ctx.fill();
 
         // Board - VERTICAL, pointing straight down the mountain
+        // When airborne, board can be brought up (for grabs)
+        const boardLift = player.airborne ? player.grabPhase * 10 : 0;
         const boardGrad = ctx.createLinearGradient(0, -8, 0, 28);
         boardGrad.addColorStop(0, COLORS.hotPink);
         boardGrad.addColorStop(0.5, '#ff69b4');
@@ -2912,28 +3908,29 @@ function drawPlayer() {
         ctx.shadowColor = COLORS.hotPink;
         ctx.shadowBlur = 10;
         ctx.beginPath();
-        ctx.roundRect(-4, -4, 8, 36, 4);
+        ctx.roundRect(-4, -4 + boardLift, 8, 36, 4);
         ctx.fill();
 
         // Board edge highlight (vertical)
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.moveTo(-3, -2);
-        ctx.lineTo(-3, 28);
+        ctx.moveTo(-3, -2 + boardLift);
+        ctx.lineTo(-3, 28 + boardLift);
         ctx.stroke();
         ctx.shadowBlur = 0;
 
         // Bindings - horizontal across the vertical board
         ctx.fillStyle = '#333';
-        ctx.fillRect(-6, 4, 12, 5);   // Front binding
-        ctx.fillRect(-6, 18, 12, 5);  // Back binding
+        ctx.fillRect(-6, 4 + boardLift, 12, 5);   // Front binding
+        ctx.fillRect(-6, 18 + boardLift, 12, 5);  // Back binding
 
         // The rider faces sideways - we see their SIDE PROFILE
         // Flip drawing direction based on stance
         const faceDir = isGoofy ? 1 : -1;  // 1 = facing right, -1 = facing left
 
         // Legs - side view, bent knees in snowboard stance
+        // Crouch makes knees bend more
         const legGrad = ctx.createLinearGradient(0, -10, 0, 20);
         legGrad.addColorStop(0, '#7744bb');
         legGrad.addColorStop(1, '#553399');
@@ -2941,19 +3938,19 @@ function drawPlayer() {
         ctx.lineWidth = 7;
         ctx.lineCap = 'round';
 
-        // Front leg (bent, on front binding)
+        // Front leg (bent, on front binding) - more bent when crouching
         ctx.beginPath();
-        ctx.moveTo(faceDir * 4, -6);
-        ctx.quadraticCurveTo(faceDir * 8, 2, 0, 7);
+        ctx.moveTo(faceDir * 4, -6 + crouchY);
+        ctx.quadraticCurveTo(faceDir * (8 + kneeBend), 2 + crouchY * 0.5, 0, 7 + boardLift);
         ctx.stroke();
 
         // Back leg (bent, on back binding)
         ctx.beginPath();
-        ctx.moveTo(faceDir * -2, -6);
-        ctx.quadraticCurveTo(faceDir * 2, 12, 0, 20);
+        ctx.moveTo(faceDir * -2, -6 + crouchY);
+        ctx.quadraticCurveTo(faceDir * (2 + kneeBend * 0.5), 12 + crouchY * 0.5, 0, 20 + boardLift);
         ctx.stroke();
 
-        // Body/torso - SIDE VIEW (thin profile)
+        // Body/torso - SIDE VIEW (thin profile) - lowers with crouch
         const jacketGrad = ctx.createLinearGradient(faceDir * -8, -30, faceDir * 8, -5);
         jacketGrad.addColorStop(0, COLORS.cyan);
         jacketGrad.addColorStop(0.5, COLORS.electricBlue);
@@ -2962,61 +3959,126 @@ function drawPlayer() {
         ctx.shadowColor = COLORS.cyan;
         ctx.shadowBlur = 6;
         ctx.beginPath();
-        // Side profile of torso - thin ellipse
-        ctx.ellipse(faceDir * 2, -18, 7, 14, 0, 0, Math.PI * 2);
+        // Side profile of torso - thin ellipse, compressed when crouching
+        const torsoY = -18 + crouchY;
+        const torsoHeight = 14 - totalCrouch * 3;
+        ctx.ellipse(faceDir * 2, torsoY, 7, torsoHeight, 0, 0, Math.PI * 2);
         ctx.fill();
 
         // Jacket stripe (side view)
         ctx.fillStyle = COLORS.magenta;
         ctx.beginPath();
-        ctx.ellipse(faceDir * 2, -18, 7, 2, 0, 0, Math.PI * 2);
+        ctx.ellipse(faceDir * 2, torsoY, 7, 2, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.shadowBlur = 0;
 
-        // Arms - side view, one arm visible (the one closer to camera), slight bend
+        // Arms - side view, position depends on crouch/grab state
         ctx.strokeStyle = jacketGrad;
         ctx.lineWidth = 5;
         ctx.lineCap = 'round';
+
+        // Determine arm positions based on state
+        let leadArmEndX = faceDir * 12;
+        let leadArmEndY = -10 + crouchY;
+        let trailArmEndX = faceDir * -6;
+        let trailArmEndY = -8 + crouchY;
+
+        // Airborne grab positions
+        if (player.airborne && player.autoTrick && player.autoTrick.type === 'grab') {
+            const grabStyle = player.autoTrick.grabStyle;
+            const grabIntensity = player.grabPhase;
+
+            if (grabStyle === 'indy' || grabStyle === 'mute') {
+                // Reach down to grab the board between bindings
+                leadArmEndX = faceDir * 2;
+                leadArmEndY = lerp(-10, 12 + boardLift, grabIntensity);
+            } else if (grabStyle === 'method' || grabStyle === 'melon') {
+                // One arm up, one grabbing behind
+                leadArmEndX = faceDir * 15;
+                leadArmEndY = lerp(-10, -30, grabIntensity); // Arm up in the air
+                trailArmEndX = 0;
+                trailArmEndY = lerp(-8, 10 + boardLift, grabIntensity); // Grab board
+            } else if (grabStyle === 'tail') {
+                // Reach back for tail
+                leadArmEndY = lerp(-10, -5 + crouchY, grabIntensity);
+                trailArmEndX = faceDir * -2;
+                trailArmEndY = lerp(-8, 25 + boardLift, grabIntensity);
+            } else if (grabStyle === 'nose') {
+                // Reach forward for nose
+                leadArmEndX = faceDir * 4;
+                leadArmEndY = lerp(-10, -2 + boardLift, grabIntensity);
+            } else if (grabStyle === 'stale' || grabStyle === 'roastbeef') {
+                // Reach between legs behind
+                trailArmEndX = faceDir * -1;
+                trailArmEndY = lerp(-8, 15 + boardLift, grabIntensity);
+            } else if (grabStyle === 'japan') {
+                // Japan air - grab with lead hand, other arm trails
+                leadArmEndX = faceDir * 3;
+                leadArmEndY = lerp(-10, 8 + boardLift, grabIntensity);
+                trailArmEndX = faceDir * -12;
+                trailArmEndY = lerp(-8, -20, grabIntensity); // Trailing arm up and back
+            } else if (grabStyle === 'crail') {
+                // Crail - lead hand to nose
+                leadArmEndX = faceDir * 5;
+                leadArmEndY = lerp(-10, -5 + boardLift, grabIntensity);
+            }
+        } else if (player.airborne) {
+            // Default airborne pose - arms out for balance, CONTROLLED (not flailing)
+            // Both arms extend outward like maintaining balance in the air
+            leadArmEndX = faceDir * 14;
+            leadArmEndY = -12;
+            trailArmEndX = faceDir * -10;
+            trailArmEndY = -10;
+        } else if (totalCrouch > 0.3) {
+            // Pre-jump crouch - arms come down and forward for balance
+            leadArmEndX = faceDir * (12 - totalCrouch * 4);
+            leadArmEndY = -10 + crouchY + totalCrouch * 5;
+            trailArmEndX = faceDir * (-6 + totalCrouch * 3);
+            trailArmEndY = -8 + crouchY + totalCrouch * 4;
+        }
+
         // Leading arm (in front, bent for balance)
         ctx.beginPath();
-        ctx.moveTo(faceDir * 6, -22);
-        ctx.quadraticCurveTo(faceDir * 14, -18, faceDir * 12, -10);
+        ctx.moveTo(faceDir * 6, torsoY - 4);
+        ctx.quadraticCurveTo(faceDir * 10, torsoY, leadArmEndX, leadArmEndY);
         ctx.stroke();
         // Trailing arm (behind, relaxed)
         ctx.beginPath();
-        ctx.moveTo(faceDir * -2, -22);
-        ctx.quadraticCurveTo(faceDir * -8, -16, faceDir * -6, -8);
+        ctx.moveTo(faceDir * -2, torsoY - 4);
+        ctx.quadraticCurveTo(faceDir * -5, torsoY + 2, trailArmEndX, trailArmEndY);
         ctx.stroke();
 
         // Gloves
         ctx.fillStyle = '#2244aa';
         ctx.beginPath();
-        ctx.arc(faceDir * 12, -9, 3, 0, Math.PI * 2);
+        ctx.arc(leadArmEndX, leadArmEndY, 3, 0, Math.PI * 2);
         ctx.fill();
         ctx.beginPath();
-        ctx.arc(faceDir * -6, -7, 3, 0, Math.PI * 2);
+        ctx.arc(trailArmEndX, trailArmEndY, 3, 0, Math.PI * 2);
         ctx.fill();
 
-        // Head - SIDE PROFILE
+        // Head - SIDE PROFILE - lowers with crouch
+        const headY = -36 + crouchY * 0.7;
         ctx.fillStyle = '#ffcc99';  // Skin tone for face
         ctx.beginPath();
-        ctx.arc(faceDir * 3, -36, 8, 0, Math.PI * 2);
+        ctx.arc(faceDir * 3, headY, 8, 0, Math.PI * 2);
         ctx.fill();
 
         // Helmet - side view
         ctx.fillStyle = '#222';
         ctx.beginPath();
-        ctx.arc(faceDir * 3, -38, 9, Math.PI * 0.8, Math.PI * 2.2);
+        ctx.arc(faceDir * 3, headY - 2, 9, Math.PI * 0.8, Math.PI * 2.2);
         ctx.fill();
 
         // Helmet color accent
         ctx.fillStyle = COLORS.hotPink;
         ctx.beginPath();
-        ctx.arc(faceDir * 3, -40, 7, Math.PI, Math.PI * 2);
+        ctx.arc(faceDir * 3, headY - 4, 7, Math.PI, Math.PI * 2);
         ctx.fill();
 
         // Goggles - side view (visible on the side of face)
-        const goggleGrad = ctx.createLinearGradient(faceDir * -2, -40, faceDir * 8, -34);
+        const goggleY = headY - 1;
+        const goggleGrad = ctx.createLinearGradient(faceDir * -2, goggleY - 3, faceDir * 8, goggleY + 3);
         goggleGrad.addColorStop(0, COLORS.magenta);
         goggleGrad.addColorStop(0.5, '#ff66cc');
         goggleGrad.addColorStop(1, COLORS.cyan);
@@ -3024,13 +4086,13 @@ function drawPlayer() {
         ctx.shadowColor = COLORS.magenta;
         ctx.shadowBlur = 4;
         ctx.beginPath();
-        ctx.ellipse(faceDir * 6, -37, 5, 3, faceDir * 0.3, 0, Math.PI * 2);
+        ctx.ellipse(faceDir * 6, goggleY, 5, 3, faceDir * 0.3, 0, Math.PI * 2);
         ctx.fill();
 
         // Goggle lens shine
         ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
         ctx.beginPath();
-        ctx.ellipse(faceDir * 5, -38, 2, 1, 0, 0, Math.PI * 2);
+        ctx.ellipse(faceDir * 5, goggleY - 1, 2, 1, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.shadowBlur = 0;
     } else {
@@ -3105,16 +4167,15 @@ function drawPlayer() {
                 leftArmX = -5; leftArmY = boardY;
                 rightArmX = 20; rightArmY = -15;
             } else {
-                // Spin tricks - arms out for style
-                const wave = Math.sin(progress * Math.PI * 2) * 8;
-                leftArmX = -22; leftArmY = -15 + wave;
-                rightArmX = 22; rightArmY = -15 - wave;
+                // Spin tricks - arms out for balance, controlled pose
+                leftArmX = -20; leftArmY = -10;
+                rightArmX = 20; rightArmY = -10;
             }
         } else if (player.airborne) {
-            // Default airborne arm wave
-            const armAngle = Math.sin(gameState.animationTime * 8) * 0.4;
-            leftArmY = -12 + Math.sin(armAngle) * 8;
-            rightArmY = -12 - Math.sin(armAngle) * 8;
+            // Default airborne pose - arms out to the sides for balance, CONTROLLED (no flailing)
+            // Arms slightly raised and spread like a skydiver maintaining stability
+            leftArmX = -20; leftArmY = -8;
+            rightArmX = 20; rightArmY = -8;
         }
 
         // Need to recreate jacketGrad for arms since it was in the else block
@@ -3285,12 +4346,12 @@ function drawBeast() {
         const breathe = Math.sin(time * 3) * 0.03 + 1;
         scale *= breathe;
 
-        // Draw aura behind sprite
+        // Draw aura behind sprite - dark blue/cyan tones like the portrait
         const pulseIntensity = 0.5 + Math.sin(time * 5) * 0.3;
         const auraGrad = ctx.createRadialGradient(screen.x, screen.y, 20, screen.x, screen.y, 80 * scale);
-        auraGrad.addColorStop(0, `rgba(255, 0, 255, ${pulseIntensity * 0.4})`);
-        auraGrad.addColorStop(0.5, `rgba(148, 0, 211, ${pulseIntensity * 0.2})`);
-        auraGrad.addColorStop(1, 'rgba(100, 0, 150, 0)');
+        auraGrad.addColorStop(0, `rgba(0, 180, 220, ${pulseIntensity * 0.4})`);
+        auraGrad.addColorStop(0.5, `rgba(20, 60, 100, ${pulseIntensity * 0.3})`);
+        auraGrad.addColorStop(1, 'rgba(10, 20, 40, 0)');
         ctx.fillStyle = auraGrad;
         ctx.beginPath();
         ctx.arc(screen.x, screen.y, 80 * scale, 0, Math.PI * 2);
@@ -3316,19 +4377,19 @@ function drawBeast() {
     const breathe = Math.sin(time * 3) * 0.05 + 1;
     ctx.scale(breathe, 1 / breathe);
 
-    // Pulsing aura gradient
+    // Pulsing aura gradient - dark blue/cyan like the portrait
     const pulseIntensity = 0.5 + Math.sin(time * 5) * 0.3;
     const auraGrad = ctx.createRadialGradient(0, 0, 20, 0, 0, 70);
-    auraGrad.addColorStop(0, `rgba(255, 0, 255, ${pulseIntensity * 0.4})`);
-    auraGrad.addColorStop(0.5, `rgba(148, 0, 211, ${pulseIntensity * 0.2})`);
-    auraGrad.addColorStop(1, 'rgba(100, 0, 150, 0)');
+    auraGrad.addColorStop(0, `rgba(0, 180, 220, ${pulseIntensity * 0.4})`);
+    auraGrad.addColorStop(0.5, `rgba(20, 60, 100, ${pulseIntensity * 0.3})`);
+    auraGrad.addColorStop(1, 'rgba(10, 20, 40, 0)');
     ctx.fillStyle = auraGrad;
     ctx.beginPath();
     ctx.arc(0, 0, 70, 0, Math.PI * 2);
     ctx.fill();
 
-    // Animated shadow tendrils around body
-    ctx.strokeStyle = 'rgba(50, 0, 80, 0.6)';
+    // Animated shadow tendrils around body - dark blue/black
+    ctx.strokeStyle = 'rgba(10, 30, 50, 0.7)';
     ctx.lineWidth = 4;
     for (let i = 0; i < 6; i++) {
         const angle = (i / 6) * Math.PI * 2 + time * 2;
@@ -3344,20 +4405,21 @@ function drawBeast() {
         ctx.stroke();
     }
 
-    // Main body
+    // Main body - dark blue/black like the portrait (not purple)
     const bodyGrad = ctx.createRadialGradient(0, -10, 5, 0, 10, 50);
-    bodyGrad.addColorStop(0, '#4a2a5a');
-    bodyGrad.addColorStop(0.6, '#2a1a3a');
-    bodyGrad.addColorStop(1, '#1a0a2a');
+    bodyGrad.addColorStop(0, '#1a2a3a');  // Dark blue-gray center
+    bodyGrad.addColorStop(0.4, '#0d1a28'); // Very dark blue
+    bodyGrad.addColorStop(0.8, '#050d15'); // Near black
+    bodyGrad.addColorStop(1, '#020508');   // Pure dark
     ctx.fillStyle = bodyGrad;
-    ctx.shadowColor = COLORS.magenta;
-    ctx.shadowBlur = 25;
+    ctx.shadowColor = COLORS.cyan;
+    ctx.shadowBlur = 20;
     ctx.beginPath();
     ctx.ellipse(0, 0, 35, 45, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Fur texture lines
-    ctx.strokeStyle = 'rgba(100, 50, 120, 0.5)';
+    // Fur texture lines - dark blue tones
+    ctx.strokeStyle = 'rgba(30, 60, 90, 0.5)';
     ctx.lineWidth = 2;
     for (let i = 0; i < 8; i++) {
         const fx = -25 + i * 7;
@@ -3367,79 +4429,97 @@ function drawBeast() {
         ctx.stroke();
     }
 
-    // Eyes - dual colored (cyan left, magenta right)
-    // Left eye - cyan
+    // Wispy hair/fur strands on top
+    ctx.strokeStyle = 'rgba(20, 40, 60, 0.6)';
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 5; i++) {
+        const baseX = -15 + i * 7.5;
+        const wave = Math.sin(time * 3 + i * 0.7) * 5;
+        ctx.beginPath();
+        ctx.moveTo(baseX, -40);
+        ctx.quadraticCurveTo(baseX + wave, -55, baseX + wave * 0.5, -60);
+        ctx.stroke();
+    }
+
+    // Eyes - BOTH CYAN like the portrait (glowing cyan eyes)
     const eyeTrack = Math.sin(time) * 2; // Subtle eye movement
     ctx.fillStyle = COLORS.cyan;
     ctx.shadowColor = COLORS.cyan;
-    ctx.shadowBlur = 20;
+    ctx.shadowBlur = 25;
+    // Left eye
     ctx.beginPath();
     ctx.ellipse(-14 + eyeTrack, -18, 8, 10, 0, 0, Math.PI * 2);
     ctx.fill();
-
-    // Right eye - magenta
-    ctx.fillStyle = COLORS.magenta;
-    ctx.shadowColor = COLORS.magenta;
+    // Right eye - ALSO CYAN (matching the portrait)
     ctx.beginPath();
     ctx.ellipse(14 + eyeTrack, -18, 8, 10, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Eye glow rings
+    // Bright white/cyan eye cores
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = '#ffffff';
+    ctx.shadowBlur = 10;
+    ctx.beginPath();
+    ctx.ellipse(-14 + eyeTrack, -18, 4, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(14 + eyeTrack, -18, 4, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Eye glow rings - both cyan
     ctx.strokeStyle = COLORS.cyan;
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.ellipse(-14 + eyeTrack, -18, 10, 12, 0, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.strokeStyle = COLORS.magenta;
     ctx.beginPath();
     ctx.ellipse(14 + eyeTrack, -18, 10, 12, 0, 0, Math.PI * 2);
     ctx.stroke();
 
-    // Pupils (track toward player slightly)
-    ctx.fillStyle = '#000';
+    // No pupils - the eyes are just glowing orbs (like the portrait)
     ctx.shadowBlur = 0;
+
+    // Dark maw/mouth - subtle, not glowing pink
+    ctx.fillStyle = 'rgba(5, 15, 25, 0.8)';
     ctx.beginPath();
-    ctx.arc(-14 + eyeTrack + 1, -18, 3, 0, Math.PI * 2);
-    ctx.arc(14 + eyeTrack + 1, -18, 3, 0, Math.PI * 2);
+    ctx.ellipse(0, 15, 15, 10, 0, 0, Math.PI);
     ctx.fill();
 
-    // Glowing mouth
-    ctx.fillStyle = 'rgba(255, 0, 100, 0.6)';
-    ctx.shadowColor = COLORS.danger;
-    ctx.shadowBlur = 10;
+    // Subtle inner glow in mouth (faint cyan/white)
+    ctx.fillStyle = 'rgba(100, 180, 200, 0.2)';
     ctx.beginPath();
-    ctx.ellipse(0, 12, 18, 12, 0, 0, Math.PI);
+    ctx.ellipse(0, 14, 10, 6, 0, 0, Math.PI);
     ctx.fill();
 
-    // Jagged glowing teeth
-    ctx.fillStyle = '#fff';
-    ctx.shadowColor = '#fff';
-    ctx.shadowBlur = 5;
-    const teethCount = 7;
+    // Teeth - slightly blue-tinted white
+    ctx.fillStyle = '#e8f4f8';
+    ctx.shadowColor = COLORS.cyan;
+    ctx.shadowBlur = 3;
+    const teethCount = 5;
     for (let i = 0; i < teethCount; i++) {
-        const tx = -15 + (i * 30 / (teethCount - 1));
-        const th = 8 + Math.sin(i * 1.5) * 4; // Varying heights
+        const tx = -10 + (i * 20 / (teethCount - 1));
+        const th = 6 + Math.sin(i * 1.5) * 2; // Varying heights
         ctx.beginPath();
-        ctx.moveTo(tx - 3, 8);
-        ctx.lineTo(tx, 8 + th);
-        ctx.lineTo(tx + 3, 8);
+        ctx.moveTo(tx - 2, 10);
+        ctx.lineTo(tx, 10 + th);
+        ctx.lineTo(tx + 2, 10);
         ctx.closePath();
         ctx.fill();
     }
 
-    // Claws appear during lunge
+    // Claws appear during lunge - dark blue/black with subtle cyan glow
     if (chase.beastState === 'lunging') {
-        ctx.fillStyle = '#ddd';
-        ctx.shadowColor = COLORS.danger;
-        ctx.shadowBlur = 8;
+        ctx.fillStyle = '#1a2a3a';
+        ctx.shadowColor = COLORS.cyan;
+        ctx.shadowBlur = 6;
         for (let side = -1; side <= 1; side += 2) {
             for (let c = 0; c < 3; c++) {
                 const clawX = side * 35;
                 const clawY = -10 + c * 10;
                 ctx.beginPath();
                 ctx.moveTo(clawX, clawY);
-                ctx.lineTo(clawX + side * 15, clawY + 5);
-                ctx.lineTo(clawX, clawY + 4);
+                ctx.lineTo(clawX + side * 18, clawY + 4);
+                ctx.lineTo(clawX, clawY + 3);
                 ctx.closePath();
                 ctx.fill();
             }
@@ -3528,11 +4608,60 @@ function drawHUD() {
 
         // Combo timer bar
         const barWidth = 80;
-        const barFill = gameState.trickComboTimer / 2.0;
+        const barFill = gameState.trickComboTimer / 2.5;
         ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
         ctx.fillRect(CANVAS_WIDTH/2 - barWidth/2, comboY + 18, barWidth, 4);
         ctx.fillStyle = COLORS.yellow;
         ctx.fillRect(CANVAS_WIDTH/2 - barWidth/2, comboY + 18, barWidth * barFill, 4);
+
+        // Chain count
+        if (gameState.comboChainLength > 1) {
+            ctx.font = '10px "Press Start 2P", monospace';
+            ctx.fillStyle = COLORS.limeGreen;
+            ctx.fillText(`${gameState.comboChainLength} chain`, CANVAS_WIDTH/2, comboY + 26);
+        }
+    }
+
+    // Flow meter (bottom left)
+    if (gameState.flowMeter > 5) {
+        const flowY = CANVAS_HEIGHT - 40;
+        const flowBarWidth = 80;
+        const flowFill = gameState.flowMeter / 100;
+
+        // Flow bar background
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        ctx.fillRect(15, flowY, flowBarWidth, 10);
+
+        // Flow bar fill with gradient
+        const flowGrad = ctx.createLinearGradient(15, flowY, 15 + flowBarWidth, flowY);
+        flowGrad.addColorStop(0, COLORS.cyan);
+        flowGrad.addColorStop(0.5, COLORS.limeGreen);
+        flowGrad.addColorStop(1, COLORS.yellow);
+        ctx.fillStyle = flowGrad;
+        ctx.fillRect(15, flowY, flowBarWidth * flowFill, 10);
+
+        // Flow label
+        ctx.font = '8px "Press Start 2P", monospace';
+        ctx.textAlign = 'left';
+        ctx.fillStyle = COLORS.cyan;
+        ctx.fillText('FLOW', 15, flowY - 12);
+
+        // Flow multiplier
+        if (gameState.flowMultiplier > 1.1) {
+            ctx.fillStyle = COLORS.limeGreen;
+            ctx.fillText(`x${gameState.flowMultiplier.toFixed(1)}`, 15 + flowBarWidth + 8, flowY);
+        }
+    }
+
+    // Collectibles count (bottom right)
+    if (gameState.collectiblesCollected > 0) {
+        ctx.font = '10px "Press Start 2P", monospace';
+        ctx.textAlign = 'right';
+        ctx.fillStyle = COLORS.yellow;
+        ctx.shadowColor = COLORS.yellow;
+        ctx.shadowBlur = 5;
+        ctx.fillText(`❄${gameState.collectiblesCollected}`, CANVAS_WIDTH - 15, CANVAS_HEIGHT - 35);
+        ctx.shadowBlur = 0;
     }
 
     // Danger warning
@@ -3755,6 +4884,7 @@ function startGame() {
         grinding: false,
         grindProgress: 0,
         currentRail: null,
+        currentGrindable: null,
         crashed: false,
         crashTimer: 0,
         stunned: 0,
@@ -3763,7 +4893,14 @@ function startGame() {
         autoTrick: null,
         autoTrickProgress: 0,
         flipRotation: 0,
-        grabPhase: 0
+        grabPhase: 0,
+        grabTweak: 0,
+        grabPoke: 0,
+        spinDirection: 0,
+        preJumpAngle: 0,
+        jumpLaunchPower: 0,
+        preloadCrouch: 0,
+        approachingJump: null
     };
 
     gameState.camera = {
@@ -3808,6 +4945,19 @@ function startGame() {
     gameState.trickMultiplier = 1;
     gameState.trickComboTimer = 0;
     gameState.maxCombo = 1;
+    gameState.comboChainLength = 0;
+
+    // Collectibles and boosts
+    gameState.collectibles = [];
+    gameState.boostPads = [];
+    gameState.collectiblesCollected = 0;
+
+    // Flow state
+    gameState.flowMeter = 0;
+    gameState.flowMultiplier = 1;
+    gameState.nearMissStreak = 0;
+    gameState.speedStreak = 0;
+    gameState.speedBonus = 0;
 
     gameState.particles = [];
     gameState.celebrations = [];
@@ -3916,6 +5066,7 @@ function update(dt) {
     updatePlayer(dt);
     updateCamera(dt);
     updateTerrain();
+    checkApproachingJump(gameState.player, dt); // Check for crouch animation
     checkCollisions();
     updateChase(dt);
     updateParticles(dt);
