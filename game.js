@@ -764,6 +764,25 @@ const input = {
     _lastSpace: false
 };
 
+// Touch control state for mobile devices
+const touchState = {
+    active: false,
+    startX: 0,
+    startY: 0,
+    currentX: 0,
+    currentY: 0,
+    touchId: null,
+    startTime: 0
+};
+
+// Touch sensitivity thresholds (in pixels)
+const TOUCH_THRESHOLDS = {
+    horizontal: 20,      // Movement to trigger left/right
+    vertical: 30,        // Movement to trigger up/down
+    tapMaxDistance: 15,  // Max movement for tap gesture
+    tapMaxDuration: 200  // Max ms for tap gesture
+};
+
 function setupInput() {
     document.addEventListener('keydown', (e) => {
         switch (e.code) {
@@ -817,6 +836,98 @@ function setupInput() {
                 break;
         }
     });
+}
+
+// ===================
+// TOUCH INPUT (MOBILE)
+// ===================
+
+function setupTouchInput() {
+    const canvas = document.getElementById('gameCanvas');
+
+    canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+    canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+    canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
+    canvas.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+}
+
+function handleTouchStart(e) {
+    e.preventDefault();
+    if (touchState.active) return;
+
+    const touch = e.touches[0];
+    touchState.active = true;
+    touchState.touchId = touch.identifier;
+    touchState.startX = touch.clientX;
+    touchState.startY = touch.clientY;
+    touchState.currentX = touch.clientX;
+    touchState.currentY = touch.clientY;
+    touchState.startTime = performance.now();
+
+    // Reset input flags
+    input.left = input.right = input.up = input.down = false;
+}
+
+function handleTouchMove(e) {
+    e.preventDefault();
+    if (!touchState.active) return;
+
+    const touch = Array.from(e.touches).find(t => t.identifier === touchState.touchId);
+    if (!touch) return;
+
+    touchState.currentX = touch.clientX;
+    touchState.currentY = touch.clientY;
+
+    const deltaX = touchState.currentX - touchState.startX;
+    const deltaY = touchState.currentY - touchState.startY;
+
+    // Horizontal steering (left/right)
+    if (deltaX > TOUCH_THRESHOLDS.horizontal) {
+        input.right = true;
+        input.left = false;
+    } else if (deltaX < -TOUCH_THRESHOLDS.horizontal) {
+        input.left = true;
+        input.right = false;
+    } else {
+        input.left = input.right = false;
+    }
+
+    // Vertical speed control (up = brake, down = tuck/accelerate)
+    if (deltaY < -TOUCH_THRESHOLDS.vertical) {
+        input.up = true;
+        input.down = false;
+    } else if (deltaY > TOUCH_THRESHOLDS.vertical) {
+        input.down = true;
+        input.up = false;
+    } else {
+        input.up = input.down = false;
+    }
+}
+
+function handleTouchEnd(e) {
+    e.preventDefault();
+
+    // Check if our tracked touch ended
+    const touchEnded = !Array.from(e.touches).find(t => t.identifier === touchState.touchId);
+    if (!touchEnded) return;
+
+    // Detect tap gesture for start/confirm
+    const duration = performance.now() - touchState.startTime;
+    const distance = Math.hypot(
+        touchState.currentX - touchState.startX,
+        touchState.currentY - touchState.startY
+    );
+
+    if (duration < TOUCH_THRESHOLDS.tapMaxDuration && distance < TOUCH_THRESHOLDS.tapMaxDistance) {
+        // Fire momentary space input for tap
+        input.space = true;
+        setTimeout(() => { input.space = false; }, 100);
+    }
+
+    // Reset touch state
+    touchState.active = false;
+    touchState.touchId = null;
+    input.left = input.right = input.up = input.down = false;
 }
 
 function getInputDirection() {
@@ -6052,6 +6163,7 @@ function init() {
     resizeStartScreenCanvases();
 
     setupInput();
+    setupTouchInput();
     loadHighScore();
     loadStance();
     updateSettingsUI();
