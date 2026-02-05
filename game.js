@@ -1412,6 +1412,11 @@ function updateGroundPhysics(player, dt) {
         spawnSnowSpray(player.x, player.y, Math.sign(player.angle));
     }
 
+    // Extra snow spray when braking (pressing UP) - stopping motion creates more spray
+    if (input.up && player.speed > 150 && Math.random() < 0.5) {
+        spawnSnowSpray(player.x, player.y, Math.random() > 0.5 ? 1 : -1);
+    }
+
     updateVisualPosition(player, dt);
 }
 
@@ -3858,6 +3863,31 @@ function drawPlayer() {
         ctx.restore();
     }
 
+    // Extra speed lines when TUCKING (pressing DOWN for speed boost)
+    if (input.down && !player.airborne && !player.crashed && player.speed > 300) {
+        const tuckAlpha = Math.min(0.6, (player.speed - 300) / 350 * 0.6);
+        ctx.save();
+        ctx.globalAlpha = tuckAlpha;
+        ctx.strokeStyle = COLORS.cyan;
+        ctx.lineWidth = 2;
+        // Draw motion blur lines on sides
+        for (let i = 0; i < 4; i++) {
+            const lineY = screen.y - 10 + i * 8;
+            const lineLen = 15 + i * 5;
+            // Left side lines
+            ctx.beginPath();
+            ctx.moveTo(screen.x - 12 - i * 3, lineY);
+            ctx.lineTo(screen.x - 12 - i * 3 - lineLen, lineY + lineLen * 0.3);
+            ctx.stroke();
+            // Right side lines
+            ctx.beginPath();
+            ctx.moveTo(screen.x + 12 + i * 3, lineY);
+            ctx.lineTo(screen.x + 12 + i * 3 + lineLen, lineY + lineLen * 0.3);
+            ctx.stroke();
+        }
+        ctx.restore();
+    }
+
     // Try sprite-based rendering first
     if (sprites.player && sprites.player.sheet.loaded) {
         // Determine animation based on player state
@@ -3880,11 +3910,11 @@ function drawPlayer() {
             } else {
                 sprites.player.setAnimation('airborne');
             }
-        } else if (input.down && player.speed > 200) {
-            // Tucking for speed - crouch down
+        } else if (input.down && !player.airborne) {
+            // Tucking for speed - crouch down (no speed requirement - animation shows immediately)
             sprites.player.setAnimation('tuck');
-        } else if (input.up) {
-            // Braking/slowing - use idle or carve animation
+        } else if (input.up && !player.airborne) {
+            // Braking/slowing - use idle animation (arms spread for drag)
             sprites.player.setAnimation('idle');
         } else if (player.angle < -5) {
             // Left carve - select frame based on angle intensity
@@ -3961,8 +3991,13 @@ function drawPlayer() {
     }
 
     // Crouch factor - increases as we approach a jump, also applies in air for grabs
-    const crouchFactor = player.preloadCrouch || 0;
+    // Also applies when player is pressing DOWN to tuck for speed
+    const manualTuck = (!player.airborne && input.down) ? 0.8 : 0;  // Tucking when pressing down
+    const crouchFactor = Math.max(player.preloadCrouch || 0, manualTuck);
     const airCrouch = player.airborne && player.autoTrick && player.autoTrick.type === 'grab' ? player.grabPhase * 0.4 : 0;
+
+    // Track if we're in active tuck mode (pressing down for speed)
+    const isTucking = !player.airborne && input.down;
 
     // Stance direction: regular = left foot forward, goofy = right foot forward
     // This affects which way the rider faces when going straight
@@ -4122,6 +4157,20 @@ function drawPlayer() {
             leadArmEndY = -12;
             trailArmEndX = faceDir * -10;
             trailArmEndY = -10;
+        } else if (isTucking) {
+            // TUCK POSE - pressing DOWN to go faster
+            // Arms tucked in close to body, very aerodynamic
+            leadArmEndX = faceDir * 6;
+            leadArmEndY = crouchY - 2;  // Arms low and forward
+            trailArmEndX = faceDir * -3;
+            trailArmEndY = crouchY - 1;  // Arms tucked behind
+        } else if (input.up && !player.airborne) {
+            // BRAKING POSE - pressing UP to slow down
+            // Arms out wide for wind resistance, body more upright
+            leadArmEndX = faceDir * 16;
+            leadArmEndY = -15;  // Arms spread out
+            trailArmEndX = faceDir * -14;
+            trailArmEndY = -12;
         } else if (totalCrouch > 0.3) {
             // Pre-jump crouch - arms come down and forward for balance
             leadArmEndX = faceDir * (12 - totalCrouch * 4);
