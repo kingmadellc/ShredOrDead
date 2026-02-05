@@ -187,12 +187,13 @@ const TERRAIN = {
     laneWidth: 68,
     slopeWidth: 480,            // Current slope width (updated by resolution system)
     baseSlopeWidth: 480,        // Base slope width (updated dynamically)
-    baseDensity: 0.08,          // Fewer obstacles
-    maxDensity: 0.18,           // Less cluttered
+    baseDensity: 0.10,          // More obstacles (trees/rocks)
+    maxDensity: 0.22,           // Denser terrain
     densityRampDistance: 4000,
-    jumpChance: 0.08,           // Reduced - fewer jumps (was 0.20)
-    railChance: 0.06,           // Increased grindable objects (was 0.04)
-    treeClusterChance: 0.45,    // Higher tree cluster chance (was 0.25)
+    jumpChance: 0.08,           // Reduced - fewer jumps
+    railChance: 0.009,          // Drastically reduced rails (15% of 0.06)
+    rockChance: 0.06,           // New: chance for large rocks
+    treeClusterChance: 0.60,    // Higher tree cluster chance
     clearPathWidth: 2
 };
 
@@ -314,6 +315,9 @@ const LODGE = {
     stairsHeight: 30,           // Height/depth of stairs
     doorWidth: 36,              // Door hitbox width
     doorHeight: 50,             // Door hitbox height
+    // Entrance ramp (points UP the mountain so player can snowboard in)
+    rampWidth: 80,              // Width of entrance ramp
+    rampLength: 100,            // Length of ramp leading to lodge
     spawnChance: 0.025,         // 2.5% chance per chunk (very rare)
     minSpawnDistance: 1500,     // Only spawn after 1500 units traveled
     minLodgeSpacing: 3000,      // Minimum distance between lodges
@@ -1221,11 +1225,16 @@ function generateTerrainChunk(chunkIndex) {
             doorY: lodgeY + LODGE.height - LODGE.doorHeight / 2,
             doorWidth: LODGE.doorWidth,
             doorHeight: LODGE.doorHeight,
-            // Stairs position
+            // Stairs position (back exit)
             stairsX: lodgeX,
             stairsY: lodgeY + LODGE.height,
             stairsWidth: LODGE.stairsWidth,
-            stairsHeight: LODGE.stairsHeight
+            stairsHeight: LODGE.stairsHeight,
+            // Entrance ramp (ABOVE lodge, pointing UP the mountain)
+            rampX: lodgeX,
+            rampY: lodgeY - LODGE.rampLength,  // Ramp starts above lodge
+            rampWidth: LODGE.rampWidth,
+            rampLength: LODGE.rampLength
         });
 
         // Update last lodge position
@@ -1366,14 +1375,15 @@ function updateGroundPhysics(player, dt) {
     const carving = Math.abs(player.angle) > 20;
     const speedMod = carving ? PHYSICS.carveSpeedBoost : 1.0;
 
-    // Up = carve back up the mountain to slow down, Down = tuck for extra speed
+    // Up = slow down (carving uphill), Down = crouch/tuck and accelerate to max speed
     if (input.up) {
-        // Slowing down - carving uphill
-        player.speed -= PHYSICS.downhillAccel * 0.5 * dt;
+        // Slowing down - carving back up the mountain
+        player.speed -= PHYSICS.downhillAccel * 0.8 * dt;
         player.speed = Math.max(player.speed, PHYSICS.minSpeed);
     } else if (input.down) {
-        // Tucking for speed
-        player.speed += PHYSICS.downhillAccel * 1.5 * dt;
+        // Crouching/tucking - rapidly accelerate toward max speed
+        player.speed += PHYSICS.downhillAccel * 3.0 * dt;
+        player.speed = Math.min(player.speed, PHYSICS.maxSpeed);
     } else {
         player.speed += PHYSICS.downhillAccel * speedMod * dt;
     }
@@ -1860,15 +1870,28 @@ function checkCollisions() {
 
     // Check lodges
     for (const lodge of gameState.lodges) {
-        // Quick distance check
-        if (Math.abs(lodge.y + lodge.height / 2 - player.y) > lodge.height) continue;
+        // Quick distance check - include ramp area above lodge
+        if (Math.abs(lodge.y + lodge.height / 2 - player.y) > lodge.height + lodge.rampLength) continue;
         if (Math.abs(lodge.x - player.x) > lodge.width) continue;
 
         const px = player.x, py = player.y;
         const pw = 20, ph = 20;
 
-        // Check door/stairs collision (entry point)
-        // Door is at bottom center of lodge, with stairs in front
+        // Check entrance RAMP collision (main entry point - ramp above lodge pointing UP mountain)
+        // Player snowboards DOWN the mountain and hits this ramp to enter
+        const rampLeft = lodge.rampX - lodge.rampWidth / 2;
+        const rampRight = lodge.rampX + lodge.rampWidth / 2;
+        const rampTop = lodge.rampY;  // Top of ramp (furthest up mountain)
+        const rampBottom = lodge.y;   // Bottom of ramp connects to lodge top
+
+        // If player hits the entrance ramp area, enter the lodge
+        if (px > rampLeft && px < rampRight &&
+            py > rampTop && py < rampBottom + 30) {
+            enterLodge(lodge);
+            return;
+        }
+
+        // Check back door/stairs collision (secondary entry/exit point)
         const doorLeft = lodge.doorX - lodge.stairsWidth / 2;
         const doorRight = lodge.doorX + lodge.stairsWidth / 2;
         const doorTop = lodge.y + lodge.height - lodge.doorHeight;
@@ -1887,11 +1910,13 @@ function checkCollisions() {
         const lodgeTop = lodge.y;
         const lodgeBottom = lodge.y + lodge.height;
 
-        // Only check wall collision if NOT in the door zone
+        // Only check wall collision if NOT in the door/ramp zone
         if (px - pw / 2 < lodgeRight && px + pw / 2 > lodgeLeft &&
             py - ph / 2 < lodgeBottom && py + ph / 2 > lodgeTop) {
-            // Check if we're in the door zone (don't crash)
-            if (!(px > doorLeft - 10 && px < doorRight + 10 && py > doorTop - 20)) {
+            // Check if we're in the door zone or ramp zone (don't crash)
+            const inDoorZone = px > doorLeft - 10 && px < doorRight + 10 && py > doorTop - 20;
+            const inRampZone = px > rampLeft - 10 && px < rampRight + 10 && py < rampBottom + 20;
+            if (!inDoorZone && !inRampZone) {
                 triggerCrash(player);
                 return;
             }
@@ -3219,7 +3244,75 @@ function drawLodges() {
         ctx.ellipse(screen.x + 10, screen.y + h + 15, w * 0.5, 20, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // ===== STAIRS (in front of lodge) =====
+        // ===== ENTRANCE RAMP (above lodge, pointing UP the mountain) =====
+        // This is the main entry - player snowboards down and hits this ramp to enter
+        const rampW = lodge.rampWidth;
+        const rampL = lodge.rampLength;
+        const rampScreen = worldToScreen(lodge.rampX, lodge.rampY);
+
+        // Ramp shadow
+        ctx.fillStyle = 'rgba(60, 80, 100, 0.3)';
+        ctx.beginPath();
+        ctx.ellipse(rampScreen.x + 5, rampScreen.y + rampL + 10, rampW * 0.4, 10, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Snow ramp base (packed snow)
+        const rampGrad = ctx.createLinearGradient(rampScreen.x, rampScreen.y, rampScreen.x, rampScreen.y + rampL);
+        rampGrad.addColorStop(0, '#e8f4f8');     // Light snow at top
+        rampGrad.addColorStop(0.5, '#d0e8f0');   // Mid tone
+        rampGrad.addColorStop(1, '#c8dce8');     // Slightly darker at bottom (shadow)
+        ctx.fillStyle = rampGrad;
+
+        // Draw tapered ramp shape (narrower at top, wider at bottom connecting to lodge)
+        ctx.beginPath();
+        ctx.moveTo(rampScreen.x - rampW * 0.3, rampScreen.y);           // Top left (narrower)
+        ctx.lineTo(rampScreen.x + rampW * 0.3, rampScreen.y);           // Top right (narrower)
+        ctx.lineTo(rampScreen.x + rampW * 0.5, rampScreen.y + rampL);   // Bottom right (wider)
+        ctx.lineTo(rampScreen.x - rampW * 0.5, rampScreen.y + rampL);   // Bottom left (wider)
+        ctx.closePath();
+        ctx.fill();
+
+        // Ramp side edges (darker for depth)
+        ctx.strokeStyle = '#a0c0d0';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(rampScreen.x - rampW * 0.3, rampScreen.y);
+        ctx.lineTo(rampScreen.x - rampW * 0.5, rampScreen.y + rampL);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(rampScreen.x + rampW * 0.3, rampScreen.y);
+        ctx.lineTo(rampScreen.x + rampW * 0.5, rampScreen.y + rampL);
+        ctx.stroke();
+
+        // Ramp surface lines (ski grooves pointing up the mountain)
+        ctx.strokeStyle = 'rgba(160, 190, 210, 0.4)';
+        ctx.lineWidth = 1;
+        for (let i = 0; i < 5; i++) {
+            const t = (i + 1) / 6;
+            const topX = rampScreen.x + (t - 0.5) * rampW * 0.6;
+            const bottomX = rampScreen.x + (t - 0.5) * rampW;
+            ctx.beginPath();
+            ctx.moveTo(topX, rampScreen.y + 5);
+            ctx.lineTo(bottomX, rampScreen.y + rampL - 5);
+            ctx.stroke();
+        }
+
+        // "ENTER" text on ramp
+        ctx.fillStyle = '#4a7a9a';
+        ctx.font = 'bold 10px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('▲ ENTER ▲', rampScreen.x, rampScreen.y + rampL * 0.4);
+
+        // Glow effect around ramp entrance
+        const glowIntensity = 0.3 + Math.sin(time * 3) * 0.1;
+        ctx.strokeStyle = `rgba(100, 200, 255, ${glowIntensity})`;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(rampScreen.x - rampW * 0.3, rampScreen.y);
+        ctx.lineTo(rampScreen.x + rampW * 0.3, rampScreen.y);
+        ctx.stroke();
+
+        // ===== BACK STAIRS (behind lodge - secondary exit) =====
         const stairsW = lodge.stairsWidth;
         const stairsH = lodge.stairsHeight;
         // Stair steps
