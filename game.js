@@ -4925,12 +4925,12 @@ function drawBeast() {
         const breathe = Math.sin(time * 3) * 0.03 + 1;
         scale *= breathe;
 
-        // Draw cold mist aura behind sprite - white/cyan tones for furry yeti
-        const pulseIntensity = 0.3 + Math.sin(time * 3) * 0.15;
-        const auraGrad = ctx.createRadialGradient(screen.x, screen.y, 25, screen.x, screen.y, 80 * scale);
-        auraGrad.addColorStop(0, `rgba(255, 255, 255, ${pulseIntensity * 0.3})`);
-        auraGrad.addColorStop(0.5, `rgba(200, 230, 250, ${pulseIntensity * 0.2})`);
-        auraGrad.addColorStop(1, 'rgba(180, 220, 240, 0)');
+        // Draw dark energy aura behind sprite - purple/magenta for shadowy beast
+        const pulseIntensity = 0.4 + Math.sin(time * 3) * 0.2;
+        const auraGrad = ctx.createRadialGradient(screen.x, screen.y, 20, screen.x, screen.y, 85 * scale);
+        auraGrad.addColorStop(0, `rgba(120, 0, 180, ${pulseIntensity * 0.4})`);
+        auraGrad.addColorStop(0.5, `rgba(60, 0, 100, ${pulseIntensity * 0.25})`);
+        auraGrad.addColorStop(1, 'rgba(20, 0, 40, 0)');
         ctx.fillStyle = auraGrad;
         ctx.beginPath();
         ctx.arc(screen.x, screen.y, 80 * scale, 0, Math.PI * 2);
@@ -4941,14 +4941,14 @@ function drawBeast() {
         if (drawn) return; // Success, skip procedural drawing
     }
 
-    // Fallback to procedural drawing - FURRY WHITE/GRAY YETI (based on YetiPortrait reference)
+    // Fallback to procedural drawing - DARK SHADOWY BEAST (matching YetiPortrait reference)
     ctx.save();
     ctx.translate(screen.x, screen.y);
 
     // Scale up during lunge and with rage
-    let scale = 1 + chase.beastRage * 0.2;
+    let scale = 1 + chase.beastRage * 0.25;
     if (chase.beastState === 'lunging') {
-        scale += chase.lungeProgress * 0.4;
+        scale += chase.lungeProgress * 0.5;
     }
     ctx.scale(scale, scale);
 
@@ -4956,178 +4956,158 @@ function drawBeast() {
     const breathe = Math.sin(time * 3) * 0.05 + 1;
     ctx.scale(breathe, 1 / breathe);
 
-    // Subtle cold mist aura (white/cyan instead of dark blue)
-    const pulseIntensity = 0.3 + Math.sin(time * 3) * 0.15;
-    const auraGrad = ctx.createRadialGradient(0, 0, 25, 0, 0, 75);
-    auraGrad.addColorStop(0, `rgba(255, 255, 255, ${pulseIntensity * 0.3})`);
-    auraGrad.addColorStop(0.5, `rgba(200, 230, 250, ${pulseIntensity * 0.2})`);
-    auraGrad.addColorStop(1, 'rgba(180, 220, 240, 0)');
+    // Dark purple/magenta energy aura
+    const pulseIntensity = 0.4 + Math.sin(time * 3) * 0.2;
+    const auraGrad = ctx.createRadialGradient(0, 0, 20, 0, 0, 85);
+    auraGrad.addColorStop(0, `rgba(120, 0, 180, ${pulseIntensity * 0.4})`);
+    auraGrad.addColorStop(0.4, `rgba(60, 0, 100, ${pulseIntensity * 0.3})`);
+    auraGrad.addColorStop(0.7, `rgba(30, 0, 50, ${pulseIntensity * 0.15})`);
+    auraGrad.addColorStop(1, 'rgba(10, 0, 20, 0)');
     ctx.fillStyle = auraGrad;
     ctx.beginPath();
-    ctx.arc(0, 0, 75, 0, Math.PI * 2);
+    ctx.arc(0, 0, 85, 0, Math.PI * 2);
     ctx.fill();
 
-    // Animated fur strands around body edge (flowing white fur)
-    const furColors = ['#ffffff', '#f0f4f8', '#e0e8f0', '#d8e4ec'];
-    ctx.lineWidth = 3;
-    for (let i = 0; i < 12; i++) {
-        const angle = (i / 12) * Math.PI * 2 + time * 0.5;
-        const len = 40 + Math.sin(time * 2 + i * 0.8) * 8;
-        ctx.strokeStyle = furColors[i % furColors.length];
+    // Floating dark energy particles
+    for (let i = 0; i < 8; i++) {
+        const angle = (i / 8) * Math.PI * 2 + time * 0.8;
+        const dist = 55 + Math.sin(time * 2 + i * 1.2) * 12;
+        const particleAlpha = 0.4 + Math.sin(time * 3 + i) * 0.2;
+        ctx.fillStyle = `rgba(150, 0, 220, ${particleAlpha})`;
         ctx.beginPath();
-        ctx.moveTo(Math.cos(angle) * 30, Math.sin(angle) * 38);
+        ctx.arc(Math.cos(angle) * dist, Math.sin(angle) * dist, 3 + Math.sin(time + i) * 1, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Animated shadow tendrils around body (dark, wispy)
+    const tendrilColors = ['#1a0a2a', '#2a1a3a', '#0a0515', '#15052a'];
+    ctx.lineWidth = 4;
+    for (let i = 0; i < 14; i++) {
+        const angle = (i / 14) * Math.PI * 2 + time * 0.4;
+        const len = 50 + Math.sin(time * 1.5 + i * 0.7) * 15;
+        ctx.strokeStyle = tendrilColors[i % tendrilColors.length];
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(angle) * 35, Math.sin(angle) * 45);
         ctx.quadraticCurveTo(
-            Math.cos(angle + 0.2) * 45 + Math.sin(time * 3 + i) * 3,
-            Math.sin(angle + 0.2) * 50,
+            Math.cos(angle + 0.3) * 55 + Math.sin(time * 2 + i) * 8,
+            Math.sin(angle + 0.3) * 60,
             Math.cos(angle) * len,
-            Math.sin(angle) * (len + 8)
+            Math.sin(angle) * (len + 12)
         );
         ctx.stroke();
     }
 
-    // Main body - WHITE/GRAY fur gradient (furry yeti)
-    const bodyGrad = ctx.createRadialGradient(0, -5, 8, 0, 15, 55);
-    bodyGrad.addColorStop(0, '#ffffff');    // White center
-    bodyGrad.addColorStop(0.3, '#f0f4f8');  // Light gray
-    bodyGrad.addColorStop(0.6, '#e0e8f0');  // Medium gray
-    bodyGrad.addColorStop(0.85, '#d0dce8'); // Darker gray fur
-    bodyGrad.addColorStop(1, '#c0d0e0');    // Edge shadow
+    // Main body - DARK purple/black gradient (menacing shadow)
+    const bodyGrad = ctx.createRadialGradient(0, -5, 10, 0, 15, 60);
+    bodyGrad.addColorStop(0, '#2a1a3a');    // Dark purple center
+    bodyGrad.addColorStop(0.3, '#1a0a2a');  // Darker purple
+    bodyGrad.addColorStop(0.6, '#0a0515');  // Very dark
+    bodyGrad.addColorStop(0.85, '#050210'); // Near black
+    bodyGrad.addColorStop(1, '#020108');    // Pure dark edge
     ctx.fillStyle = bodyGrad;
-    ctx.shadowColor = 'rgba(180, 200, 220, 0.5)';
-    ctx.shadowBlur = 3;
+    ctx.shadowColor = 'rgba(100, 0, 150, 0.5)';
+    ctx.shadowBlur = 4;
     ctx.beginPath();
-    ctx.ellipse(0, 0, 38, 48, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, 0, 45, 55, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Fur texture - multiple layers of white/gray strokes
-    for (let layer = 0; layer < 3; layer++) {
-        ctx.strokeStyle = `rgba(255, 255, 255, ${0.3 - layer * 0.08})`;
-        ctx.lineWidth = 2 - layer * 0.5;
-        for (let i = 0; i < 10; i++) {
-            const fx = -30 + i * 7 + layer * 2;
-            const wave = Math.sin(time * 2 + i + layer) * 3;
-            ctx.beginPath();
-            ctx.moveTo(fx, -35 + layer * 5);
-            ctx.quadraticCurveTo(fx + wave, -5, fx + wave * 0.5, 30 - layer * 5);
-            ctx.stroke();
-        }
-    }
-
-    // Shaggy fur tufts on head/shoulders
-    ctx.strokeStyle = '#f8f8ff';
-    ctx.lineWidth = 3;
-    for (let i = 0; i < 7; i++) {
-        const baseX = -20 + i * 7;
-        const wave = Math.sin(time * 2.5 + i * 0.9) * 6;
+    // Dark fur texture lines
+    ctx.strokeStyle = 'rgba(40, 20, 60, 0.4)';
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 12; i++) {
+        const fx = -35 + i * 6;
+        const wave = Math.sin(time * 1.5 + i) * 4;
         ctx.beginPath();
-        ctx.moveTo(baseX, -42);
-        ctx.quadraticCurveTo(baseX + wave, -58, baseX + wave * 0.6, -65 - Math.abs(wave) * 0.3);
+        ctx.moveTo(fx, -45);
+        ctx.quadraticCurveTo(fx + wave, 0, fx + wave * 0.5, 40);
         ctx.stroke();
     }
 
-    // Face area - slightly darker gray for contrast
-    ctx.fillStyle = '#d8e0e8';
-    ctx.beginPath();
-    ctx.ellipse(0, -8, 22, 18, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Eyes - GLOWING CYAN (keeping the supernatural element)
-    const eyeTrack = Math.sin(time) * 2;
-    ctx.fillStyle = COLORS.cyan;
-    ctx.shadowColor = COLORS.cyan;
-    ctx.shadowBlur = 4;
-    // Left eye
-    ctx.beginPath();
-    ctx.ellipse(-12 + eyeTrack, -15, 7, 9, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // Right eye
-    ctx.beginPath();
-    ctx.ellipse(12 + eyeTrack, -15, 7, 9, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Eye cores - bright white
-    ctx.fillStyle = '#ffffff';
-    ctx.shadowColor = '#ffffff';
-    ctx.shadowBlur = 2;
-    ctx.beginPath();
-    ctx.ellipse(-12 + eyeTrack, -15, 3, 4, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.ellipse(12 + eyeTrack, -15, 3, 4, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Brow fur (angry expression)
-    ctx.strokeStyle = '#c0d0e0';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(-22, -22);
-    ctx.quadraticCurveTo(-12, -28, -5, -24);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(22, -22);
-    ctx.quadraticCurveTo(12, -28, 5, -24);
-    ctx.stroke();
+    // Wispy shadow tufts rising from head
+    ctx.strokeStyle = '#1a0a2a';
+    ctx.lineWidth = 3;
+    for (let i = 0; i < 9; i++) {
+        const baseX = -25 + i * 6;
+        const wave = Math.sin(time * 2 + i * 0.8) * 8;
+        ctx.beginPath();
+        ctx.moveTo(baseX, -48);
+        ctx.quadraticCurveTo(baseX + wave, -68, baseX + wave * 0.5, -78 - Math.abs(wave) * 0.4);
+        ctx.stroke();
+    }
 
     ctx.shadowBlur = 0;
 
-    // Nose - dark gray
-    ctx.fillStyle = '#3a4a5a';
+    // Eyes - HETEROCHROMATIC (left cyan, right magenta) with intense glow
+    const eyeTrack = Math.sin(time) * 2;
+
+    // Left eye - CYAN
+    ctx.fillStyle = COLORS.cyan;
+    ctx.shadowColor = COLORS.cyan;
+    ctx.shadowBlur = 6;
     ctx.beginPath();
-    ctx.ellipse(0, -2, 6, 4, 0, 0, Math.PI * 2);
+    ctx.ellipse(-14 + eyeTrack, -18, 8, 10, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Mouth/maw - dark with teeth showing
-    ctx.fillStyle = '#2a3a4a';
+    // Right eye - MAGENTA
+    ctx.fillStyle = COLORS.magenta;
+    ctx.shadowColor = COLORS.magenta;
+    ctx.shadowBlur = 6;
     ctx.beginPath();
-    ctx.ellipse(0, 12, 16, 12, 0, 0, Math.PI);
+    ctx.ellipse(14 + eyeTrack, -18, 8, 10, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Inner mouth (darker)
-    ctx.fillStyle = '#1a2530';
-    ctx.beginPath();
-    ctx.ellipse(0, 14, 12, 8, 0, 0, Math.PI);
-    ctx.fill();
-
-    // Teeth - white, sharp
+    // Eye cores - bright white for intensity
     ctx.fillStyle = '#ffffff';
-    ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
-    ctx.shadowBlur = 2;
-    const teethCount = 6;
+    ctx.shadowColor = '#ffffff';
+    ctx.shadowBlur = 3;
+    ctx.beginPath();
+    ctx.ellipse(-14 + eyeTrack, -18, 3, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(14 + eyeTrack, -18, 3, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.shadowBlur = 0;
+
+    // Dark maw - barely visible void
+    ctx.fillStyle = '#050008';
+    ctx.beginPath();
+    ctx.ellipse(0, 15, 18, 14, 0, 0, Math.PI);
+    ctx.fill();
+
+    // Subtle inner glow in mouth (faint magenta)
+    ctx.fillStyle = 'rgba(150, 0, 100, 0.15)';
+    ctx.beginPath();
+    ctx.ellipse(0, 17, 12, 8, 0, 0, Math.PI);
+    ctx.fill();
+
+    // Teeth - dark silhouettes, barely visible
+    ctx.fillStyle = 'rgba(60, 40, 80, 0.6)';
+    const teethCount = 5;
     for (let i = 0; i < teethCount; i++) {
-        const tx = -12 + (i * 24 / (teethCount - 1));
-        const th = 7 + Math.sin(i * 1.2) * 2;
+        const tx = -10 + (i * 20 / (teethCount - 1));
+        const th = 6 + Math.sin(i * 1.3) * 2;
         ctx.beginPath();
-        ctx.moveTo(tx - 2.5, 8);
-        ctx.lineTo(tx, 8 + th);
-        ctx.lineTo(tx + 2.5, 8);
-        ctx.closePath();
-        ctx.fill();
-    }
-    // Lower teeth (smaller)
-    for (let i = 0; i < 4; i++) {
-        const tx = -7 + (i * 14 / 3);
-        const th = 4 + Math.sin(i * 1.5);
-        ctx.beginPath();
-        ctx.moveTo(tx - 1.5, 18);
-        ctx.lineTo(tx, 18 - th);
-        ctx.lineTo(tx + 1.5, 18);
+        ctx.moveTo(tx - 2, 10);
+        ctx.lineTo(tx, 10 + th);
+        ctx.lineTo(tx + 2, 10);
         ctx.closePath();
         ctx.fill();
     }
 
-    // Claws appear during lunge - white/gray with slight cyan glow
+    // Claws appear during lunge - dark with magenta/cyan glow
     if (chase.beastState === 'lunging') {
-        ctx.fillStyle = '#e0e8f0';
-        ctx.shadowColor = COLORS.cyan;
-        ctx.shadowBlur = 1;
+        ctx.fillStyle = '#1a0a2a';
+        ctx.shadowColor = COLORS.magenta;
+        ctx.shadowBlur = 3;
         for (let side = -1; side <= 1; side += 2) {
-            for (let c = 0; c < 3; c++) {
-                const clawX = side * 35;
-                const clawY = -10 + c * 10;
+            for (let c = 0; c < 4; c++) {
+                const clawX = side * 42;
+                const clawY = -15 + c * 12;
                 ctx.beginPath();
                 ctx.moveTo(clawX, clawY);
-                ctx.lineTo(clawX + side * 18, clawY + 4);
-                ctx.lineTo(clawX, clawY + 3);
+                ctx.lineTo(clawX + side * 22, clawY + 5);
+                ctx.lineTo(clawX, clawY + 4);
                 ctx.closePath();
                 ctx.fill();
             }
