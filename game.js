@@ -848,16 +848,29 @@ function setupTouchInput() {
     document.addEventListener('touchmove', handleTouchMove, { passive: false });
     document.addEventListener('touchend', handleTouchEnd, { passive: false });
     document.addEventListener('touchcancel', handleTouchEnd, { passive: false });
-
-    // Prevent default touch behaviors on the whole page for iOS
-    document.body.style.touchAction = 'none';
-    document.body.style.webkitTouchCallout = 'none';
-    document.body.style.webkitUserSelect = 'none';
-
 }
 
 function handleTouchStart(e) {
-    e.preventDefault();
+    // Check if touching an interactive element (button, link, input, etc.)
+    const target = e.target;
+    const isInteractive = target.tagName === 'BUTTON' ||
+                          target.tagName === 'A' ||
+                          target.tagName === 'INPUT' ||
+                          target.tagName === 'SELECT' ||
+                          target.closest('button') ||
+                          target.closest('a') ||
+                          target.closest('.menu-btn') ||
+                          target.closest('.submenu') ||
+                          target.closest('#settingsMenu') ||
+                          target.closest('#startScreen');
+
+    // Only prevent default during active gameplay, allow menu interactions
+    if (gameState.screen === 'playing' || gameState.screen === 'lodge') {
+        e.preventDefault();
+    } else if (isInteractive) {
+        // Allow the touch event to pass through to buttons on menus
+        return;
+    }
 
     // Always take the first touch
     const touch = e.changedTouches[0] || e.touches[0];
@@ -876,11 +889,13 @@ function handleTouchStart(e) {
     input.right = false;
     input.up = false;
     input.down = false;
-
 }
 
 function handleTouchMove(e) {
-    e.preventDefault();
+    // Only prevent default during active gameplay
+    if (gameState.screen === 'playing' || gameState.screen === 'lodge') {
+        e.preventDefault();
+    }
     if (!touchState.active) return;
 
     // Find our touch or use first available
@@ -929,7 +944,10 @@ function handleTouchMove(e) {
 }
 
 function handleTouchEnd(e) {
-    e.preventDefault();
+    // Only prevent default during active gameplay
+    if (gameState.screen === 'playing' || gameState.screen === 'lodge') {
+        e.preventDefault();
+    }
 
     if (!touchState.active) return;
 
@@ -6188,6 +6206,14 @@ function gameLoop(timestamp) {
 function init() {
     canvas = document.getElementById('gameCanvas');
     ctx = canvas.getContext('2d');
+
+    // Detect iOS/mobile and enable fullscreen-like mode automatically
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ||
+                     (navigator.maxTouchPoints > 0 && window.innerWidth < 1024);
+    if (isMobile) {
+        displaySettings.fullscreen = true;
+        document.body.classList.add('fullscreen-mode');
+    }
 
     // Initialize resolution system
     loadSettings();
