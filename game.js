@@ -779,6 +779,11 @@ function setupInput() {
             case 'Space':
                 input.space = true;
                 break;
+            case 'Escape':
+                if (document.fullscreenElement) {
+                    document.exitFullscreen();
+                }
+                break;
         }
     });
 
