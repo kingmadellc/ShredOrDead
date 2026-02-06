@@ -1,393 +1,864 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="384" viewBox="0 0 512 384">
   <!-- Yeti/Beast Sprite Sheet: 4 columns x 3 rows = 12 frames, 128x128 per frame -->
-  <!-- Row 1: Chase/Movement (frames 0-3) -->
-  <!-- Row 2: Attack/Lunge (frames 4-7) -->
-  <!-- Row 3: Rage/Special States (frames 8-11) -->
+  <!-- HUMANOID bipedal beast: gorilla-proportioned, burly, furry, terrifying -->
+  <!-- Row 0: Chase/Run cycle (frames 0-3) -->
+  <!-- Row 1: Attack/Lunge (frames 0-3) -->
+  <!-- Row 2: Rage States (frames 0-3) -->
 
   <defs>
-    <!-- Body gradient (dark purple) -->
-    <radialGradient id="bodyGrad" cx="50%" cy="30%" r="70%">
-      <stop offset="0%" style="stop-color:#6a3a7a"/>
-      <stop offset="60%" style="stop-color:#4a2a5a"/>
-      <stop offset="100%" style="stop-color:#1a0a2a"/>
+    <!-- Fur base gradient - dark indigo -->
+    <radialGradient id="furBody" cx="50%" cy="35%" r="55%">
+      <stop offset="0%" style="stop-color:#2a2a4a"/>
+      <stop offset="60%" style="stop-color:#1a1a3a"/>
+      <stop offset="100%" style="stop-color:#0d0d2a"/>
     </radialGradient>
-    <!-- Rage aura gradient -->
-    <radialGradient id="auraGrad" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" style="stop-color:#ff00ff;stop-opacity:0.3"/>
-      <stop offset="70%" style="stop-color:#8800aa;stop-opacity:0.1"/>
-      <stop offset="100%" style="stop-color:#440066;stop-opacity:0"/>
+    <!-- Fur shadow for limbs -->
+    <linearGradient id="furLimb" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a3a"/>
+      <stop offset="100%" style="stop-color:#0d0d2a"/>
+    </linearGradient>
+    <!-- Head gradient -->
+    <radialGradient id="headFur" cx="50%" cy="40%" r="55%">
+      <stop offset="0%" style="stop-color:#2a2a4a"/>
+      <stop offset="70%" style="stop-color:#1a1a3a"/>
+      <stop offset="100%" style="stop-color:#0d0d2a"/>
     </radialGradient>
-    <!-- Eye glow cyan -->
-    <radialGradient id="eyeCyan" cx="50%" cy="50%" r="50%">
+    <!-- Eye glow - cyan -->
+    <radialGradient id="eyeGlow" cx="50%" cy="50%" r="50%">
       <stop offset="0%" style="stop-color:#ffffff"/>
-      <stop offset="40%" style="stop-color:#00ffff"/>
-      <stop offset="100%" style="stop-color:#0088aa"/>
+      <stop offset="35%" style="stop-color:#00ffee"/>
+      <stop offset="70%" style="stop-color:#006688"/>
+      <stop offset="100%" style="stop-color:#003344;stop-opacity:0"/>
     </radialGradient>
-    <!-- Eye glow magenta -->
-    <radialGradient id="eyeMagenta" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" style="stop-color:#ffffff"/>
-      <stop offset="40%" style="stop-color:#ff00ff"/>
-      <stop offset="100%" style="stop-color:#aa0088"/>
+    <!-- Mouth interior -->
+    <radialGradient id="mouthInner" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" style="stop-color:#3a0815"/>
+      <stop offset="100%" style="stop-color:#2a0510"/>
     </radialGradient>
-    <!-- Mouth glow -->
-    <radialGradient id="mouthGrad" cx="50%" cy="0%" r="100%">
-      <stop offset="0%" style="stop-color:#ff4444"/>
-      <stop offset="100%" style="stop-color:#aa0000"/>
-    </radialGradient>
-    <!-- Glow filter -->
-    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+    <!-- Body edge blur -->
+    <filter id="furEdge" x="-5%" y="-5%" width="110%" height="110%">
+      <feGaussianBlur stdDeviation="0.8" result="blur"/>
       <feMerge>
-        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="blur"/>
         <feMergeNode in="SourceGraphic"/>
       </feMerge>
     </filter>
-    <!-- Strong glow -->
-    <filter id="strongGlow" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+    <!-- Eye glow filter -->
+    <filter id="eyeFlare" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="2.5" result="glow"/>
       <feMerge>
-        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="glow"/>
         <feMergeNode in="SourceGraphic"/>
       </feMerge>
     </filter>
+    <!-- Stronger glow for rage -->
+    <filter id="eyeFlareStrong" x="-150%" y="-150%" width="400%" height="400%">
+      <feGaussianBlur stdDeviation="4" result="glow"/>
+      <feMerge>
+        <feMergeNode in="glow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <!-- Rage aura -->
+    <radialGradient id="rageAura" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" style="stop-color:#2a1a4a;stop-opacity:0.3"/>
+      <stop offset="60%" style="stop-color:#1a0a3a;stop-opacity:0.15"/>
+      <stop offset="100%" style="stop-color:#0a0520;stop-opacity:0"/>
+    </radialGradient>
   </defs>
 
-  <!-- ROW 1: CHASE/MOVEMENT -->
-  <!-- Frame 0: Neutral chase pose -->
-  <g transform="translate(64, 64)">
-    <!-- Aura -->
-    <ellipse cx="0" cy="10" rx="50" ry="45" fill="url(#auraGrad)"/>
-    <!-- Shadow tendrils -->
-    <path d="M-35,30 Q-50,20 -45,45" stroke="#330044" stroke-width="4" fill="none" opacity="0.6"/>
-    <path d="M35,30 Q50,20 45,45" stroke="#330044" stroke-width="4" fill="none" opacity="0.6"/>
-    <path d="M-20,40 Q-30,50 -25,55" stroke="#330044" stroke-width="3" fill="none" opacity="0.4"/>
-    <path d="M20,40 Q30,50 25,55" stroke="#330044" stroke-width="3" fill="none" opacity="0.4"/>
-    <!-- Main body -->
-    <ellipse cx="0" cy="10" rx="35" ry="45" fill="url(#bodyGrad)" filter="url(#glow)"/>
-    <!-- Fur texture lines -->
-    <path d="M-25,-20 Q-23,-10 -25,0" stroke="#2a1a3a" stroke-width="2" fill="none"/>
-    <path d="M-15,-25 Q-13,-15 -15,-5" stroke="#2a1a3a" stroke-width="2" fill="none"/>
-    <path d="M0,-30 Q2,-20 0,-10" stroke="#2a1a3a" stroke-width="2" fill="none"/>
-    <path d="M15,-25 Q17,-15 15,-5" stroke="#2a1a3a" stroke-width="2" fill="none"/>
-    <path d="M25,-20 Q27,-10 25,0" stroke="#2a1a3a" stroke-width="2" fill="none"/>
-    <!-- Arms -->
-    <ellipse cx="-38" cy="5" rx="12" ry="20" fill="url(#bodyGrad)"/>
-    <ellipse cx="38" cy="5" rx="12" ry="20" fill="url(#bodyGrad)"/>
-    <!-- Claws -->
-    <path d="M-45,20 L-48,28 M-42,22 L-44,30 M-39,23 L-40,31" stroke="#1a0a1a" stroke-width="2" stroke-linecap="round"/>
-    <path d="M45,20 L48,28 M42,22 L44,30 M39,23 L40,31" stroke="#1a0a1a" stroke-width="2" stroke-linecap="round"/>
-    <!-- Left eye (cyan) -->
-    <ellipse cx="-12" cy="-10" rx="10" ry="12" fill="url(#eyeCyan)" filter="url(#glow)"/>
-    <circle cx="-12" cy="-10" r="4" fill="#000"/>
-    <!-- Right eye (magenta) -->
-    <ellipse cx="12" cy="-10" rx="10" ry="12" fill="url(#eyeMagenta)" filter="url(#glow)"/>
-    <circle cx="12" cy="-10" r="4" fill="#000"/>
-    <!-- Mouth -->
-    <ellipse cx="0" cy="20" rx="15" ry="10" fill="url(#mouthGrad)" filter="url(#glow)"/>
-    <!-- Teeth -->
-    <polygon points="-10,15 -8,22 -6,15" fill="#ffffff"/>
-    <polygon points="-4,14 -2,23 0,14" fill="#ffffff"/>
-    <polygon points="2,14 4,23 6,14" fill="#ffffff"/>
-    <polygon points="8,15 10,22 12,15" fill="#ffffff"/>
+  <!-- ============================================ -->
+  <!-- ROW 0: CHASE / RUN CYCLE                     -->
+  <!-- ============================================ -->
+
+  <!-- Frame 0: Left-foot-forward stride, right arm forward -->
+  <g transform="translate(0, 0)">
+    <!-- Snow particles -->
+    <circle cx="18" cy="22" r="1" fill="#c8dcff" opacity="0.3"/>
+    <circle cx="108" cy="15" r="0.8" fill="#c8dcff" opacity="0.25"/>
+    <circle cx="42" cy="105" r="1.1" fill="#c8dcff" opacity="0.28"/>
+    <circle cx="98" cy="95" r="0.7" fill="#c8dcff" opacity="0.22"/>
+    <!-- Ground shadow -->
+    <ellipse cx="64" cy="108" rx="28" ry="5" fill="rgba(0,0,0,0.2)"/>
+
+    <!-- Left leg (forward, knee bent) -->
+    <path d="M50,80 L44,92 L42,104" stroke="#0d0d2a" stroke-width="13" stroke-linecap="round" fill="none"/>
+    <!-- Left foot -->
+    <path d="M38,103 L46,106" stroke="#0d0d2a" stroke-width="8" stroke-linecap="round" fill="none"/>
+    <!-- Right leg (back, pushing off) -->
+    <path d="M72,78 L80,90 L84,102" stroke="#0d0d2a" stroke-width="12" stroke-linecap="round" fill="none"/>
+    <!-- Right foot -->
+    <path d="M80,101 L88,104" stroke="#0d0d2a" stroke-width="7" stroke-linecap="round" fill="none"/>
+
+    <!-- Torso - barrel chest, wide shoulders, 5deg forward lean -->
+    <path d="M40,42 Q38,38 42,35 L54,30 Q64,28 74,30 L86,35 Q90,38 88,42 L90,55 Q92,65 88,72 L84,78 Q74,82 64,82 Q54,82 44,78 L40,72 Q36,65 38,55 Z"
+      fill="url(#furBody)" filter="url(#furEdge)"/>
+    <!-- Chest/pectoral mass -->
+    <path d="M48,44 Q54,40 64,40 Q74,40 80,44 Q82,50 78,56 Q70,60 64,60 Q58,60 50,56 Q46,50 48,44 Z"
+      fill="#2a2a4a" opacity="0.5"/>
+    <!-- Shoulder hump - left -->
+    <ellipse cx="42" cy="38" rx="10" ry="7" fill="#1a1a3a"/>
+    <!-- Shoulder hump - right -->
+    <ellipse cx="86" cy="38" rx="10" ry="7" fill="#1a1a3a"/>
+
+    <!-- Left arm (swinging back) -->
+    <path d="M40,44 L32,58 L28,72" stroke="url(#furLimb)" stroke-width="11" stroke-linecap="round" fill="none"/>
+    <!-- Left hand/claws -->
+    <circle cx="27" cy="73" r="5" fill="#0d0d2a"/>
+    <path d="M24,70 L20,66" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+    <path d="M26,68 L23,63" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+    <path d="M29,68 L27,63" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+
+    <!-- Right arm (swinging forward) -->
+    <path d="M88,44 L94,54 L98,66" stroke="url(#furLimb)" stroke-width="11" stroke-linecap="round" fill="none"/>
+    <!-- Right hand/claws -->
+    <circle cx="99" cy="67" r="5" fill="#0d0d2a"/>
+    <path d="M102,64 L106,60" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+    <path d="M100,62 L103,57" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+    <path d="M97,62 L99,57" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+
+    <!-- Head -->
+    <path d="M50,18 Q48,14 50,10 Q54,5 64,4 Q74,5 78,10 Q80,14 78,18 Q82,22 80,28 Q78,32 74,34 Q68,36 64,36 Q60,36 54,34 Q50,32 48,28 Q46,22 50,18 Z"
+      fill="url(#headFur)" filter="url(#furEdge)"/>
+    <!-- Brow ridge -->
+    <path d="M50,16 Q56,12 64,12 Q72,12 78,16 Q80,18 78,20 Q72,17 64,17 Q56,17 50,20 Q48,18 50,16 Z"
+      fill="#0d0d2a"/>
+    <!-- Eyes - deep-set under brow -->
+    <circle cx="56" cy="20" r="3" fill="url(#eyeGlow)" filter="url(#eyeFlare)"/>
+    <circle cx="56" cy="20" r="1.2" fill="#ffffff"/>
+    <circle cx="72" cy="20" r="3" fill="url(#eyeGlow)" filter="url(#eyeFlare)"/>
+    <circle cx="72" cy="20" r="1.2" fill="#ffffff"/>
+    <!-- Nose ridge -->
+    <path d="M62,23 L64,26 L66,23" stroke="#0d0d2a" stroke-width="2" fill="none"/>
+    <!-- Mouth - closed, grimace -->
+    <path d="M56,30 Q60,33 64,32 Q68,33 72,30" stroke="#0d0d2a" stroke-width="1.8" fill="none"/>
+    <!-- Fang tips peeking -->
+    <path d="M58,30 L57,33" stroke="#e8e0d0" stroke-width="1.5" stroke-linecap="round"/>
+    <path d="M70,30 L71,33" stroke="#e8e0d0" stroke-width="1.5" stroke-linecap="round"/>
+
+    <!-- Fur texture strokes on torso -->
+    <path d="M44,45 L42,50" stroke="#4a4a6a" stroke-width="1.2" opacity="0.5"/>
+    <path d="M48,55 L45,60" stroke="#4a4a6a" stroke-width="1.2" opacity="0.5"/>
+    <path d="M80,45 L83,50" stroke="#4a4a6a" stroke-width="1.2" opacity="0.5"/>
+    <path d="M76,60 L79,65" stroke="#4a4a6a" stroke-width="1.2" opacity="0.5"/>
+    <path d="M60,42 L58,47" stroke="#4a4a6a" stroke-width="1" opacity="0.4"/>
+    <path d="M68,42 L70,47" stroke="#4a4a6a" stroke-width="1" opacity="0.4"/>
+    <!-- Fur on head -->
+    <path d="M52,8 L50,3" stroke="#4a4a6a" stroke-width="1.5" opacity="0.5"/>
+    <path d="M64,5 L64,0" stroke="#4a4a6a" stroke-width="1.5" opacity="0.5"/>
+    <path d="M76,8 L78,3" stroke="#4a4a6a" stroke-width="1.5" opacity="0.5"/>
   </g>
 
-  <!-- Frame 1: Chase lean forward -->
-  <g transform="translate(192, 64) rotate(8)">
-    <ellipse cx="0" cy="10" rx="50" ry="45" fill="url(#auraGrad)"/>
-    <path d="M-35,30 Q-55,15 -50,40" stroke="#330044" stroke-width="4" fill="none" opacity="0.6"/>
-    <path d="M35,30 Q55,15 50,40" stroke="#330044" stroke-width="4" fill="none" opacity="0.6"/>
-    <ellipse cx="0" cy="10" rx="35" ry="45" fill="url(#bodyGrad)" filter="url(#glow)"/>
-    <path d="M-25,-20 Q-21,-10 -25,0" stroke="#2a1a3a" stroke-width="2" fill="none"/>
-    <path d="M-15,-25 Q-11,-15 -15,-5" stroke="#2a1a3a" stroke-width="2" fill="none"/>
-    <path d="M0,-30 Q4,-20 0,-10" stroke="#2a1a3a" stroke-width="2" fill="none"/>
-    <path d="M15,-25 Q19,-15 15,-5" stroke="#2a1a3a" stroke-width="2" fill="none"/>
-    <path d="M25,-20 Q29,-10 25,0" stroke="#2a1a3a" stroke-width="2" fill="none"/>
-    <!-- Arms reaching forward -->
-    <ellipse cx="-40" cy="-5" rx="12" ry="20" fill="url(#bodyGrad)" transform="rotate(-20)"/>
-    <ellipse cx="40" cy="-5" rx="12" ry="20" fill="url(#bodyGrad)" transform="rotate(20)"/>
-    <path d="M-50,10 L-55,16 M-47,12 L-51,18 M-44,13 L-47,19" stroke="#1a0a1a" stroke-width="2" stroke-linecap="round"/>
-    <path d="M50,10 L55,16 M47,12 L51,18 M44,13 L47,19" stroke="#1a0a1a" stroke-width="2" stroke-linecap="round"/>
-    <ellipse cx="-12" cy="-10" rx="10" ry="12" fill="url(#eyeCyan)" filter="url(#glow)"/>
-    <circle cx="-10" cy="-10" r="4" fill="#000"/>
-    <ellipse cx="12" cy="-10" rx="10" ry="12" fill="url(#eyeMagenta)" filter="url(#glow)"/>
-    <circle cx="14" cy="-10" r="4" fill="#000"/>
-    <ellipse cx="0" cy="20" rx="18" ry="12" fill="url(#mouthGrad)" filter="url(#glow)"/>
-    <polygon points="-12,14 -10,24 -8,14" fill="#ffffff"/>
-    <polygon points="-4,13 -2,25 0,13" fill="#ffffff"/>
-    <polygon points="4,13 6,25 8,13" fill="#ffffff"/>
-    <polygon points="10,14 12,24 14,14" fill="#ffffff"/>
+  <!-- Frame 1: Contact/bounce phase - body lowered, knees bent, arms transitioning -->
+  <g transform="translate(128, 0)">
+    <circle cx="20" cy="25" r="1" fill="#c8dcff" opacity="0.3"/>
+    <circle cx="105" cy="18" r="0.8" fill="#c8dcff" opacity="0.25"/>
+    <circle cx="38" cy="100" r="0.9" fill="#c8dcff" opacity="0.28"/>
+    <circle cx="100" cy="88" r="0.7" fill="#c8dcff" opacity="0.22"/>
+    <ellipse cx="64" cy="112" rx="30" ry="5" fill="rgba(0,0,0,0.2)"/>
+
+    <!-- Left leg (under body, bent) -->
+    <path d="M52,84 L48,96 L46,108" stroke="#0d0d2a" stroke-width="13" stroke-linecap="round" fill="none"/>
+    <path d="M42,107 L50,110" stroke="#0d0d2a" stroke-width="8" stroke-linecap="round" fill="none"/>
+    <!-- Right leg (under body, bent) -->
+    <path d="M76,84 L80,96 L78,108" stroke="#0d0d2a" stroke-width="12" stroke-linecap="round" fill="none"/>
+    <path d="M74,107 L82,110" stroke="#0d0d2a" stroke-width="7" stroke-linecap="round" fill="none"/>
+
+    <!-- Torso - slightly compressed (body lower in bounce) -->
+    <path d="M40,46 Q38,42 42,39 L54,34 Q64,32 74,34 L86,39 Q90,42 88,46 L90,58 Q92,68 88,76 L84,82 Q74,86 64,86 Q54,86 44,82 L40,76 Q36,68 38,58 Z"
+      fill="url(#furBody)" filter="url(#furEdge)"/>
+    <path d="M48,48 Q54,44 64,44 Q74,44 80,48 Q82,54 78,60 Q70,64 64,64 Q58,64 50,60 Q46,54 48,48 Z"
+      fill="#2a2a4a" opacity="0.5"/>
+    <ellipse cx="42" cy="42" rx="10" ry="7" fill="#1a1a3a"/>
+    <ellipse cx="86" cy="42" rx="10" ry="7" fill="#1a1a3a"/>
+
+    <!-- Arms at sides (transitioning) -->
+    <path d="M40,48 L34,62 L30,76" stroke="url(#furLimb)" stroke-width="11" stroke-linecap="round" fill="none"/>
+    <circle cx="29" cy="77" r="5" fill="#0d0d2a"/>
+    <path d="M26,74 L22,70" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+    <path d="M28,72 L25,67" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+    <path d="M31,72 L29,67" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+
+    <path d="M88,48 L94,62 L98,76" stroke="url(#furLimb)" stroke-width="11" stroke-linecap="round" fill="none"/>
+    <circle cx="99" cy="77" r="5" fill="#0d0d2a"/>
+    <path d="M102,74 L106,70" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+    <path d="M100,72 L103,67" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+    <path d="M97,72 L99,67" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+
+    <!-- Head (slightly lower due to bounce) -->
+    <path d="M50,22 Q48,18 50,14 Q54,9 64,8 Q74,9 78,14 Q80,18 78,22 Q82,26 80,32 Q78,36 74,38 Q68,40 64,40 Q60,40 54,38 Q50,36 48,32 Q46,26 50,22 Z"
+      fill="url(#headFur)" filter="url(#furEdge)"/>
+    <path d="M50,20 Q56,16 64,16 Q72,16 78,20 Q80,22 78,24 Q72,21 64,21 Q56,21 50,24 Q48,22 50,20 Z"
+      fill="#0d0d2a"/>
+    <circle cx="56" cy="24" r="3" fill="url(#eyeGlow)" filter="url(#eyeFlare)"/>
+    <circle cx="56" cy="24" r="1.2" fill="#ffffff"/>
+    <circle cx="72" cy="24" r="3" fill="url(#eyeGlow)" filter="url(#eyeFlare)"/>
+    <circle cx="72" cy="24" r="1.2" fill="#ffffff"/>
+    <path d="M62,27 L64,30 L66,27" stroke="#0d0d2a" stroke-width="2" fill="none"/>
+    <path d="M56,34 Q60,37 64,36 Q68,37 72,34" stroke="#0d0d2a" stroke-width="1.8" fill="none"/>
+    <path d="M58,34 L57,37" stroke="#e8e0d0" stroke-width="1.5" stroke-linecap="round"/>
+    <path d="M70,34 L71,37" stroke="#e8e0d0" stroke-width="1.5" stroke-linecap="round"/>
+
+    <!-- Fur texture -->
+    <path d="M44,50 L42,55" stroke="#4a4a6a" stroke-width="1.2" opacity="0.5"/>
+    <path d="M80,50 L83,55" stroke="#4a4a6a" stroke-width="1.2" opacity="0.5"/>
+    <path d="M60,46 L58,51" stroke="#4a4a6a" stroke-width="1" opacity="0.4"/>
+    <path d="M68,46 L70,51" stroke="#4a4a6a" stroke-width="1" opacity="0.4"/>
+    <path d="M52,12 L50,7" stroke="#4a4a6a" stroke-width="1.5" opacity="0.5"/>
+    <path d="M64,9 L64,4" stroke="#4a4a6a" stroke-width="1.5" opacity="0.5"/>
+    <path d="M76,12 L78,7" stroke="#4a4a6a" stroke-width="1.5" opacity="0.5"/>
   </g>
 
-  <!-- Frame 2: Chase stride 1 -->
-  <g transform="translate(320, 64)">
-    <ellipse cx="0" cy="10" rx="55" ry="50" fill="url(#auraGrad)"/>
-    <path d="M-40,25 Q-60,10 -55,35" stroke="#330044" stroke-width="5" fill="none" opacity="0.7"/>
-    <path d="M40,25 Q60,10 55,35" stroke="#330044" stroke-width="5" fill="none" opacity="0.7"/>
-    <ellipse cx="0" cy="10" rx="38" ry="48" fill="url(#bodyGrad)" filter="url(#glow)"/>
-    <path d="M-28,-22 Q-24,-12 -28,0" stroke="#2a1a3a" stroke-width="2" fill="none"/>
-    <path d="M-14,-28 Q-10,-18 -14,-6" stroke="#2a1a3a" stroke-width="2" fill="none"/>
-    <path d="M0,-32 Q4,-22 0,-10" stroke="#2a1a3a" stroke-width="2" fill="none"/>
-    <path d="M14,-28 Q18,-18 14,-6" stroke="#2a1a3a" stroke-width="2" fill="none"/>
-    <path d="M28,-22 Q32,-12 28,0" stroke="#2a1a3a" stroke-width="2" fill="none"/>
-    <!-- Left arm up -->
-    <ellipse cx="-42" cy="-10" rx="13" ry="22" fill="url(#bodyGrad)" transform="rotate(-30 -42 -10)"/>
-    <!-- Right arm down -->
-    <ellipse cx="42" cy="15" rx="13" ry="22" fill="url(#bodyGrad)" transform="rotate(30 42 15)"/>
-    <path d="M-55,-5 L-60,2 M-52,-3 L-56,4 M-49,-2 L-52,5" stroke="#1a0a1a" stroke-width="2" stroke-linecap="round"/>
-    <path d="M52,30 L56,38 M49,32 L52,40 M46,33 L48,41" stroke="#1a0a1a" stroke-width="2" stroke-linecap="round"/>
-    <ellipse cx="-12" cy="-12" rx="11" ry="13" fill="url(#eyeCyan)" filter="url(#glow)"/>
-    <circle cx="-14" cy="-12" r="4" fill="#000"/>
-    <ellipse cx="12" cy="-12" rx="11" ry="13" fill="url(#eyeMagenta)" filter="url(#glow)"/>
-    <circle cx="10" cy="-12" r="4" fill="#000"/>
-    <ellipse cx="0" cy="18" rx="16" ry="11" fill="url(#mouthGrad)" filter="url(#glow)"/>
-    <polygon points="-11,13 -9,22 -7,13" fill="#ffffff"/>
-    <polygon points="-3,12 -1,23 1,12" fill="#ffffff"/>
-    <polygon points="5,12 7,23 9,12" fill="#ffffff"/>
-    <polygon points="11,13 13,22 15,13" fill="#ffffff"/>
+  <!-- Frame 2: Right-foot-forward stride (mirror of F0) -->
+  <g transform="translate(256, 0)">
+    <circle cx="22" cy="20" r="0.9" fill="#c8dcff" opacity="0.28"/>
+    <circle cx="110" cy="28" r="1" fill="#c8dcff" opacity="0.25"/>
+    <circle cx="35" cy="98" r="0.8" fill="#c8dcff" opacity="0.3"/>
+    <circle cx="95" cy="102" r="1.1" fill="#c8dcff" opacity="0.22"/>
+    <ellipse cx="64" cy="108" rx="28" ry="5" fill="rgba(0,0,0,0.2)"/>
+
+    <!-- Right leg (forward, knee bent) -->
+    <path d="M78,80 L84,92 L86,104" stroke="#0d0d2a" stroke-width="13" stroke-linecap="round" fill="none"/>
+    <path d="M82,103 L90,106" stroke="#0d0d2a" stroke-width="8" stroke-linecap="round" fill="none"/>
+    <!-- Left leg (back, pushing off) -->
+    <path d="M56,78 L48,90 L44,102" stroke="#0d0d2a" stroke-width="12" stroke-linecap="round" fill="none"/>
+    <path d="M40,101 L48,104" stroke="#0d0d2a" stroke-width="7" stroke-linecap="round" fill="none"/>
+
+    <!-- Torso -->
+    <path d="M40,42 Q38,38 42,35 L54,30 Q64,28 74,30 L86,35 Q90,38 88,42 L90,55 Q92,65 88,72 L84,78 Q74,82 64,82 Q54,82 44,78 L40,72 Q36,65 38,55 Z"
+      fill="url(#furBody)" filter="url(#furEdge)"/>
+    <path d="M48,44 Q54,40 64,40 Q74,40 80,44 Q82,50 78,56 Q70,60 64,60 Q58,60 50,56 Q46,50 48,44 Z"
+      fill="#2a2a4a" opacity="0.5"/>
+    <ellipse cx="42" cy="38" rx="10" ry="7" fill="#1a1a3a"/>
+    <ellipse cx="86" cy="38" rx="10" ry="7" fill="#1a1a3a"/>
+
+    <!-- Right arm (swinging back) -->
+    <path d="M88,44 L96,58 L100,72" stroke="url(#furLimb)" stroke-width="11" stroke-linecap="round" fill="none"/>
+    <circle cx="101" cy="73" r="5" fill="#0d0d2a"/>
+    <path d="M104,70 L108,66" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+    <path d="M102,68 L105,63" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+    <path d="M99,68 L101,63" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+
+    <!-- Left arm (swinging forward) -->
+    <path d="M40,44 L34,54 L30,66" stroke="url(#furLimb)" stroke-width="11" stroke-linecap="round" fill="none"/>
+    <circle cx="29" cy="67" r="5" fill="#0d0d2a"/>
+    <path d="M26,64 L22,60" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+    <path d="M28,62 L25,57" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+    <path d="M31,62 L29,57" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+
+    <!-- Head -->
+    <path d="M50,18 Q48,14 50,10 Q54,5 64,4 Q74,5 78,10 Q80,14 78,18 Q82,22 80,28 Q78,32 74,34 Q68,36 64,36 Q60,36 54,34 Q50,32 48,28 Q46,22 50,18 Z"
+      fill="url(#headFur)" filter="url(#furEdge)"/>
+    <path d="M50,16 Q56,12 64,12 Q72,12 78,16 Q80,18 78,20 Q72,17 64,17 Q56,17 50,20 Q48,18 50,16 Z"
+      fill="#0d0d2a"/>
+    <circle cx="56" cy="20" r="3" fill="url(#eyeGlow)" filter="url(#eyeFlare)"/>
+    <circle cx="56" cy="20" r="1.2" fill="#ffffff"/>
+    <circle cx="72" cy="20" r="3" fill="url(#eyeGlow)" filter="url(#eyeFlare)"/>
+    <circle cx="72" cy="20" r="1.2" fill="#ffffff"/>
+    <path d="M62,23 L64,26 L66,23" stroke="#0d0d2a" stroke-width="2" fill="none"/>
+    <path d="M56,30 Q60,33 64,32 Q68,33 72,30" stroke="#0d0d2a" stroke-width="1.8" fill="none"/>
+    <path d="M58,30 L57,33" stroke="#e8e0d0" stroke-width="1.5" stroke-linecap="round"/>
+    <path d="M70,30 L71,33" stroke="#e8e0d0" stroke-width="1.5" stroke-linecap="round"/>
+
+    <!-- Fur texture -->
+    <path d="M44,45 L42,50" stroke="#4a4a6a" stroke-width="1.2" opacity="0.5"/>
+    <path d="M80,45 L83,50" stroke="#4a4a6a" stroke-width="1.2" opacity="0.5"/>
+    <path d="M60,42 L58,47" stroke="#4a4a6a" stroke-width="1" opacity="0.4"/>
+    <path d="M68,42 L70,47" stroke="#4a4a6a" stroke-width="1" opacity="0.4"/>
+    <path d="M52,8 L50,3" stroke="#4a4a6a" stroke-width="1.5" opacity="0.5"/>
+    <path d="M64,5 L64,0" stroke="#4a4a6a" stroke-width="1.5" opacity="0.5"/>
+    <path d="M76,8 L78,3" stroke="#4a4a6a" stroke-width="1.5" opacity="0.5"/>
   </g>
 
-  <!-- Frame 3: Chase stride 2 -->
-  <g transform="translate(448, 64)">
-    <ellipse cx="0" cy="10" rx="55" ry="50" fill="url(#auraGrad)"/>
-    <path d="M-40,25 Q-60,10 -55,35" stroke="#330044" stroke-width="5" fill="none" opacity="0.7"/>
-    <path d="M40,25 Q60,10 55,35" stroke="#330044" stroke-width="5" fill="none" opacity="0.7"/>
-    <ellipse cx="0" cy="10" rx="38" ry="48" fill="url(#bodyGrad)" filter="url(#glow)"/>
-    <path d="M-28,-22 Q-32,-12 -28,0" stroke="#2a1a3a" stroke-width="2" fill="none"/>
-    <path d="M-14,-28 Q-18,-18 -14,-6" stroke="#2a1a3a" stroke-width="2" fill="none"/>
-    <path d="M0,-32 Q-4,-22 0,-10" stroke="#2a1a3a" stroke-width="2" fill="none"/>
-    <path d="M14,-28 Q10,-18 14,-6" stroke="#2a1a3a" stroke-width="2" fill="none"/>
-    <path d="M28,-22 Q24,-12 28,0" stroke="#2a1a3a" stroke-width="2" fill="none"/>
-    <!-- Right arm up -->
-    <ellipse cx="42" cy="-10" rx="13" ry="22" fill="url(#bodyGrad)" transform="rotate(30 42 -10)"/>
-    <!-- Left arm down -->
-    <ellipse cx="-42" cy="15" rx="13" ry="22" fill="url(#bodyGrad)" transform="rotate(-30 -42 15)"/>
-    <path d="M55,-5 L60,2 M52,-3 L56,4 M49,-2 L52,5" stroke="#1a0a1a" stroke-width="2" stroke-linecap="round"/>
-    <path d="M-52,30 L-56,38 M-49,32 L-52,40 M-46,33 L-48,41" stroke="#1a0a1a" stroke-width="2" stroke-linecap="round"/>
-    <ellipse cx="-12" cy="-12" rx="11" ry="13" fill="url(#eyeCyan)" filter="url(#glow)"/>
-    <circle cx="-10" cy="-12" r="4" fill="#000"/>
-    <ellipse cx="12" cy="-12" rx="11" ry="13" fill="url(#eyeMagenta)" filter="url(#glow)"/>
-    <circle cx="14" cy="-12" r="4" fill="#000"/>
-    <ellipse cx="0" cy="18" rx="16" ry="11" fill="url(#mouthGrad)" filter="url(#glow)"/>
-    <polygon points="-11,13 -9,22 -7,13" fill="#ffffff"/>
-    <polygon points="-3,12 -1,23 1,12" fill="#ffffff"/>
-    <polygon points="5,12 7,23 9,12" fill="#ffffff"/>
-    <polygon points="11,13 13,22 15,13" fill="#ffffff"/>
+  <!-- Frame 3: Push-off phase - body higher, extending upward -->
+  <g transform="translate(384, 0)">
+    <circle cx="15" cy="18" r="1.1" fill="#c8dcff" opacity="0.3"/>
+    <circle cx="112" cy="24" r="0.8" fill="#c8dcff" opacity="0.25"/>
+    <circle cx="45" cy="100" r="0.9" fill="#c8dcff" opacity="0.28"/>
+    <circle cx="90" cy="105" r="1" fill="#c8dcff" opacity="0.2"/>
+    <ellipse cx="64" cy="106" rx="26" ry="4" fill="rgba(0,0,0,0.18)"/>
+
+    <!-- Left leg (extending back, pushing off) -->
+    <path d="M54,76 L50,88 L48,100" stroke="#0d0d2a" stroke-width="13" stroke-linecap="round" fill="none"/>
+    <path d="M44,99 L52,102" stroke="#0d0d2a" stroke-width="8" stroke-linecap="round" fill="none"/>
+    <!-- Right leg (coming forward) -->
+    <path d="M74,76 L76,88 L74,100" stroke="#0d0d2a" stroke-width="12" stroke-linecap="round" fill="none"/>
+    <path d="M70,99 L78,102" stroke="#0d0d2a" stroke-width="7" stroke-linecap="round" fill="none"/>
+
+    <!-- Torso - body 3px higher, more upright -->
+    <path d="M40,38 Q38,34 42,31 L54,26 Q64,24 74,26 L86,31 Q90,34 88,38 L90,52 Q92,62 88,68 L84,74 Q74,78 64,78 Q54,78 44,74 L40,68 Q36,62 38,52 Z"
+      fill="url(#furBody)" filter="url(#furEdge)"/>
+    <path d="M48,40 Q54,36 64,36 Q74,36 80,40 Q82,46 78,52 Q70,56 64,56 Q58,56 50,52 Q46,46 48,40 Z"
+      fill="#2a2a4a" opacity="0.5"/>
+    <ellipse cx="42" cy="34" rx="10" ry="7" fill="#1a1a3a"/>
+    <ellipse cx="86" cy="34" rx="10" ry="7" fill="#1a1a3a"/>
+
+    <!-- Arms in mid position -->
+    <path d="M40,40 L34,56 L30,70" stroke="url(#furLimb)" stroke-width="11" stroke-linecap="round" fill="none"/>
+    <circle cx="29" cy="71" r="5" fill="#0d0d2a"/>
+    <path d="M26,68 L22,64" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+    <path d="M28,66 L25,61" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+    <path d="M31,66 L29,61" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+
+    <path d="M88,40 L94,56 L98,70" stroke="url(#furLimb)" stroke-width="11" stroke-linecap="round" fill="none"/>
+    <circle cx="99" cy="71" r="5" fill="#0d0d2a"/>
+    <path d="M102,68 L106,64" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+    <path d="M100,66 L103,61" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+    <path d="M97,66 L99,61" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+
+    <!-- Head (higher) -->
+    <path d="M50,14 Q48,10 50,6 Q54,1 64,0 Q74,1 78,6 Q80,10 78,14 Q82,18 80,24 Q78,28 74,30 Q68,32 64,32 Q60,32 54,30 Q50,28 48,24 Q46,18 50,14 Z"
+      fill="url(#headFur)" filter="url(#furEdge)"/>
+    <path d="M50,12 Q56,8 64,8 Q72,8 78,12 Q80,14 78,16 Q72,13 64,13 Q56,13 50,16 Q48,14 50,12 Z"
+      fill="#0d0d2a"/>
+    <circle cx="56" cy="16" r="3" fill="url(#eyeGlow)" filter="url(#eyeFlare)"/>
+    <circle cx="56" cy="16" r="1.2" fill="#ffffff"/>
+    <circle cx="72" cy="16" r="3" fill="url(#eyeGlow)" filter="url(#eyeFlare)"/>
+    <circle cx="72" cy="16" r="1.2" fill="#ffffff"/>
+    <path d="M62,19 L64,22 L66,19" stroke="#0d0d2a" stroke-width="2" fill="none"/>
+    <path d="M56,26 Q60,29 64,28 Q68,29 72,26" stroke="#0d0d2a" stroke-width="1.8" fill="none"/>
+    <path d="M58,26 L57,29" stroke="#e8e0d0" stroke-width="1.5" stroke-linecap="round"/>
+    <path d="M70,26 L71,29" stroke="#e8e0d0" stroke-width="1.5" stroke-linecap="round"/>
+
+    <!-- Fur texture -->
+    <path d="M44,42 L42,47" stroke="#4a4a6a" stroke-width="1.2" opacity="0.5"/>
+    <path d="M80,42 L83,47" stroke="#4a4a6a" stroke-width="1.2" opacity="0.5"/>
+    <path d="M60,38 L58,43" stroke="#4a4a6a" stroke-width="1" opacity="0.4"/>
+    <path d="M68,38 L70,43" stroke="#4a4a6a" stroke-width="1" opacity="0.4"/>
+    <path d="M52,4 L50,-1" stroke="#4a4a6a" stroke-width="1.5" opacity="0.5"/>
+    <path d="M64,1 L64,-4" stroke="#4a4a6a" stroke-width="1.5" opacity="0.5"/>
+    <path d="M76,4 L78,-1" stroke="#4a4a6a" stroke-width="1.5" opacity="0.5"/>
   </g>
 
-  <!-- ROW 2: ATTACK/LUNGE -->
-  <!-- Frame 4: Wind up -->
-  <g transform="translate(64, 192)">
-    <ellipse cx="0" cy="5" rx="55" ry="50" fill="url(#auraGrad)"/>
-    <ellipse cx="0" cy="5" rx="40" ry="50" fill="url(#bodyGrad)" filter="url(#glow)"/>
-    <!-- Arms pulled back -->
-    <ellipse cx="-45" cy="-15" rx="14" ry="24" fill="url(#bodyGrad)" transform="rotate(-45 -45 -15)"/>
-    <ellipse cx="45" cy="-15" rx="14" ry="24" fill="url(#bodyGrad)" transform="rotate(45 45 -15)"/>
-    <path d="M-58,-25 L-65,-20 M-55,-27 L-62,-22 M-52,-28 L-58,-24" stroke="#1a0a1a" stroke-width="3" stroke-linecap="round"/>
-    <path d="M58,-25 L65,-20 M55,-27 L62,-22 M52,-28 L58,-24" stroke="#1a0a1a" stroke-width="3" stroke-linecap="round"/>
-    <!-- Intense eyes -->
-    <ellipse cx="-14" cy="-15" rx="12" ry="14" fill="url(#eyeCyan)" filter="url(#strongGlow)"/>
-    <circle cx="-14" cy="-15" r="5" fill="#000"/>
-    <ellipse cx="14" cy="-15" rx="12" ry="14" fill="url(#eyeMagenta)" filter="url(#strongGlow)"/>
-    <circle cx="14" cy="-15" r="5" fill="#000"/>
-    <!-- Open mouth roar -->
-    <ellipse cx="0" cy="20" rx="20" ry="18" fill="url(#mouthGrad)" filter="url(#strongGlow)"/>
-    <polygon points="-14,10 -12,24 -10,10" fill="#ffffff"/>
-    <polygon points="-6,8 -4,26 -2,8" fill="#ffffff"/>
-    <polygon points="2,8 4,26 6,8" fill="#ffffff"/>
-    <polygon points="10,10 12,24 14,10" fill="#ffffff"/>
+  <!-- ============================================ -->
+  <!-- ROW 1: ATTACK / LUNGE                        -->
+  <!-- ============================================ -->
+
+  <!-- Frame 0 (Row 1): Wind-up - body coils back, arms raised, mouth opening -->
+  <g transform="translate(0, 128)">
+    <circle cx="20" cy="20" r="1" fill="#c8dcff" opacity="0.3"/>
+    <circle cx="105" cy="25" r="0.8" fill="#c8dcff" opacity="0.22"/>
+    <ellipse cx="64" cy="112" rx="26" ry="5" fill="rgba(0,0,0,0.2)"/>
+
+    <!-- Legs - wide stance, knees deeply bent for coil -->
+    <path d="M48,84 L40,96 L38,108" stroke="#0d0d2a" stroke-width="13" stroke-linecap="round" fill="none"/>
+    <path d="M34,107 L42,110" stroke="#0d0d2a" stroke-width="8" stroke-linecap="round" fill="none"/>
+    <path d="M80,84 L88,96 L90,108" stroke="#0d0d2a" stroke-width="13" stroke-linecap="round" fill="none"/>
+    <path d="M86,107 L94,110" stroke="#0d0d2a" stroke-width="8" stroke-linecap="round" fill="none"/>
+
+    <!-- Torso - tilted back 15 degrees, coiled -->
+    <path d="M38,48 Q36,44 40,40 L52,34 Q64,30 76,34 L88,40 Q92,44 90,48 L92,60 Q94,70 90,78 L86,84 Q76,88 64,88 Q52,88 42,84 L38,78 Q34,70 36,60 Z"
+      fill="url(#furBody)" filter="url(#furEdge)"/>
+    <ellipse cx="40" cy="42" rx="11" ry="8" fill="#1a1a3a"/>
+    <ellipse cx="88" cy="42" rx="11" ry="8" fill="#1a1a3a"/>
+
+    <!-- Arms RAISED overhead, claws spread -->
+    <path d="M38,44 L30,30 L26,16" stroke="url(#furLimb)" stroke-width="12" stroke-linecap="round" fill="none"/>
+    <circle cx="25" cy="15" r="6" fill="#0d0d2a"/>
+    <path d="M20,12 L14,6" stroke="#3a3030" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M23,9 L18,2" stroke="#3a3030" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M27,8 L24,1" stroke="#3a3030" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M30,10 L30,3" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+
+    <path d="M90,44 L98,30 L102,16" stroke="url(#furLimb)" stroke-width="12" stroke-linecap="round" fill="none"/>
+    <circle cx="103" cy="15" r="6" fill="#0d0d2a"/>
+    <path d="M108,12 L114,6" stroke="#3a3030" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M105,9 L110,2" stroke="#3a3030" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M101,8 L104,1" stroke="#3a3030" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M98,10 L98,3" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+
+    <!-- Head - tilted back slightly -->
+    <path d="M50,22 Q48,18 50,14 Q54,8 64,7 Q74,8 78,14 Q80,18 78,22 Q82,26 80,32 Q78,36 74,38 Q68,40 64,40 Q60,40 54,38 Q50,36 48,32 Q46,26 50,22 Z"
+      fill="url(#headFur)" filter="url(#furEdge)"/>
+    <path d="M50,20 Q56,15 64,15 Q72,15 78,20 Q80,22 78,24 Q72,20 64,20 Q56,20 50,24 Q48,22 50,20 Z"
+      fill="#0d0d2a"/>
+    <circle cx="56" cy="23" r="3.5" fill="url(#eyeGlow)" filter="url(#eyeFlare)"/>
+    <circle cx="56" cy="23" r="1.3" fill="#ffffff"/>
+    <circle cx="72" cy="23" r="3.5" fill="url(#eyeGlow)" filter="url(#eyeFlare)"/>
+    <circle cx="72" cy="23" r="1.3" fill="#ffffff"/>
+    <path d="M62,26 L64,29 L66,26" stroke="#0d0d2a" stroke-width="2" fill="none"/>
+    <!-- Mouth starting to open -->
+    <path d="M54,32 Q58,30 64,30 Q70,30 74,32" stroke="#0d0d2a" stroke-width="2" fill="none"/>
+    <path d="M55,34 Q60,37 64,37 Q68,37 73,34" stroke="#0d0d2a" stroke-width="2" fill="none"/>
+    <!-- Mouth interior peek -->
+    <ellipse cx="64" cy="33" rx="8" ry="2" fill="#2a0510" opacity="0.6"/>
+    <!-- Upper fangs -->
+    <path d="M57,32 L56,36" stroke="#e8e0d0" stroke-width="2" stroke-linecap="round"/>
+    <path d="M71,32 L72,36" stroke="#e8e0d0" stroke-width="2" stroke-linecap="round"/>
+
+    <path d="M52,10 L50,5" stroke="#4a4a6a" stroke-width="1.5" opacity="0.5"/>
+    <path d="M64,8 L64,3" stroke="#4a4a6a" stroke-width="1.5" opacity="0.5"/>
+    <path d="M76,10 L78,5" stroke="#4a4a6a" stroke-width="1.5" opacity="0.5"/>
+  </g>
+
+  <!-- Frame 1 (Row 1): Lunge mid - lurching forward, mouth wide, fangs visible -->
+  <g transform="translate(128, 128)">
+    <circle cx="15" cy="30" r="0.9" fill="#c8dcff" opacity="0.28"/>
+    <circle cx="110" cy="20" r="1" fill="#c8dcff" opacity="0.22"/>
+    <ellipse cx="66" cy="110" rx="28" ry="5" fill="rgba(0,0,0,0.2)"/>
+
+    <!-- Legs - lunging forward -->
+    <path d="M46,82 L40,94 L38,106" stroke="#0d0d2a" stroke-width="13" stroke-linecap="round" fill="none"/>
+    <path d="M34,105 L42,108" stroke="#0d0d2a" stroke-width="8" stroke-linecap="round" fill="none"/>
+    <path d="M78,80 L84,92 L86,104" stroke="#0d0d2a" stroke-width="13" stroke-linecap="round" fill="none"/>
+    <path d="M82,103 L90,106" stroke="#0d0d2a" stroke-width="8" stroke-linecap="round" fill="none"/>
+
+    <!-- Torso - lunging forward, stretched -->
+    <path d="M36,44 Q34,40 38,36 L50,30 Q62,26 74,30 L86,36 Q90,40 88,44 L92,56 Q94,66 90,74 L86,80 Q76,84 64,84 Q52,84 42,80 L38,74 Q34,66 36,56 Z"
+      fill="url(#furBody)" filter="url(#furEdge)"/>
+    <ellipse cx="38" cy="38" rx="12" ry="8" fill="#1a1a3a"/>
+    <ellipse cx="88" cy="38" rx="12" ry="8" fill="#1a1a3a"/>
+
+    <!-- Arms coming down - claws reaching forward -->
+    <path d="M36,42 L24,48 L16,56" stroke="url(#furLimb)" stroke-width="12" stroke-linecap="round" fill="none"/>
+    <circle cx="15" cy="57" r="6" fill="#0d0d2a"/>
+    <path d="M10,55 L4,52" stroke="#3a3030" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M12,52 L7,48" stroke="#3a3030" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M14,50 L10,45" stroke="#3a3030" stroke-width="2.5" stroke-linecap="round"/>
+
+    <path d="M90,42 L102,48 L112,56" stroke="url(#furLimb)" stroke-width="12" stroke-linecap="round" fill="none"/>
+    <circle cx="113" cy="57" r="6" fill="#0d0d2a"/>
+    <path d="M118,55 L124,52" stroke="#3a3030" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M116,52 L121,48" stroke="#3a3030" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M114,50 L118,45" stroke="#3a3030" stroke-width="2.5" stroke-linecap="round"/>
+
+    <!-- Head - leaning forward aggressively -->
+    <path d="M48,18 Q46,14 48,10 Q52,4 64,3 Q76,4 80,10 Q82,14 80,18 Q84,22 82,28 Q80,34 76,36 Q70,40 64,40 Q58,40 52,36 Q48,34 46,28 Q44,22 48,18 Z"
+      fill="url(#headFur)" filter="url(#furEdge)"/>
+    <path d="M48,16 Q54,11 64,11 Q74,11 80,16 Q82,18 80,20 Q74,16 64,16 Q54,16 48,20 Q46,18 48,16 Z"
+      fill="#0d0d2a"/>
+    <!-- Eyes wider, more intense -->
+    <circle cx="55" cy="20" r="3.8" fill="url(#eyeGlow)" filter="url(#eyeFlare)"/>
+    <circle cx="55" cy="20" r="1.4" fill="#ffffff"/>
+    <circle cx="73" cy="20" r="3.8" fill="url(#eyeGlow)" filter="url(#eyeFlare)"/>
+    <circle cx="73" cy="20" r="1.4" fill="#ffffff"/>
+    <path d="M62,24 L64,27 L66,24" stroke="#0d0d2a" stroke-width="2" fill="none"/>
+
+    <!-- MOUTH WIDE OPEN - upper jaw -->
+    <path d="M52,28 Q58,26 64,26 Q70,26 76,28 L78,30 Q72,28 64,28 Q56,28 50,30 Z"
+      fill="#0d0d2a"/>
+    <!-- Lower jaw dropped -->
+    <path d="M52,40 Q58,44 64,44 Q70,44 76,40 L78,38 Q72,42 64,42 Q56,42 50,38 Z"
+      fill="#0d0d2a"/>
+    <!-- Mouth interior (gaping dark void) -->
+    <ellipse cx="64" cy="34" rx="12" ry="7" fill="url(#mouthInner)"/>
+    <!-- Upper teeth/fangs -->
+    <path d="M55,29 L53,35" stroke="#e8e0d0" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M73,29 L75,35" stroke="#e8e0d0" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M59,29 L58,33" stroke="#e8e0d0" stroke-width="1.8" stroke-linecap="round"/>
+    <path d="M64,28 L64,32" stroke="#e8e0d0" stroke-width="1.8" stroke-linecap="round"/>
+    <path d="M69,29 L70,33" stroke="#e8e0d0" stroke-width="1.8" stroke-linecap="round"/>
+    <!-- Lower teeth -->
+    <path d="M57,42 L56,38" stroke="#e8e0d0" stroke-width="2" stroke-linecap="round"/>
+    <path d="M71,42 L72,38" stroke="#e8e0d0" stroke-width="2" stroke-linecap="round"/>
+    <path d="M62,43 L62,40" stroke="#e8e0d0" stroke-width="1.5" stroke-linecap="round"/>
+    <path d="M66,43 L66,40" stroke="#e8e0d0" stroke-width="1.5" stroke-linecap="round"/>
+    <!-- Saliva strings -->
+    <path d="M56,34 Q55,37 56,40" stroke="#4a4a6a" stroke-width="0.8" fill="none" opacity="0.4"/>
+    <path d="M72,34 Q73,37 72,40" stroke="#4a4a6a" stroke-width="0.8" fill="none" opacity="0.4"/>
+
+    <path d="M50,7 L48,2" stroke="#4a4a6a" stroke-width="1.5" opacity="0.5"/>
+    <path d="M64,4 L64,-1" stroke="#4a4a6a" stroke-width="1.5" opacity="0.5"/>
+    <path d="M78,7 L80,2" stroke="#4a4a6a" stroke-width="1.5" opacity="0.5"/>
+  </g>
+
+  <!-- Frame 2 (Row 1): Full strike - max extension, claws out, mouth gaping -->
+  <g transform="translate(256, 128)">
+    <circle cx="18" cy="28" r="0.8" fill="#c8dcff" opacity="0.25"/>
+    <circle cx="108" cy="15" r="1" fill="#c8dcff" opacity="0.28"/>
+    <ellipse cx="66" cy="112" rx="30" ry="5" fill="rgba(0,0,0,0.22)"/>
+
+    <!-- Legs planted wide -->
+    <path d="M44,84 L36,96 L34,108" stroke="#0d0d2a" stroke-width="14" stroke-linecap="round" fill="none"/>
+    <path d="M30,107 L38,110" stroke="#0d0d2a" stroke-width="8" stroke-linecap="round" fill="none"/>
+    <path d="M84,84 L92,96 L94,108" stroke="#0d0d2a" stroke-width="14" stroke-linecap="round" fill="none"/>
+    <path d="M90,107 L98,110" stroke="#0d0d2a" stroke-width="8" stroke-linecap="round" fill="none"/>
+
+    <!-- Torso - maximum forward extension -->
+    <path d="M34,44 Q32,40 36,35 L48,28 Q62,24 76,28 L88,35 Q92,40 90,44 L94,58 Q96,68 92,76 L88,82 Q78,86 64,86 Q50,86 40,82 L36,76 Q32,68 34,58 Z"
+      fill="url(#furBody)" filter="url(#furEdge)"/>
+    <ellipse cx="36" cy="38" rx="12" ry="9" fill="#1a1a3a"/>
+    <ellipse cx="90" cy="38" rx="12" ry="9" fill="#1a1a3a"/>
+
+    <!-- Arms FULLY extended with claws -->
+    <path d="M34,40 L18,42 L4,48" stroke="url(#furLimb)" stroke-width="12" stroke-linecap="round" fill="none"/>
+    <circle cx="3" cy="49" r="7" fill="#0d0d2a"/>
+    <path d="M-3,47 L-10,44" stroke="#3a3030" stroke-width="3" stroke-linecap="round"/>
+    <path d="M-2,44 L-8,39" stroke="#3a3030" stroke-width="3" stroke-linecap="round"/>
+    <path d="M0,42 L-5,36" stroke="#3a3030" stroke-width="3" stroke-linecap="round"/>
+    <path d="M3,41 L0,35" stroke="#3a3030" stroke-width="2.5" stroke-linecap="round"/>
+
+    <path d="M92,40 L108,42 L124,48" stroke="url(#furLimb)" stroke-width="12" stroke-linecap="round" fill="none"/>
+    <circle cx="125" cy="49" r="7" fill="#0d0d2a"/>
+    <path d="M131,47 L138,44" stroke="#3a3030" stroke-width="3" stroke-linecap="round"/>
+    <path d="M130,44 L136,39" stroke="#3a3030" stroke-width="3" stroke-linecap="round"/>
+    <path d="M128,42 L133,36" stroke="#3a3030" stroke-width="3" stroke-linecap="round"/>
+    <path d="M125,41 L128,35" stroke="#3a3030" stroke-width="2.5" stroke-linecap="round"/>
+
+    <!-- Head - thrust forward -->
+    <path d="M46,16 Q44,12 46,8 Q50,2 64,1 Q78,2 82,8 Q84,12 82,16 Q86,20 84,26 Q82,32 78,34 Q72,38 64,38 Q56,38 50,34 Q46,32 44,26 Q42,20 46,16 Z"
+      fill="url(#headFur)" filter="url(#furEdge)"/>
+    <path d="M46,14 Q52,9 64,9 Q76,9 82,14 Q84,16 82,18 Q76,14 64,14 Q52,14 46,18 Q44,16 46,14 Z"
+      fill="#0d0d2a"/>
+    <!-- Eyes at MAX intensity -->
+    <circle cx="54" cy="18" r="4" fill="url(#eyeGlow)" filter="url(#eyeFlareStrong)"/>
+    <circle cx="54" cy="18" r="1.5" fill="#ffffff"/>
+    <circle cx="74" cy="18" r="4" fill="url(#eyeGlow)" filter="url(#eyeFlareStrong)"/>
+    <circle cx="74" cy="18" r="1.5" fill="#ffffff"/>
+
+    <!-- GAPING MOUTH - maximum terror -->
+    <path d="M50,26 Q56,23 64,23 Q72,23 78,26" fill="#0d0d2a"/>
+    <path d="M50,42 Q56,46 64,47 Q72,46 78,42" fill="#0d0d2a"/>
+    <!-- Mouth interior - dark abyss -->
+    <ellipse cx="64" cy="34" rx="14" ry="10" fill="url(#mouthInner)"/>
+    <!-- Gum line -->
+    <path d="M52,27 Q58,25 64,25 Q70,25 76,27" stroke="#5a1020" stroke-width="1.5" fill="none"/>
+    <path d="M52,42 Q58,44 64,44 Q70,44 76,42" stroke="#5a1020" stroke-width="1.5" fill="none"/>
+    <!-- Upper fangs - HUGE -->
+    <path d="M54,26 L52,36" stroke="#e8e0d0" stroke-width="3" stroke-linecap="round"/>
+    <path d="M74,26 L76,36" stroke="#e8e0d0" stroke-width="3" stroke-linecap="round"/>
+    <path d="M58,26 L57,32" stroke="#e8e0d0" stroke-width="2" stroke-linecap="round"/>
+    <path d="M64,25 L64,31" stroke="#e8e0d0" stroke-width="2" stroke-linecap="round"/>
+    <path d="M70,26 L71,32" stroke="#e8e0d0" stroke-width="2" stroke-linecap="round"/>
     <!-- Lower fangs -->
-    <polygon points="-8,30 -6,38 -4,30" fill="#ffffff"/>
-    <polygon points="4,30 6,38 8,30" fill="#ffffff"/>
-  </g>
-
-  <!-- Frame 5: Lunge mid -->
-  <g transform="translate(192, 192) rotate(15)">
-    <ellipse cx="0" cy="5" rx="60" ry="55" fill="url(#auraGrad)"/>
-    <!-- Motion blur effect -->
-    <ellipse cx="-20" cy="5" rx="35" ry="45" fill="url(#bodyGrad)" opacity="0.3"/>
-    <ellipse cx="0" cy="5" rx="42" ry="52" fill="url(#bodyGrad)" filter="url(#glow)"/>
-    <!-- Arms forward attack -->
-    <ellipse cx="-35" cy="15" rx="14" ry="26" fill="url(#bodyGrad)" transform="rotate(60 -35 15)"/>
-    <ellipse cx="35" cy="15" rx="14" ry="26" fill="url(#bodyGrad)" transform="rotate(-60 35 15)"/>
-    <path d="M-42,35 L-48,45 M-38,38 L-44,48 M-34,40 L-38,50" stroke="#1a0a1a" stroke-width="3" stroke-linecap="round"/>
-    <path d="M42,35 L48,45 M38,38 L44,48 M34,40 L38,50" stroke="#1a0a1a" stroke-width="3" stroke-linecap="round"/>
-    <ellipse cx="-14" cy="-18" rx="13" ry="15" fill="url(#eyeCyan)" filter="url(#strongGlow)"/>
-    <circle cx="-16" cy="-18" r="5" fill="#000"/>
-    <ellipse cx="14" cy="-18" rx="13" ry="15" fill="url(#eyeMagenta)" filter="url(#strongGlow)"/>
-    <circle cx="12" cy="-18" r="5" fill="#000"/>
-    <ellipse cx="0" cy="18" rx="22" ry="20" fill="url(#mouthGrad)" filter="url(#strongGlow)"/>
-    <polygon points="-16,8 -14,26 -12,8" fill="#ffffff"/>
-    <polygon points="-6,6 -4,28 -2,6" fill="#ffffff"/>
-    <polygon points="2,6 4,28 6,6" fill="#ffffff"/>
-    <polygon points="12,8 14,26 16,8" fill="#ffffff"/>
-    <polygon points="-10,32 -8,42 -6,32" fill="#ffffff"/>
-    <polygon points="6,32 8,42 10,32" fill="#ffffff"/>
-  </g>
-
-  <!-- Frame 6: Full lunge/swipe -->
-  <g transform="translate(320, 192) rotate(25)">
-    <ellipse cx="0" cy="0" rx="65" ry="60" fill="url(#auraGrad)"/>
-    <ellipse cx="-30" cy="0" rx="35" ry="45" fill="url(#bodyGrad)" opacity="0.2"/>
-    <ellipse cx="-15" cy="0" rx="38" ry="48" fill="url(#bodyGrad)" opacity="0.3"/>
-    <ellipse cx="0" cy="0" rx="45" ry="55" fill="url(#bodyGrad)" filter="url(#glow)"/>
-    <!-- Arms fully extended -->
-    <ellipse cx="-25" cy="30" rx="15" ry="28" fill="url(#bodyGrad)" transform="rotate(80 -25 30)"/>
-    <ellipse cx="25" cy="30" rx="15" ry="28" fill="url(#bodyGrad)" transform="rotate(-80 25 30)"/>
-    <!-- Extended claws -->
-    <path d="M-30,55 L-35,68 M-25,58 L-28,72 M-20,60 L-22,74" stroke="#1a0a1a" stroke-width="4" stroke-linecap="round"/>
-    <path d="M30,55 L35,68 M25,58 L28,72 M20,60 L22,74" stroke="#1a0a1a" stroke-width="4" stroke-linecap="round"/>
-    <!-- Rage eyes -->
-    <ellipse cx="-16" cy="-22" rx="14" ry="16" fill="url(#eyeCyan)" filter="url(#strongGlow)"/>
-    <circle cx="-18" cy="-22" r="6" fill="#000"/>
-    <ellipse cx="16" cy="-22" rx="14" ry="16" fill="url(#eyeMagenta)" filter="url(#strongGlow)"/>
-    <circle cx="14" cy="-22" r="6" fill="#000"/>
-    <!-- Max open mouth -->
-    <ellipse cx="0" cy="12" rx="25" ry="24" fill="url(#mouthGrad)" filter="url(#strongGlow)"/>
-    <polygon points="-18,2 -16,24 -14,2" fill="#ffffff"/>
-    <polygon points="-8,0 -6,28 -4,0" fill="#ffffff"/>
-    <polygon points="4,0 6,28 8,0" fill="#ffffff"/>
-    <polygon points="14,2 16,24 18,2" fill="#ffffff"/>
-    <polygon points="-12,30 -10,44 -8,30" fill="#ffffff"/>
-    <polygon points="8,30 10,44 12,30" fill="#ffffff"/>
-  </g>
-
-  <!-- Frame 7: Recovery -->
-  <g transform="translate(448, 192) rotate(-5)">
-    <ellipse cx="0" cy="10" rx="50" ry="45" fill="url(#auraGrad)"/>
-    <ellipse cx="0" cy="10" rx="36" ry="46" fill="url(#bodyGrad)" filter="url(#glow)"/>
-    <!-- Arms returning -->
-    <ellipse cx="-40" cy="10" rx="12" ry="22" fill="url(#bodyGrad)" transform="rotate(15 -40 10)"/>
-    <ellipse cx="40" cy="10" rx="12" ry="22" fill="url(#bodyGrad)" transform="rotate(-15 40 10)"/>
-    <path d="M-48,28 L-52,36 M-45,30 L-48,38 M-42,31 L-44,39" stroke="#1a0a1a" stroke-width="2" stroke-linecap="round"/>
-    <path d="M48,28 L52,36 M45,30 L48,38 M42,31 L44,39" stroke="#1a0a1a" stroke-width="2" stroke-linecap="round"/>
-    <ellipse cx="-12" cy="-10" rx="10" ry="12" fill="url(#eyeCyan)" filter="url(#glow)"/>
-    <circle cx="-12" cy="-10" r="4" fill="#000"/>
-    <ellipse cx="12" cy="-10" rx="10" ry="12" fill="url(#eyeMagenta)" filter="url(#glow)"/>
-    <circle cx="12" cy="-10" r="4" fill="#000"/>
-    <ellipse cx="0" cy="20" rx="16" ry="12" fill="url(#mouthGrad)" filter="url(#glow)"/>
-    <polygon points="-10,15 -8,24 -6,15" fill="#ffffff"/>
-    <polygon points="-2,14 0,25 2,14" fill="#ffffff"/>
-    <polygon points="6,15 8,24 10,15" fill="#ffffff"/>
-  </g>
-
-  <!-- ROW 3: RAGE/SPECIAL STATES -->
-  <!-- Frame 8: Low rage (normal) -->
-  <g transform="translate(64, 320)">
-    <ellipse cx="0" cy="10" rx="48" ry="43" fill="url(#auraGrad)" opacity="0.5"/>
-    <ellipse cx="0" cy="10" rx="33" ry="43" fill="url(#bodyGrad)" filter="url(#glow)"/>
-    <ellipse cx="-36" cy="5" rx="11" ry="18" fill="url(#bodyGrad)"/>
-    <ellipse cx="36" cy="5" rx="11" ry="18" fill="url(#bodyGrad)"/>
-    <path d="M-43,18 L-46,26 M-40,20 L-42,28 M-37,21 L-38,29" stroke="#1a0a1a" stroke-width="2" stroke-linecap="round"/>
-    <path d="M43,18 L46,26 M40,20 L42,28 M37,21 L38,29" stroke="#1a0a1a" stroke-width="2" stroke-linecap="round"/>
-    <ellipse cx="-11" cy="-10" rx="9" ry="11" fill="url(#eyeCyan)" filter="url(#glow)"/>
-    <circle cx="-11" cy="-10" r="3" fill="#000"/>
-    <ellipse cx="11" cy="-10" rx="9" ry="11" fill="url(#eyeMagenta)" filter="url(#glow)"/>
-    <circle cx="11" cy="-10" r="3" fill="#000"/>
-    <ellipse cx="0" cy="18" rx="13" ry="9" fill="url(#mouthGrad)"/>
-    <polygon points="-8,14 -6,21 -4,14" fill="#ffffff"/>
-    <polygon points="-1,13 1,22 3,13" fill="#ffffff"/>
-    <polygon points="6,14 8,21 10,14" fill="#ffffff"/>
-  </g>
-
-  <!-- Frame 9: Medium rage -->
-  <g transform="translate(192, 320)">
-    <ellipse cx="0" cy="8" rx="55" ry="50" fill="url(#auraGrad)" opacity="0.7"/>
-    <!-- Pulsing effect ring -->
-    <ellipse cx="0" cy="8" rx="50" ry="45" fill="none" stroke="#ff00ff" stroke-width="2" opacity="0.4"/>
-    <ellipse cx="0" cy="8" rx="38" ry="48" fill="url(#bodyGrad)" filter="url(#glow)"/>
-    <!-- Raised fur -->
-    <path d="M-30,-25 L-32,-35" stroke="#4a2a5a" stroke-width="3" stroke-linecap="round"/>
-    <path d="M-15,-32 L-16,-42" stroke="#4a2a5a" stroke-width="3" stroke-linecap="round"/>
-    <path d="M0,-35 L0,-45" stroke="#4a2a5a" stroke-width="3" stroke-linecap="round"/>
-    <path d="M15,-32 L16,-42" stroke="#4a2a5a" stroke-width="3" stroke-linecap="round"/>
-    <path d="M30,-25 L32,-35" stroke="#4a2a5a" stroke-width="3" stroke-linecap="round"/>
-    <ellipse cx="-40" cy="3" rx="13" ry="21" fill="url(#bodyGrad)"/>
-    <ellipse cx="40" cy="3" rx="13" ry="21" fill="url(#bodyGrad)"/>
-    <path d="M-48,18 L-52,28 M-44,21 L-47,31 M-40,23 L-42,33" stroke="#1a0a1a" stroke-width="3" stroke-linecap="round"/>
-    <path d="M48,18 L52,28 M44,21 L47,31 M40,23 L42,33" stroke="#1a0a1a" stroke-width="3" stroke-linecap="round"/>
-    <ellipse cx="-13" cy="-12" rx="11" ry="13" fill="url(#eyeCyan)" filter="url(#strongGlow)"/>
-    <circle cx="-13" cy="-12" r="4" fill="#000"/>
-    <ellipse cx="13" cy="-12" rx="11" ry="13" fill="url(#eyeMagenta)" filter="url(#strongGlow)"/>
-    <circle cx="13" cy="-12" r="4" fill="#000"/>
-    <ellipse cx="0" cy="20" rx="17" ry="13" fill="url(#mouthGrad)" filter="url(#glow)"/>
-    <polygon points="-12,14 -10,25 -8,14" fill="#ffffff"/>
-    <polygon points="-4,13 -2,26 0,13" fill="#ffffff"/>
-    <polygon points="4,13 6,26 8,13" fill="#ffffff"/>
-    <polygon points="10,14 12,25 14,14" fill="#ffffff"/>
-  </g>
-
-  <!-- Frame 10: High rage -->
-  <g transform="translate(320, 320)">
-    <ellipse cx="0" cy="5" rx="60" ry="55" fill="url(#auraGrad)"/>
-    <!-- Multiple pulse rings -->
-    <ellipse cx="0" cy="5" rx="55" ry="50" fill="none" stroke="#ff00ff" stroke-width="2" opacity="0.5"/>
-    <ellipse cx="0" cy="5" rx="50" ry="45" fill="none" stroke="#00ffff" stroke-width="2" opacity="0.3"/>
-    <ellipse cx="0" cy="5" rx="42" ry="52" fill="url(#bodyGrad)" filter="url(#strongGlow)"/>
-    <!-- More raised fur -->
-    <path d="M-32,-28 L-36,-42" stroke="#5a3a6a" stroke-width="4" stroke-linecap="round"/>
-    <path d="M-16,-35 L-18,-50" stroke="#5a3a6a" stroke-width="4" stroke-linecap="round"/>
-    <path d="M0,-38 L0,-54" stroke="#5a3a6a" stroke-width="4" stroke-linecap="round"/>
-    <path d="M16,-35 L18,-50" stroke="#5a3a6a" stroke-width="4" stroke-linecap="round"/>
-    <path d="M32,-28 L36,-42" stroke="#5a3a6a" stroke-width="4" stroke-linecap="round"/>
-    <!-- Raised arms -->
-    <ellipse cx="-44" cy="-5" rx="14" ry="24" fill="url(#bodyGrad)" transform="rotate(-20 -44 -5)"/>
-    <ellipse cx="44" cy="-5" rx="14" ry="24" fill="url(#bodyGrad)" transform="rotate(20 44 -5)"/>
-    <path d="M-54,12 L-60,22 M-50,15 L-55,25 M-46,17 L-50,27" stroke="#1a0a1a" stroke-width="3" stroke-linecap="round"/>
-    <path d="M54,12 L60,22 M50,15 L55,25 M46,17 L50,27" stroke="#1a0a1a" stroke-width="3" stroke-linecap="round"/>
-    <!-- Intense glowing eyes -->
-    <ellipse cx="-14" cy="-15" rx="13" ry="15" fill="url(#eyeCyan)" filter="url(#strongGlow)"/>
-    <circle cx="-14" cy="-15" r="5" fill="#000"/>
-    <ellipse cx="14" cy="-15" rx="13" ry="15" fill="url(#eyeMagenta)" filter="url(#strongGlow)"/>
-    <circle cx="14" cy="-15" r="5" fill="#000"/>
-    <!-- Roaring mouth -->
-    <ellipse cx="0" cy="18" rx="20" ry="18" fill="url(#mouthGrad)" filter="url(#strongGlow)"/>
-    <polygon points="-14,10 -12,26 -10,10" fill="#ffffff"/>
-    <polygon points="-6,8 -4,28 -2,8" fill="#ffffff"/>
-    <polygon points="2,8 4,28 6,8" fill="#ffffff"/>
-    <polygon points="10,10 12,26 14,10" fill="#ffffff"/>
-    <polygon points="-8,30 -6,40 -4,30" fill="#ffffff"/>
-    <polygon points="4,30 6,40 8,30" fill="#ffffff"/>
-  </g>
-
-  <!-- Frame 11: Max rage / Berserk -->
-  <g transform="translate(448, 320)">
-    <!-- Intense aura -->
-    <ellipse cx="0" cy="0" rx="62" ry="58" fill="url(#auraGrad)"/>
-    <ellipse cx="0" cy="0" rx="58" ry="54" fill="none" stroke="#ff00ff" stroke-width="3" opacity="0.7"/>
-    <ellipse cx="0" cy="0" rx="52" ry="48" fill="none" stroke="#ff00ff" stroke-width="2" opacity="0.5"/>
-    <ellipse cx="0" cy="0" rx="46" ry="42" fill="none" stroke="#00ffff" stroke-width="2" opacity="0.3"/>
-    <!-- Larger, angrier body -->
-    <ellipse cx="0" cy="0" rx="45" ry="55" fill="url(#bodyGrad)" filter="url(#strongGlow)"/>
-    <!-- Maximum fur raise -->
-    <path d="M-35,-32 L-42,-50" stroke="#6a4a7a" stroke-width="5" stroke-linecap="round"/>
-    <path d="M-18,-40 L-22,-58" stroke="#6a4a7a" stroke-width="5" stroke-linecap="round"/>
-    <path d="M0,-44 L0,-64" stroke="#6a4a7a" stroke-width="5" stroke-linecap="round"/>
-    <path d="M18,-40 L22,-58" stroke="#6a4a7a" stroke-width="5" stroke-linecap="round"/>
-    <path d="M35,-32 L42,-50" stroke="#6a4a7a" stroke-width="5" stroke-linecap="round"/>
-    <!-- Arms raised high -->
-    <ellipse cx="-48" cy="-15" rx="15" ry="26" fill="url(#bodyGrad)" transform="rotate(-40 -48 -15)"/>
-    <ellipse cx="48" cy="-15" rx="15" ry="26" fill="url(#bodyGrad)" transform="rotate(40 48 -15)"/>
-    <!-- Huge claws -->
-    <path d="M-60,-5 L-70,5 M-56,-8 L-66,2 M-52,-10 L-60,-2" stroke="#1a0a1a" stroke-width="4" stroke-linecap="round"/>
-    <path d="M60,-5 L70,5 M56,-8 L66,2 M52,-10 L60,-2" stroke="#1a0a1a" stroke-width="4" stroke-linecap="round"/>
-    <!-- Maximum glow eyes -->
-    <ellipse cx="-15" cy="-18" rx="14" ry="16" fill="#ffffff" filter="url(#strongGlow)"/>
-    <ellipse cx="-15" cy="-18" rx="12" ry="14" fill="url(#eyeCyan)" filter="url(#strongGlow)"/>
-    <circle cx="-15" cy="-18" r="4" fill="#000"/>
-    <ellipse cx="15" cy="-18" rx="14" ry="16" fill="#ffffff" filter="url(#strongGlow)"/>
-    <ellipse cx="15" cy="-18" rx="12" ry="14" fill="url(#eyeMagenta)" filter="url(#strongGlow)"/>
-    <circle cx="15" cy="-18" r="4" fill="#000"/>
-    <!-- Maximum roar mouth -->
-    <ellipse cx="0" cy="15" rx="24" ry="22" fill="url(#mouthGrad)" filter="url(#strongGlow)"/>
-    <polygon points="-18,6 -16,28 -14,6" fill="#ffffff"/>
-    <polygon points="-8,4 -6,32 -4,4" fill="#ffffff"/>
-    <polygon points="4,4 6,32 8,4" fill="#ffffff"/>
-    <polygon points="14,6 16,28 18,6" fill="#ffffff"/>
-    <polygon points="-12,32 -10,46 -8,32" fill="#ffffff"/>
-    <polygon points="8,32 10,46 12,32" fill="#ffffff"/>
+    <path d="M56,44 L55,38" stroke="#e8e0d0" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M72,44 L73,38" stroke="#e8e0d0" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M61,45 L61,40" stroke="#e8e0d0" stroke-width="1.8" stroke-linecap="round"/>
+    <path d="M67,45 L67,40" stroke="#e8e0d0" stroke-width="1.8" stroke-linecap="round"/>
     <!-- Drool/saliva -->
-    <path d="M-6,35 Q-8,45 -4,50" stroke="#ff6666" stroke-width="2" fill="none" opacity="0.6"/>
-    <path d="M6,35 Q8,45 4,50" stroke="#ff6666" stroke-width="2" fill="none" opacity="0.6"/>
+    <path d="M54,34 Q53,38 54,43" stroke="rgba(180,200,220,0.3)" stroke-width="1" fill="none"/>
+    <path d="M74,34 Q75,38 74,43" stroke="rgba(180,200,220,0.3)" stroke-width="1" fill="none"/>
+    <path d="M64,31 Q63,36 64,42" stroke="rgba(180,200,220,0.25)" stroke-width="0.8" fill="none"/>
+
+    <path d="M48,5 L46,0" stroke="#4a4a6a" stroke-width="1.5" opacity="0.5"/>
+    <path d="M64,2 L64,-3" stroke="#4a4a6a" stroke-width="1.5" opacity="0.5"/>
+    <path d="M80,5 L82,0" stroke="#4a4a6a" stroke-width="1.5" opacity="0.5"/>
   </g>
+
+  <!-- Frame 3 (Row 1): Recovery - pulling back, mouth closing -->
+  <g transform="translate(384, 128)">
+    <circle cx="22" cy="22" r="1" fill="#c8dcff" opacity="0.28"/>
+    <circle cx="105" cy="30" r="0.8" fill="#c8dcff" opacity="0.25"/>
+    <ellipse cx="64" cy="110" rx="27" ry="5" fill="rgba(0,0,0,0.2)"/>
+
+    <!-- Legs returning to neutral -->
+    <path d="M50,82 L46,94 L44,106" stroke="#0d0d2a" stroke-width="13" stroke-linecap="round" fill="none"/>
+    <path d="M40,105 L48,108" stroke="#0d0d2a" stroke-width="8" stroke-linecap="round" fill="none"/>
+    <path d="M78,82 L82,94 L84,106" stroke="#0d0d2a" stroke-width="13" stroke-linecap="round" fill="none"/>
+    <path d="M80,105 L88,108" stroke="#0d0d2a" stroke-width="8" stroke-linecap="round" fill="none"/>
+
+    <!-- Torso - returning upright -->
+    <path d="M38,44 Q36,40 40,37 L52,32 Q64,28 76,32 L88,37 Q92,40 90,44 L92,58 Q94,68 90,76 L86,82 Q76,86 64,86 Q52,86 42,82 L38,76 Q34,68 36,58 Z"
+      fill="url(#furBody)" filter="url(#furEdge)"/>
+    <ellipse cx="40" cy="40" rx="10" ry="7" fill="#1a1a3a"/>
+    <ellipse cx="88" cy="40" rx="10" ry="7" fill="#1a1a3a"/>
+
+    <!-- Arms returning to sides -->
+    <path d="M38,42 L30,56 L26,70" stroke="url(#furLimb)" stroke-width="11" stroke-linecap="round" fill="none"/>
+    <circle cx="25" cy="71" r="5" fill="#0d0d2a"/>
+    <path d="M22,68 L18,64" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+    <path d="M24,66 L21,61" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+    <path d="M27,66 L25,61" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+
+    <path d="M90,42 L98,56 L102,70" stroke="url(#furLimb)" stroke-width="11" stroke-linecap="round" fill="none"/>
+    <circle cx="103" cy="71" r="5" fill="#0d0d2a"/>
+    <path d="M106,68 L110,64" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+    <path d="M104,66 L107,61" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+    <path d="M101,66 L103,61" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+
+    <!-- Head - returning neutral -->
+    <path d="M50,20 Q48,16 50,12 Q54,6 64,5 Q74,6 78,12 Q80,16 78,20 Q82,24 80,30 Q78,34 74,36 Q68,38 64,38 Q60,38 54,36 Q50,34 48,30 Q46,24 50,20 Z"
+      fill="url(#headFur)" filter="url(#furEdge)"/>
+    <path d="M50,18 Q56,13 64,13 Q72,13 78,18 Q80,20 78,22 Q72,18 64,18 Q56,18 50,22 Q48,20 50,18 Z"
+      fill="#0d0d2a"/>
+    <circle cx="56" cy="22" r="3" fill="url(#eyeGlow)" filter="url(#eyeFlare)"/>
+    <circle cx="56" cy="22" r="1.2" fill="#ffffff"/>
+    <circle cx="72" cy="22" r="3" fill="url(#eyeGlow)" filter="url(#eyeFlare)"/>
+    <circle cx="72" cy="22" r="1.2" fill="#ffffff"/>
+    <path d="M62,25 L64,28 L66,25" stroke="#0d0d2a" stroke-width="2" fill="none"/>
+    <!-- Mouth closing -->
+    <path d="M56,32 Q60,35 64,34 Q68,35 72,32" stroke="#0d0d2a" stroke-width="1.8" fill="none"/>
+    <path d="M58,32 L57,34" stroke="#e8e0d0" stroke-width="1.5" stroke-linecap="round"/>
+    <path d="M70,32 L71,34" stroke="#e8e0d0" stroke-width="1.5" stroke-linecap="round"/>
+
+    <path d="M52,8 L50,3" stroke="#4a4a6a" stroke-width="1.5" opacity="0.5"/>
+    <path d="M64,6 L64,1" stroke="#4a4a6a" stroke-width="1.5" opacity="0.5"/>
+    <path d="M76,8 L78,3" stroke="#4a4a6a" stroke-width="1.5" opacity="0.5"/>
+  </g>
+
+  <!-- ============================================ -->
+  <!-- ROW 2: RAGE STATES                           -->
+  <!-- ============================================ -->
+
+  <!-- Frame 0 (Row 2): Low rage - normal, relaxed stance -->
+  <g transform="translate(0, 256)">
+    <circle cx="20" cy="18" r="1" fill="#c8dcff" opacity="0.28"/>
+    <circle cx="108" cy="22" r="0.8" fill="#c8dcff" opacity="0.22"/>
+    <circle cx="40" cy="100" r="0.9" fill="#c8dcff" opacity="0.25"/>
+    <ellipse cx="64" cy="110" rx="26" ry="5" fill="rgba(0,0,0,0.2)"/>
+
+    <!-- Legs - standing neutral -->
+    <path d="M52,82 L50,94 L48,106" stroke="#0d0d2a" stroke-width="13" stroke-linecap="round" fill="none"/>
+    <path d="M44,105 L52,108" stroke="#0d0d2a" stroke-width="8" stroke-linecap="round" fill="none"/>
+    <path d="M76,82 L78,94 L80,106" stroke="#0d0d2a" stroke-width="13" stroke-linecap="round" fill="none"/>
+    <path d="M76,105 L84,108" stroke="#0d0d2a" stroke-width="8" stroke-linecap="round" fill="none"/>
+
+    <!-- Torso - upright, relaxed -->
+    <path d="M40,42 Q38,38 42,35 L54,30 Q64,28 74,30 L86,35 Q90,38 88,42 L90,56 Q92,66 88,74 L84,80 Q74,84 64,84 Q54,84 44,80 L40,74 Q36,66 38,56 Z"
+      fill="url(#furBody)" filter="url(#furEdge)"/>
+    <path d="M48,44 Q54,40 64,40 Q74,40 80,44 Q82,50 78,56 Q70,60 64,60 Q58,60 50,56 Q46,50 48,44 Z"
+      fill="#2a2a4a" opacity="0.5"/>
+    <ellipse cx="42" cy="38" rx="10" ry="7" fill="#1a1a3a"/>
+    <ellipse cx="86" cy="38" rx="10" ry="7" fill="#1a1a3a"/>
+
+    <!-- Arms at sides, relaxed -->
+    <path d="M40,44 L34,60 L30,76" stroke="url(#furLimb)" stroke-width="11" stroke-linecap="round" fill="none"/>
+    <circle cx="29" cy="77" r="5" fill="#0d0d2a"/>
+    <path d="M26,74 L22,70" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+    <path d="M28,72 L25,67" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+    <path d="M31,72 L29,67" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+
+    <path d="M88,44 L94,60 L98,76" stroke="url(#furLimb)" stroke-width="11" stroke-linecap="round" fill="none"/>
+    <circle cx="99" cy="77" r="5" fill="#0d0d2a"/>
+    <path d="M102,74 L106,70" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+    <path d="M100,72 L103,67" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+    <path d="M97,72 L99,67" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+
+    <!-- Head -->
+    <path d="M50,18 Q48,14 50,10 Q54,5 64,4 Q74,5 78,10 Q80,14 78,18 Q82,22 80,28 Q78,32 74,34 Q68,36 64,36 Q60,36 54,34 Q50,32 48,28 Q46,22 50,18 Z"
+      fill="url(#headFur)" filter="url(#furEdge)"/>
+    <path d="M50,16 Q56,12 64,12 Q72,12 78,16 Q80,18 78,20 Q72,17 64,17 Q56,17 50,20 Q48,18 50,16 Z"
+      fill="#0d0d2a"/>
+    <circle cx="56" cy="20" r="3" fill="url(#eyeGlow)" filter="url(#eyeFlare)"/>
+    <circle cx="56" cy="20" r="1.2" fill="#ffffff"/>
+    <circle cx="72" cy="20" r="3" fill="url(#eyeGlow)" filter="url(#eyeFlare)"/>
+    <circle cx="72" cy="20" r="1.2" fill="#ffffff"/>
+    <path d="M62,23 L64,26 L66,23" stroke="#0d0d2a" stroke-width="2" fill="none"/>
+    <path d="M56,30 Q60,33 64,32 Q68,33 72,30" stroke="#0d0d2a" stroke-width="1.8" fill="none"/>
+
+    <path d="M44,46 L42,51" stroke="#4a4a6a" stroke-width="1.2" opacity="0.5"/>
+    <path d="M80,46 L83,51" stroke="#4a4a6a" stroke-width="1.2" opacity="0.5"/>
+    <path d="M52,8 L50,3" stroke="#4a4a6a" stroke-width="1.5" opacity="0.5"/>
+    <path d="M64,5 L64,0" stroke="#4a4a6a" stroke-width="1.5" opacity="0.5"/>
+    <path d="M76,8 L78,3" stroke="#4a4a6a" stroke-width="1.5" opacity="0.5"/>
+  </g>
+
+  <!-- Frame 1 (Row 2): Medium rage - slightly puffed, fang tips showing -->
+  <g transform="translate(128, 256)">
+    <circle cx="18" cy="20" r="1" fill="#c8dcff" opacity="0.28"/>
+    <circle cx="110" cy="15" r="0.8" fill="#c8dcff" opacity="0.22"/>
+    <ellipse cx="64" cy="112" rx="28" ry="5" fill="rgba(0,0,0,0.2)"/>
+
+    <!-- Legs - slightly wider stance -->
+    <path d="M50,84 L46,96 L44,108" stroke="#0d0d2a" stroke-width="14" stroke-linecap="round" fill="none"/>
+    <path d="M40,107 L48,110" stroke="#0d0d2a" stroke-width="8" stroke-linecap="round" fill="none"/>
+    <path d="M78,84 L82,96 L84,108" stroke="#0d0d2a" stroke-width="14" stroke-linecap="round" fill="none"/>
+    <path d="M80,107 L88,110" stroke="#0d0d2a" stroke-width="8" stroke-linecap="round" fill="none"/>
+
+    <!-- Torso - slightly puffed -->
+    <path d="M38,42 Q36,38 40,34 L52,28 Q64,26 76,28 L88,34 Q92,38 90,42 L92,56 Q94,67 90,76 L86,82 Q76,86 64,86 Q52,86 42,82 L38,76 Q34,67 36,56 Z"
+      fill="url(#furBody)" filter="url(#furEdge)"/>
+    <ellipse cx="40" cy="38" rx="11" ry="8" fill="#1a1a3a"/>
+    <ellipse cx="88" cy="38" rx="11" ry="8" fill="#1a1a3a"/>
+
+    <!-- Arms - slightly tensed, fists clenching -->
+    <path d="M38,42 L30,58 L26,74" stroke="url(#furLimb)" stroke-width="12" stroke-linecap="round" fill="none"/>
+    <circle cx="25" cy="75" r="5.5" fill="#0d0d2a"/>
+    <path d="M22,72 L18,68" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+    <path d="M24,70 L21,65" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+    <path d="M27,70 L25,65" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+
+    <path d="M90,42 L98,58 L102,74" stroke="url(#furLimb)" stroke-width="12" stroke-linecap="round" fill="none"/>
+    <circle cx="103" cy="75" r="5.5" fill="#0d0d2a"/>
+    <path d="M106,72 L110,68" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+    <path d="M104,70 L107,65" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+    <path d="M101,70 L103,65" stroke="#3a3030" stroke-width="2" stroke-linecap="round"/>
+
+    <!-- Head - shoulders raised slightly -->
+    <path d="M50,18 Q48,14 50,10 Q54,4 64,3 Q74,4 78,10 Q80,14 78,18 Q82,22 80,28 Q78,32 74,34 Q68,36 64,36 Q60,36 54,34 Q50,32 48,28 Q46,22 50,18 Z"
+      fill="url(#headFur)" filter="url(#furEdge)"/>
+    <path d="M50,16 Q56,11 64,11 Q72,11 78,16 Q80,18 78,20 Q72,16 64,16 Q56,16 50,20 Q48,18 50,16 Z"
+      fill="#0d0d2a"/>
+    <!-- Eyes slightly brighter -->
+    <circle cx="56" cy="20" r="3.3" fill="url(#eyeGlow)" filter="url(#eyeFlare)"/>
+    <circle cx="56" cy="20" r="1.3" fill="#ffffff"/>
+    <circle cx="72" cy="20" r="3.3" fill="url(#eyeGlow)" filter="url(#eyeFlare)"/>
+    <circle cx="72" cy="20" r="1.3" fill="#ffffff"/>
+    <path d="M62,23 L64,26 L66,23" stroke="#0d0d2a" stroke-width="2" fill="none"/>
+    <!-- Mouth slightly open, fang tips visible -->
+    <path d="M54,30 Q60,28 64,28 Q68,28 74,30" stroke="#0d0d2a" stroke-width="1.5" fill="none"/>
+    <path d="M55,32 Q60,34 64,34 Q68,34 73,32" stroke="#0d0d2a" stroke-width="1.5" fill="none"/>
+    <ellipse cx="64" cy="31" rx="8" ry="2" fill="#2a0510" opacity="0.5"/>
+    <path d="M57,30 L56,33" stroke="#e8e0d0" stroke-width="1.8" stroke-linecap="round"/>
+    <path d="M71,30 L72,33" stroke="#e8e0d0" stroke-width="1.8" stroke-linecap="round"/>
+
+    <!-- Extra fur tufts showing agitation -->
+    <path d="M50,6 L47,0" stroke="#4a4a6a" stroke-width="1.8" opacity="0.6"/>
+    <path d="M58,4 L56,-2" stroke="#4a4a6a" stroke-width="1.5" opacity="0.5"/>
+    <path d="M64,3 L64,-3" stroke="#4a4a6a" stroke-width="1.8" opacity="0.6"/>
+    <path d="M70,4 L72,-2" stroke="#4a4a6a" stroke-width="1.5" opacity="0.5"/>
+    <path d="M78,6 L81,0" stroke="#4a4a6a" stroke-width="1.8" opacity="0.6"/>
+    <path d="M44,46 L41,51" stroke="#4a4a6a" stroke-width="1.2" opacity="0.5"/>
+    <path d="M84,46 L87,51" stroke="#4a4a6a" stroke-width="1.2" opacity="0.5"/>
+  </g>
+
+  <!-- Frame 2 (Row 2): High rage - fur on end, snarling, tensed -->
+  <g transform="translate(256, 256)">
+    <circle cx="15" cy="15" r="0.9" fill="#c8dcff" opacity="0.28"/>
+    <circle cx="112" cy="20" r="1" fill="#c8dcff" opacity="0.22"/>
+    <!-- Rage aura -->
+    <ellipse cx="64" cy="58" rx="55" ry="50" fill="url(#rageAura)"/>
+    <ellipse cx="64" cy="114" rx="30" ry="5" fill="rgba(0,0,0,0.22)"/>
+
+    <!-- Legs - wide aggressive stance -->
+    <path d="M46,86 L40,98 L38,110" stroke="#0d0d2a" stroke-width="15" stroke-linecap="round" fill="none"/>
+    <path d="M34,109 L42,112" stroke="#0d0d2a" stroke-width="9" stroke-linecap="round" fill="none"/>
+    <path d="M82,86 L88,98 L90,110" stroke="#0d0d2a" stroke-width="15" stroke-linecap="round" fill="none"/>
+    <path d="M86,109 L94,112" stroke="#0d0d2a" stroke-width="9" stroke-linecap="round" fill="none"/>
+
+    <!-- Torso - puffed up, wider -->
+    <path d="M34,42 Q32,38 36,33 L48,26 Q64,22 80,26 L92,33 Q96,38 94,42 L96,58 Q98,70 94,78 L90,86 Q78,90 64,90 Q50,90 38,86 L34,78 Q30,70 32,58 Z"
+      fill="url(#furBody)" filter="url(#furEdge)"/>
+    <ellipse cx="36" cy="36" rx="13" ry="9" fill="#1a1a3a"/>
+    <ellipse cx="92" cy="36" rx="13" ry="9" fill="#1a1a3a"/>
+
+    <!-- Arms raised and tensed -->
+    <path d="M34,40 L24,52 L18,66" stroke="url(#furLimb)" stroke-width="13" stroke-linecap="round" fill="none"/>
+    <circle cx="17" cy="67" r="6" fill="#0d0d2a"/>
+    <path d="M12,64 L6,60" stroke="#3a3030" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M14,62 L9,57" stroke="#3a3030" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M17,60 L13,55" stroke="#3a3030" stroke-width="2.5" stroke-linecap="round"/>
+
+    <path d="M94,40 L104,52 L110,66" stroke="url(#furLimb)" stroke-width="13" stroke-linecap="round" fill="none"/>
+    <circle cx="111" cy="67" r="6" fill="#0d0d2a"/>
+    <path d="M116,64 L122,60" stroke="#3a3030" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M114,62 L119,57" stroke="#3a3030" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M111,60 L115,55" stroke="#3a3030" stroke-width="2.5" stroke-linecap="round"/>
+
+    <!-- Head - hunched forward aggressively -->
+    <path d="M48,16 Q46,12 48,8 Q52,2 64,1 Q76,2 80,8 Q82,12 80,16 Q84,20 82,26 Q80,32 76,34 Q70,38 64,38 Q58,38 52,34 Q48,32 46,26 Q44,20 48,16 Z"
+      fill="url(#headFur)" filter="url(#furEdge)"/>
+    <path d="M48,14 Q54,8 64,8 Q74,8 80,14 Q82,16 80,18 Q74,13 64,13 Q54,13 48,18 Q46,16 48,14 Z"
+      fill="#0d0d2a"/>
+    <!-- Eyes very bright -->
+    <circle cx="55" cy="18" r="3.8" fill="url(#eyeGlow)" filter="url(#eyeFlareStrong)"/>
+    <circle cx="55" cy="18" r="1.4" fill="#ffffff"/>
+    <circle cx="73" cy="18" r="3.8" fill="url(#eyeGlow)" filter="url(#eyeFlareStrong)"/>
+    <circle cx="73" cy="18" r="1.4" fill="#ffffff"/>
+    <path d="M62,22 L64,25 L66,22" stroke="#0d0d2a" stroke-width="2" fill="none"/>
+    <!-- Snarling mouth -->
+    <path d="M52,28 Q58,26 64,26 Q70,26 76,28" fill="#0d0d2a"/>
+    <path d="M52,36 Q58,39 64,39 Q70,39 76,36" fill="#0d0d2a"/>
+    <ellipse cx="64" cy="32" rx="11" ry="5" fill="url(#mouthInner)"/>
+    <path d="M55,28 L54,34" stroke="#e8e0d0" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M73,28 L74,34" stroke="#e8e0d0" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M59,27 L58,31" stroke="#e8e0d0" stroke-width="1.8" stroke-linecap="round"/>
+    <path d="M69,27 L70,31" stroke="#e8e0d0" stroke-width="1.8" stroke-linecap="round"/>
+    <path d="M57,38 L56,34" stroke="#e8e0d0" stroke-width="2" stroke-linecap="round"/>
+    <path d="M71,38 L72,34" stroke="#e8e0d0" stroke-width="2" stroke-linecap="round"/>
+
+    <!-- Fur spikes on end - aggressive -->
+    <path d="M46,4 L42,-4" stroke="#4a4a6a" stroke-width="2" opacity="0.7"/>
+    <path d="M52,2 L48,-6" stroke="#3a3a5a" stroke-width="2" opacity="0.6"/>
+    <path d="M58,1 L56,-6" stroke="#4a4a6a" stroke-width="2" opacity="0.7"/>
+    <path d="M64,0 L64,-8" stroke="#3a3a5a" stroke-width="2.5" opacity="0.7"/>
+    <path d="M70,1 L72,-6" stroke="#4a4a6a" stroke-width="2" opacity="0.7"/>
+    <path d="M76,2 L80,-6" stroke="#3a3a5a" stroke-width="2" opacity="0.6"/>
+    <path d="M82,4 L86,-4" stroke="#4a4a6a" stroke-width="2" opacity="0.7"/>
+    <!-- Shoulder fur spikes -->
+    <path d="M32,32 L26,26" stroke="#4a4a6a" stroke-width="2" opacity="0.6"/>
+    <path d="M96,32 L102,26" stroke="#4a4a6a" stroke-width="2" opacity="0.6"/>
+  </g>
+
+  <!-- Frame 3 (Row 2): Max rage / Berserk - maximum size, roaring, wild -->
+  <g transform="translate(384, 256)">
+    <circle cx="12" cy="12" r="0.8" fill="#c8dcff" opacity="0.25"/>
+    <circle cx="115" cy="18" r="1" fill="#c8dcff" opacity="0.22"/>
+    <!-- Strong rage aura -->
+    <ellipse cx="64" cy="58" rx="60" ry="55" fill="url(#rageAura)"/>
+    <ellipse cx="64" cy="60" rx="50" ry="45" fill="url(#rageAura)"/>
+    <ellipse cx="64" cy="116" rx="32" ry="6" fill="rgba(0,0,0,0.25)"/>
+
+    <!-- Legs - WIDE power stance -->
+    <path d="M42,88 L34,100 L32,112" stroke="#0d0d2a" stroke-width="16" stroke-linecap="round" fill="none"/>
+    <path d="M28,111 L36,114" stroke="#0d0d2a" stroke-width="9" stroke-linecap="round" fill="none"/>
+    <path d="M86,88 L94,100 L96,112" stroke="#0d0d2a" stroke-width="16" stroke-linecap="round" fill="none"/>
+    <path d="M92,111 L100,114" stroke="#0d0d2a" stroke-width="9" stroke-linecap="round" fill="none"/>
+
+    <!-- Torso - MAXIMUM size, fur puffed -->
+    <path d="M30,42 Q28,36 32,30 L46,22 Q64,18 82,22 L96,30 Q100,36 98,42 L100,58 Q102,72 98,82 L94,88 Q80,94 64,94 Q48,94 34,88 L30,82 Q26,72 28,58 Z"
+      fill="url(#furBody)" filter="url(#furEdge)"/>
+    <ellipse cx="32" cy="34" rx="14" ry="10" fill="#1a1a3a"/>
+    <ellipse cx="96" cy="34" rx="14" ry="10" fill="#1a1a3a"/>
+
+    <!-- Arms raised in roar pose -->
+    <path d="M30,38 L18,46 L8,56" stroke="url(#furLimb)" stroke-width="14" stroke-linecap="round" fill="none"/>
+    <circle cx="7" cy="57" r="7" fill="#0d0d2a"/>
+    <path d="M2,54 L-5,50" stroke="#3a3030" stroke-width="3" stroke-linecap="round"/>
+    <path d="M4,51 L-2,46" stroke="#3a3030" stroke-width="3" stroke-linecap="round"/>
+    <path d="M6,49 L1,43" stroke="#3a3030" stroke-width="3" stroke-linecap="round"/>
+
+    <path d="M98,38 L110,46 L120,56" stroke="url(#furLimb)" stroke-width="14" stroke-linecap="round" fill="none"/>
+    <circle cx="121" cy="57" r="7" fill="#0d0d2a"/>
+    <path d="M126,54 L133,50" stroke="#3a3030" stroke-width="3" stroke-linecap="round"/>
+    <path d="M124,51 L130,46" stroke="#3a3030" stroke-width="3" stroke-linecap="round"/>
+    <path d="M122,49 L127,43" stroke="#3a3030" stroke-width="3" stroke-linecap="round"/>
+
+    <!-- Head - tilted back in ROAR -->
+    <path d="M46,14 Q44,10 46,6 Q50,0 64,-1 Q78,0 82,6 Q84,10 82,14 Q86,18 84,24 Q82,30 78,32 Q72,36 64,36 Q56,36 50,32 Q46,30 44,24 Q42,18 46,14 Z"
+      fill="url(#headFur)" filter="url(#furEdge)"/>
+    <path d="M46,12 Q52,6 64,6 Q76,6 82,12 Q84,14 82,16 Q76,11 64,11 Q52,11 46,16 Q44,14 46,12 Z"
+      fill="#0d0d2a"/>
+    <!-- Eyes BLAZING -->
+    <circle cx="54" cy="16" r="4.5" fill="url(#eyeGlow)" filter="url(#eyeFlareStrong)"/>
+    <circle cx="54" cy="16" r="1.8" fill="#ffffff"/>
+    <circle cx="74" cy="16" r="4.5" fill="url(#eyeGlow)" filter="url(#eyeFlareStrong)"/>
+    <circle cx="74" cy="16" r="1.8" fill="#ffffff"/>
+
+    <!-- FULL ROAR - mouth wide open -->
+    <path d="M48,24 Q56,20 64,20 Q72,20 80,24" fill="#0d0d2a"/>
+    <path d="M48,42 Q56,48 64,48 Q72,48 80,42" fill="#0d0d2a"/>
+    <ellipse cx="64" cy="33" rx="15" ry="11" fill="url(#mouthInner)"/>
+    <!-- Gum lines -->
+    <path d="M50,25 Q56,22 64,22 Q72,22 78,25" stroke="#5a1020" stroke-width="1.5" fill="none"/>
+    <path d="M50,42 Q56,45 64,46 Q72,45 78,42" stroke="#5a1020" stroke-width="1.5" fill="none"/>
+    <!-- HUGE upper fangs -->
+    <path d="M52,24 L50,36" stroke="#e8e0d0" stroke-width="3.5" stroke-linecap="round"/>
+    <path d="M76,24 L78,36" stroke="#e8e0d0" stroke-width="3.5" stroke-linecap="round"/>
+    <path d="M57,23 L56,30" stroke="#e8e0d0" stroke-width="2.2" stroke-linecap="round"/>
+    <path d="M64,22 L64,29" stroke="#e8e0d0" stroke-width="2.2" stroke-linecap="round"/>
+    <path d="M71,23 L72,30" stroke="#e8e0d0" stroke-width="2.2" stroke-linecap="round"/>
+    <!-- Lower fangs -->
+    <path d="M54,44 L53,37" stroke="#e8e0d0" stroke-width="3" stroke-linecap="round"/>
+    <path d="M74,44 L75,37" stroke="#e8e0d0" stroke-width="3" stroke-linecap="round"/>
+    <path d="M60,46 L60,40" stroke="#e8e0d0" stroke-width="2" stroke-linecap="round"/>
+    <path d="M68,46 L68,40" stroke="#e8e0d0" stroke-width="2" stroke-linecap="round"/>
+    <!-- Drool -->
+    <path d="M52,34 Q50,40 52,46" stroke="rgba(180,200,220,0.35)" stroke-width="1.2" fill="none"/>
+    <path d="M76,34 Q78,40 76,46" stroke="rgba(180,200,220,0.35)" stroke-width="1.2" fill="none"/>
+    <path d="M64,29 Q62,38 64,46" stroke="rgba(180,200,220,0.25)" stroke-width="0.8" fill="none"/>
+
+    <!-- WILD fur spikes -->
+    <path d="M42,2 L36,-8" stroke="#3a3a5a" stroke-width="2.5" opacity="0.8"/>
+    <path d="M48,0 L44,-10" stroke="#4a4a6a" stroke-width="2.5" opacity="0.7"/>
+    <path d="M54,-1 L50,-12" stroke="#3a3a5a" stroke-width="2.5" opacity="0.8"/>
+    <path d="M60,-1 L58,-12" stroke="#4a4a6a" stroke-width="3" opacity="0.8"/>
+    <path d="M64,-1 L64,-14" stroke="#3a3a5a" stroke-width="3" opacity="0.8"/>
+    <path d="M68,-1 L70,-12" stroke="#4a4a6a" stroke-width="3" opacity="0.8"/>
+    <path d="M74,-1 L78,-12" stroke="#3a3a5a" stroke-width="2.5" opacity="0.8"/>
+    <path d="M80,0 L84,-10" stroke="#4a4a6a" stroke-width="2.5" opacity="0.7"/>
+    <path d="M86,2 L92,-8" stroke="#3a3a5a" stroke-width="2.5" opacity="0.8"/>
+    <!-- Shoulder fur spikes -->
+    <path d="M26,28 L18,20" stroke="#4a4a6a" stroke-width="2.5" opacity="0.7"/>
+    <path d="M22,34 L14,28" stroke="#3a3a5a" stroke-width="2" opacity="0.6"/>
+    <path d="M102,28 L110,20" stroke="#4a4a6a" stroke-width="2.5" opacity="0.7"/>
+    <path d="M106,34 L114,28" stroke="#3a3a5a" stroke-width="2" opacity="0.6"/>
+    <!-- Dark energy wisps -->
+    <path d="M28,50 Q18,45 14,52 Q10,60 16,62" stroke="#1a0a2a" stroke-width="2.5" fill="none" opacity="0.4"/>
+    <path d="M100,50 Q110,45 114,52 Q118,60 112,62" stroke="#1a0a2a" stroke-width="2.5" fill="none" opacity="0.4"/>
+    <path d="M36,70 Q26,65 22,74" stroke="#15052a" stroke-width="2" fill="none" opacity="0.35"/>
+    <path d="M92,70 Q102,65 106,74" stroke="#15052a" stroke-width="2" fill="none" opacity="0.35"/>
+  </g>
+
 </svg>
