@@ -1336,7 +1336,7 @@
             const snowCanvas = document.getElementById('snowCanvas');
             const ctx = snowCanvas.getContext('2d');
             let particles = [];
-            const MAX_PARTICLES = 50;
+            const MAX_PARTICLES = 30;
             let lastTime = performance.now();
             let initialized = false;
 
@@ -1412,14 +1412,6 @@
                     ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
                     ctx.fillStyle = `rgba(255, 255, 255, ${p.opacity})`;
                     ctx.fill();
-
-                    // Subtle glow for larger particles
-                    if (p.size > 3) {
-                        ctx.beginPath();
-                        ctx.arc(p.x, p.y, p.size * 1.5, 0, Math.PI * 2);
-                        ctx.fillStyle = `rgba(200, 240, 255, ${p.opacity * 0.25})`;
-                        ctx.fill();
-                    }
                 }
             }
 
@@ -1465,7 +1457,7 @@
 
             const ctx = canvas.getContext('2d');
             const particles = [];
-            const maxParticles = 60;
+            const maxParticles = 30;
 
             // Set canvas size - matches CSS dimensions
             function resizeCanvas() {
@@ -1622,11 +1614,6 @@
                     // Sparkle
                     sparkle: rand(0, Math.PI * 2),
                     sparkleSpeed: rand(0.15, 0.4),
-
-                    // Trail
-                    trail: [],
-                    trailLength: initialSize > 6 ? 6 : initialSize > 3 ? 4 : 2,
-
                     // Physics
                     drag: rand(0.985, 0.995),
                     gravity: rand(-0.008, 0.015),
@@ -1651,11 +1638,6 @@
             function updateParticles(dt) {
                 for (let i = particles.length - 1; i >= 0; i--) {
                     const p = particles[i];
-
-                    // Store trail
-                    if (p.trail.length >= p.trailLength) p.trail.shift();
-                    p.trail.push({ x: p.x, y: p.y, size: p.size });
-
                     // Wobble/swirl motion
                     p.wobble += p.wobbleSpeed;
                     const wobble = Math.sin(p.wobble) * p.wobbleAmp;
@@ -1707,59 +1689,17 @@
                 ctx.translate(p.x, p.y);
                 ctx.rotate(p.rotation);
 
-                // Draw trail
-                for (let i = 0; i < p.trail.length; i++) {
-                    const t = p.trail[i];
-                    const trailRatio = i / p.trail.length;
-                    const trailAlpha = trailRatio * alpha * 0.2;
-                    const trailSize = t.size * trailRatio * 0.3;
-
-                    if (trailAlpha < 0.02 || trailSize < 0.3) continue;
-
-                    const rx = t.x - p.x;
-                    const ry = t.y - p.y;
-
-                    ctx.beginPath();
-                    ctx.arc(rx, ry, trailSize, 0, Math.PI * 2);
-                    ctx.fillStyle = `hsla(${p.hue}, ${p.sat * 0.5}%, ${p.light}%, ${trailAlpha})`;
-                    ctx.fill();
-                }
-
-                // Create gradient for snowflake
-                const gradSize = p.size * 2.5;
-                const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, gradSize);
-
-                // Neon ice glow
-                grad.addColorStop(0, `hsla(0, 0%, 100%, ${alpha})`);
-                grad.addColorStop(0.15, `hsla(${p.hue}, ${p.sat}%, ${Math.min(100, p.light + 10)}%, ${alpha * 0.95})`);
-                grad.addColorStop(0.4, `hsla(${p.hue}, ${p.sat * 0.8}%, ${p.light}%, ${alpha * 0.7})`);
-                grad.addColorStop(0.7, `hsla(${p.hue}, ${p.sat * 0.5}%, ${p.light * 0.8}%, ${alpha * 0.3})`);
-                grad.addColorStop(1, `hsla(${p.hue}, 30%, 80%, 0)`);
-
-                // Draw snowflake shape - 6-pointed star
-                const points = 6;
-                const outerRadius = p.size;
-                const innerRadius = p.size * 0.4;
-
+                const color = `hsla(${p.hue}, ${p.sat}%, ${p.light}%, ${alpha})`;
+                ctx.fillStyle = color;
                 ctx.beginPath();
-                for (let i = 0; i < points * 2; i++) {
-                    const radius = i % 2 === 0 ? outerRadius : innerRadius;
-                    const angle = (i * Math.PI) / points - Math.PI / 2;
-                    const px = Math.cos(angle) * radius;
-                    const py = Math.sin(angle) * radius;
-                    if (i === 0) ctx.moveTo(px, py);
-                    else ctx.lineTo(px, py);
-                }
-                ctx.closePath();
-                ctx.fillStyle = grad;
+                ctx.arc(0, 0, Math.max(1, p.size), 0, Math.PI * 2);
                 ctx.fill();
 
-                // Bright core for larger flakes
-                if (p.size > 4 && alpha > 0.4) {
+                // Small bright core for larger flakes
+                if (p.size > 5 && alpha > 0.4) {
+                    ctx.fillStyle = `hsla(0, 0%, 100%, ${alpha * 0.8})`;
                     ctx.beginPath();
-                    const coreSize = p.size * 0.25 * sparkleMod;
-                    ctx.arc(0, 0, coreSize, 0, Math.PI * 2);
-                    ctx.fillStyle = `hsla(0, 0%, 100%, ${alpha * 0.9})`;
+                    ctx.arc(0, 0, p.size * 0.2, 0, Math.PI * 2);
                     ctx.fill();
                 }
 

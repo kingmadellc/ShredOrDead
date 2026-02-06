@@ -21,6 +21,9 @@ const performanceSettings = {
     skipFrameThreshold: 0.05  // Skip rendering if dt > this (lag spike recovery)
 };
 
+// Per-frame performance flag (set in gameLoop)
+let lowQualityFrame = false;
+
 // Helper to get shadow blur based on quality setting - USE THIS for all shadowBlur calls
 function getShadowBlur(baseBlur) {
     switch (performanceSettings.shadowQuality) {
@@ -42,6 +45,9 @@ const gradientCache = {
     background: null,
     dangerVignette: null,
     fogGradient: null,
+    mountainLeft: null,
+    mountainRight: null,
+    mountainWidth: 0,
     // Extended cache for frequently-used gradients
     railGradients: new Map(),
     obstacleGradients: new Map(),
@@ -58,6 +64,9 @@ const gradientCache = {
         this.background = null;
         this.dangerVignette = null;
         this.fogGradient = null;
+        this.mountainLeft = null;
+        this.mountainRight = null;
+        this.mountainWidth = 0;
         this.railGradients.clear();
         this.obstacleGradients.clear();
         this.static.treeTrunk = null;
@@ -483,8 +492,8 @@ const SPRITE_CONFIG = {
         columns: 4,
         rows: 3,
         animations: {
-            chase: { row: 0, frames: [0, 1, 2, 3, 2, 1], frameTime: 120 },
-            lunge: { row: 1, frames: [0, 1, 2], frameTime: 100 },
+            chase: { row: 0, frames: [0, 1, 2, 3, 2, 1], frameTimes: [100, 80, 140, 80, 140, 80] },
+            lunge: { row: 1, frames: [0, 0, 1, 2, 2, 3], frameTimes: [60, 60, 80, 120, 80, 100] },
             recover: { row: 1, frames: [3], frameTime: 150 },
             rageLow: { row: 2, frames: [0], frameTime: 100 },
             rageMedium: { row: 2, frames: [1], frameTime: 100 },
@@ -555,7 +564,11 @@ class AnimatedSprite {
         if (!anim || anim.frames.length <= 1) return;
 
         this.frameTimer += dt * 1000;
-        if (this.frameTimer >= anim.frameTime) {
+        // Support per-frame timing via frameTimes array, fallback to single frameTime
+        const ft = anim.frameTimes
+            ? anim.frameTimes[this.frameIndex % anim.frameTimes.length]
+            : anim.frameTime;
+        if (this.frameTimer >= ft) {
             this.frameTimer = 0;
             this.frameIndex = (this.frameIndex + 1) % anim.frames.length;
         }
@@ -604,6 +617,98 @@ async function loadSprites() {
 
     sprites.loaded = snowboarderSheet.loaded && yetiSheet.loaded;
     console.log('Sprites loaded:', sprites.loaded);
+}
+
+// ============================================
+// HUD OVERLAY SYSTEM - Cyberpunk Console Frame
+// ============================================
+const hudOverlay = {
+    image: null,
+    loaded: false,
+    topBarCanvas: null,
+    bottomBarCanvas: null,
+    cachedWidth: 0,
+    cachedHeight: 0,
+    // Source image slice fractions (tune visually)
+    topSlice: 0.30,
+    bottomSlice: 0.60,
+    // Bar heights in base resolution pixels (480x640)
+    topBarHeight: 50,
+    bottomBarHeight: 65
+};
+
+async function loadHUDOverlay() {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            hudOverlay.image = img;
+            hudOverlay.loaded = true;
+            compositeHUDBars();
+            console.log('HUD overlay loaded successfully');
+            resolve(true);
+        };
+        img.onerror = () => {
+            console.warn('HUD overlay failed to load, using text-only HUD');
+            hudOverlay.loaded = false;
+            resolve(false);
+        };
+        img.src = 'assets/hud/hud-frame.png';
+    });
+}
+
+function compositeHUDBars() {
+    if (!hudOverlay.loaded || !hudOverlay.image) return;
+
+    const img = hudOverlay.image;
+    const w = CANVAS_WIDTH;
+    const scale = getUIScale();
+
+    const topH = Math.round(hudOverlay.topBarHeight * scale);
+    const bottomH = Math.round(hudOverlay.bottomBarHeight * scale);
+
+    // --- TOP BAR offscreen canvas ---
+    hudOverlay.topBarCanvas = document.createElement('canvas');
+    hudOverlay.topBarCanvas.width = w;
+    hudOverlay.topBarCanvas.height = topH;
+    const topCtx = hudOverlay.topBarCanvas.getContext('2d');
+
+    const srcTopHeight = Math.round(img.height * hudOverlay.topSlice);
+    topCtx.drawImage(img, 0, 0, img.width, srcTopHeight, 0, 0, w, topH);
+
+    // Dark overlay for readability
+    topCtx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+    topCtx.fillRect(0, 0, w, topH);
+
+    // Cyan glow at bottom edge
+    const topGlow = topCtx.createLinearGradient(0, topH - 6, 0, topH);
+    topGlow.addColorStop(0, 'rgba(0, 255, 255, 0)');
+    topGlow.addColorStop(1, 'rgba(0, 255, 255, 0.6)');
+    topCtx.fillStyle = topGlow;
+    topCtx.fillRect(0, topH - 6, w, 6);
+
+    // --- BOTTOM BAR offscreen canvas ---
+    hudOverlay.bottomBarCanvas = document.createElement('canvas');
+    hudOverlay.bottomBarCanvas.width = w;
+    hudOverlay.bottomBarCanvas.height = bottomH;
+    const bottomCtx = hudOverlay.bottomBarCanvas.getContext('2d');
+
+    const srcBottomY = Math.round(img.height * hudOverlay.bottomSlice);
+    const srcBottomHeight = img.height - srcBottomY;
+    bottomCtx.drawImage(img, 0, srcBottomY, img.width, srcBottomHeight, 0, 0, w, bottomH);
+
+    // Dark overlay for readability
+    bottomCtx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+    bottomCtx.fillRect(0, 0, w, bottomH);
+
+    // Cyan glow at top edge
+    const bottomGlow = bottomCtx.createLinearGradient(0, 0, 0, 6);
+    bottomGlow.addColorStop(0, 'rgba(0, 255, 255, 0.6)');
+    bottomGlow.addColorStop(1, 'rgba(0, 255, 255, 0)');
+    bottomCtx.fillStyle = bottomGlow;
+    bottomCtx.fillRect(0, 0, w, 6);
+
+    hudOverlay.cachedWidth = w;
+    hudOverlay.cachedHeight = CANVAS_HEIGHT;
 }
 
 // ===================
@@ -1092,7 +1197,7 @@ function spawnGrindSparks(x, y) {
 }
 
 function spawnCrashParticles(x, y) {
-    for (let i = 0; i < 15; i++) {
+    for (let i = 0; i < 8; i++) {
         const angle = Math.random() * Math.PI * 2;
         const speed = 100 + Math.random() * 150;
         gameState.particles.push(ParticlePool.spawn(
@@ -2955,7 +3060,7 @@ function draw() {
         drawFogWall();
         drawDeathAnimation();  // Draw chomp animation instead of player
         drawParticles();
-        drawDangerVignette();
+        drawDeathVignette(gameState.deathAnimation);
         return;
     }
 
@@ -2997,18 +3102,18 @@ function draw() {
     // Draw celebrations
     drawCelebrations();
 
-    // Draw HUD
-    drawHUD();
-
-    // Draw danger vignette
+    // Draw danger vignette (before HUD so console panels overlay it)
     if (gameState.dangerLevel > 0.2) {
         drawDangerVignette();
     }
 
-    // Draw speed lines
+    // Draw speed lines (before HUD so console panels overlay them)
     if (gameState.player.speed > 400) {
         drawSpeedLines();
     }
+
+    // Draw HUD last - console panels sit on top of all effects
+    drawHUD();
 }
 
 function drawBackground() {
@@ -3040,19 +3145,25 @@ function drawBackground() {
             // Right mountain margin
             ctx.fillRect(CANVAS_WIDTH - marginWidth + 5, 0, marginWidth - 5, CANVAS_HEIGHT);
 
-            // Mountain silhouette effect on sides - cooler, snowy tones
-            const mountainGrad = ctx.createLinearGradient(0, 0, marginWidth, 0);
-            mountainGrad.addColorStop(0, 'rgba(160, 190, 210, 0.8)');
-            mountainGrad.addColorStop(0.5, 'rgba(180, 210, 230, 0.5)');
-            mountainGrad.addColorStop(1, 'transparent');
-            ctx.fillStyle = mountainGrad;
-            ctx.fillRect(0, 0, marginWidth, CANVAS_HEIGHT);
+            // Mountain silhouette effect on sides - cached gradients
+            if (!gradientCache.mountainLeft || gradientCache.mountainWidth !== marginWidth) {
+                gradientCache.mountainWidth = marginWidth;
+                const mountainGrad = ctx.createLinearGradient(0, 0, marginWidth, 0);
+                mountainGrad.addColorStop(0, 'rgba(160, 190, 210, 0.8)');
+                mountainGrad.addColorStop(0.5, 'rgba(180, 210, 230, 0.5)');
+                mountainGrad.addColorStop(1, 'transparent');
+                gradientCache.mountainLeft = mountainGrad;
 
-            const mountainGradR = ctx.createLinearGradient(CANVAS_WIDTH, 0, CANVAS_WIDTH - marginWidth, 0);
-            mountainGradR.addColorStop(0, 'rgba(160, 190, 210, 0.8)');
-            mountainGradR.addColorStop(0.5, 'rgba(180, 210, 230, 0.5)');
-            mountainGradR.addColorStop(1, 'transparent');
-            ctx.fillStyle = mountainGradR;
+                const mountainGradR = ctx.createLinearGradient(CANVAS_WIDTH, 0, CANVAS_WIDTH - marginWidth, 0);
+                mountainGradR.addColorStop(0, 'rgba(160, 190, 210, 0.8)');
+                mountainGradR.addColorStop(0.5, 'rgba(180, 210, 230, 0.5)');
+                mountainGradR.addColorStop(1, 'transparent');
+                gradientCache.mountainRight = mountainGradR;
+            }
+
+            ctx.fillStyle = gradientCache.mountainLeft;
+            ctx.fillRect(0, 0, marginWidth, CANVAS_HEIGHT);
+            ctx.fillStyle = gradientCache.mountainRight;
             ctx.fillRect(CANVAS_WIDTH - marginWidth, 0, marginWidth, CANVAS_HEIGHT);
         }
     }
@@ -4963,6 +5074,15 @@ function drawFogWall() {
     const screen = worldToScreen(0, chase.fogY);
     const time = gameState.animationTime;
 
+    if (lowQualityFrame) {
+        // Lightweight fog wall for performance spikes
+        ctx.fillStyle = 'rgba(30, 15, 45, 0.8)';
+        ctx.fillRect(0, screen.y - 140, CANVAS_WIDTH, 240);
+        ctx.fillStyle = 'rgba(12, 6, 20, 0.9)';
+        ctx.fillRect(0, screen.y + 20, CANVAS_WIDTH, 120);
+        return;
+    }
+
     // Multi-layer fog gradient for more depth
     const gradient = ctx.createLinearGradient(0, screen.y - 200, 0, screen.y + 80);
     gradient.addColorStop(0, 'rgba(20, 10, 35, 0)');
@@ -4975,8 +5095,9 @@ function drawFogWall() {
     ctx.fillStyle = gradient;
     ctx.fillRect(0, screen.y - 200, CANVAS_WIDTH, 300);
 
-    // Animated tendrils with bezier curves (10 tendrils)
-    for (let i = 0; i < 10; i++) {
+    // Animated tendrils with bezier curves (reduced count)
+    const tendrilCount = 5;
+    for (let i = 0; i < tendrilCount; i++) {
         const baseX = (i * CANVAS_WIDTH / 10) + 24;
         const phase = time * 2.5 + i * 0.8;
         const amplitude = 30 + Math.sin(i * 1.3) * 15;
@@ -5008,7 +5129,7 @@ function drawFogWall() {
     ctx.shadowBlur = 3;
     ctx.beginPath();
     ctx.moveTo(0, screen.y - 80);
-    for (let x = 0; x <= CANVAS_WIDTH; x += 10) {
+    for (let x = 0; x <= CANVAS_WIDTH; x += 20) {
         const waveY = screen.y - 80 + Math.sin(x * 0.02 + time * 3) * 15 + Math.sin(x * 0.05 + time * 2) * 8;
         ctx.lineTo(x, waveY);
     }
@@ -5017,7 +5138,7 @@ function drawFogWall() {
 
     // Floating particle motes
     ctx.fillStyle = 'rgba(200, 150, 255, 0.5)';
-    for (let i = 0; i < 15; i++) {
+    for (let i = 0; i < 8; i++) {
         const moteX = (i * 37 + time * 20) % CANVAS_WIDTH;
         const moteY = screen.y - 120 + Math.sin(time * 2 + i * 0.7) * 40;
         const moteSize = 2 + Math.sin(time * 3 + i) * 1;
@@ -5068,24 +5189,60 @@ function drawBeast() {
             scale += chase.lungeProgress * 0.3;
         }
 
-        // Breathing effect
-        const breathe = Math.sin(time * 3) * 0.03 + 1;
+        // Breathing effect - amplitude increases with rage
+        const breathe = Math.sin(time * 3) * (0.03 + chase.beastRage * 0.04) + 1;
         scale *= breathe;
 
-        // Draw dark energy aura behind sprite - purple/magenta for shadowy beast
-        const pulseIntensity = 0.4 + Math.sin(time * 3) * 0.2;
-        const auraGrad = ctx.createRadialGradient(screen.x, screen.y, 20, screen.x, screen.y, 85 * scale);
-        auraGrad.addColorStop(0, `rgba(120, 0, 180, ${pulseIntensity * 0.4})`);
-        auraGrad.addColorStop(0.5, `rgba(60, 0, 100, ${pulseIntensity * 0.25})`);
-        auraGrad.addColorStop(1, 'rgba(20, 0, 40, 0)');
-        ctx.fillStyle = auraGrad;
-        ctx.beginPath();
-        ctx.arc(screen.x, screen.y, 80 * scale, 0, Math.PI * 2);
-        ctx.fill();
+        // Draw dark energy aura behind sprite (skip on low-quality frames)
+        if (!lowQualityFrame) {
+            const pulseIntensity = 0.3 + Math.sin(time * 3) * 0.15;
+            const auraGrad = ctx.createRadialGradient(screen.x, screen.y, 15, screen.x, screen.y, 75 * scale);
+            auraGrad.addColorStop(0, `rgba(20, 5, 40, ${pulseIntensity * 0.3})`);
+            auraGrad.addColorStop(0.5, `rgba(10, 2, 25, ${pulseIntensity * 0.2})`);
+            auraGrad.addColorStop(1, 'rgba(5, 0, 15, 0)');
+            ctx.fillStyle = auraGrad;
+            ctx.beginPath();
+            ctx.arc(screen.x, screen.y, 70 * scale, 0, Math.PI * 2);
+            ctx.fill();
+        }
 
         // Draw sprite
         const drawn = sprites.beast.draw(ctx, screen.x, screen.y, scale, 0, false);
-        if (drawn) return; // Success, skip procedural drawing
+        if (drawn && !lowQualityFrame) {
+            // Procedural overlay: dark tendrils on top of sprite for living quality
+            ctx.save();
+            ctx.translate(screen.x, screen.y);
+            ctx.scale(scale, scale);
+            const tendrilColors = ['#1a0a2a', '#0a0515', '#150820', '#0f0618'];
+            ctx.lineWidth = 3;
+            for (let i = 0; i < 5; i++) {
+                const angle = (i / 5) * Math.PI * 2 + time * 0.5;
+                const len = 45 + Math.sin(time * 1.5 + i) * 12;
+                ctx.strokeStyle = tendrilColors[i % tendrilColors.length];
+                ctx.globalAlpha = 0.35 + Math.sin(time + i * 1.2) * 0.1;
+                ctx.beginPath();
+                ctx.moveTo(Math.cos(angle) * 30, Math.sin(angle) * 38);
+                ctx.quadraticCurveTo(
+                    Math.cos(angle + 0.3) * 48 + Math.sin(time + i) * 6,
+                    Math.sin(angle + 0.3) * 52,
+                    Math.cos(angle) * len,
+                    Math.sin(angle) * (len + 10)
+                );
+                ctx.stroke();
+            }
+            // Snow/ice particles around creature
+            ctx.globalAlpha = 1;
+            for (let i = 0; i < 3; i++) {
+                const pAngle = (i / 3) * Math.PI * 2 + time * 0.6;
+                const pDist = 48 + Math.sin(time * 2 + i * 1.5) * 10;
+                ctx.fillStyle = `rgba(200, 220, 255, ${0.25 + Math.sin(time * 2.5 + i) * 0.1})`;
+                ctx.beginPath();
+                ctx.arc(Math.cos(pAngle) * pDist, Math.sin(pAngle) * pDist, 1.5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+            return; // Success, skip procedural drawing
+        }
     }
 
     // Fallback to procedural drawing - DARK SHADOWY BEAST (matching YetiPortrait reference)
@@ -5327,7 +5484,89 @@ function drawCelebrations() {
 
 function drawHUD() {
     ctx.textBaseline = 'top';
+    const scale = getUIScale();
 
+    if (hudOverlay.loaded && hudOverlay.topBarCanvas && hudOverlay.bottomBarCanvas) {
+        drawImageHUD(scale);
+    } else {
+        drawTextHUD(scale);
+    }
+}
+
+// ============================================
+// IMAGE-BASED HUD - Cyberpunk console overlay
+// ============================================
+function drawImageHUD(scale) {
+    const topH = Math.round(hudOverlay.topBarHeight * scale);
+    const bottomH = Math.round(hudOverlay.bottomBarHeight * scale);
+
+    // --- Draw top bar panel ---
+    ctx.drawImage(hudOverlay.topBarCanvas, 0, 0);
+
+    // --- Draw bottom bar panel ---
+    ctx.drawImage(hudOverlay.bottomBarCanvas, 0, CANVAS_HEIGHT - bottomH);
+
+    // === TOP BAR DATA ===
+    const topPadding = Math.round(10 * scale);
+    const topTextY = topPadding;
+    const sideMargin = Math.round(20 * scale);
+
+    // Distance (top-left) - LED readout
+    drawLEDText(`${gameState.distance}m`, sideMargin, topTextY, COLORS.cyan,
+                Math.round(14 * scale), 'left');
+
+    // Speed (top-center) - prominent LED readout
+    const speedPercent = Math.floor((gameState.player.speed / PHYSICS.maxSpeed) * 100);
+    const speedColor = speedPercent > 75 ? COLORS.hotPink : COLORS.electricBlue;
+    drawLEDText(`${speedPercent}%`, CANVAS_WIDTH / 2, topTextY, speedColor,
+                Math.round(16 * scale), 'center');
+
+    // Score (top-right) - LED readout
+    drawLEDText(gameState.score.toString().padStart(6, '0'), CANVAS_WIDTH - sideMargin,
+                topTextY, COLORS.magenta, Math.round(14 * scale), 'right');
+
+    // Combo (just below top bar, in gameplay area)
+    if (gameState.trickMultiplier > 1) {
+        drawComboDisplay(topH + Math.round(10 * scale), scale);
+    }
+
+    // === BOTTOM BAR DATA ===
+    const bottomBarTop = CANVAS_HEIGHT - bottomH;
+    const bottomPadding = Math.round(12 * scale);
+
+    // Flow meter (bottom-left, inside bottom bar)
+    if (gameState.flowMeter > 5) {
+        drawFlowMeterDisplay(sideMargin, bottomBarTop + bottomPadding, scale);
+    }
+
+    // Collectibles count (bottom-right, inside bottom bar)
+    if (gameState.collectiblesCollected > 0) {
+        drawLEDText(`\u2744${gameState.collectiblesCollected}`, CANVAS_WIDTH - sideMargin,
+                    bottomBarTop + bottomPadding, COLORS.gold,
+                    Math.round(10 * scale), 'right');
+    }
+
+    // Danger warning (above bottom bar, in gameplay area)
+    if (gameState.dangerLevel > 0.5) {
+        const pulse = animCache.sin10 * 0.3 + 0.7;
+        ctx.globalAlpha = gameState.dangerLevel * pulse;
+        const dangerSize = Math.round(20 * scale);
+        const fontKey = `pressStart${dangerSize}`;
+        ctx.font = FONTS[fontKey] || `bold ${dangerSize}px "Press Start 2P", monospace`;
+        ctx.textAlign = 'center';
+        ctx.fillStyle = COLORS.danger;
+        ctx.shadowColor = COLORS.danger;
+        ctx.shadowBlur = getShadowBlur(6);
+        ctx.fillText('SPEED UP!', CANVAS_WIDTH / 2, bottomBarTop - Math.round(30 * scale));
+        ctx.shadowBlur = 0;
+        ctx.globalAlpha = 1;
+    }
+}
+
+// ============================================
+// TEXT-ONLY HUD FALLBACK (original behavior)
+// ============================================
+function drawTextHUD(scale) {
     // Distance (top left)
     drawNeonText(`${gameState.distance}m`, 15, 15, COLORS.cyan, 16, 'left');
 
@@ -5341,56 +5580,12 @@ function drawHUD() {
 
     // Combo (if active)
     if (gameState.trickMultiplier > 1) {
-        const comboY = 50;
-        ctx.font = FONTS.pressStart14;
-        ctx.textAlign = 'center';
-        ctx.fillStyle = COLORS.gold;
-        ctx.shadowColor = COLORS.gold;
-        ctx.shadowBlur = getShadowBlur(5);
-        ctx.fillText(`x${gameState.trickMultiplier.toFixed(1)}`, CANVAS_WIDTH/2, comboY);
-        ctx.shadowBlur = 0;
-
-        // Combo timer bar
-        const barWidth = 80;
-        const barFill = gameState.trickComboTimer / 2.5;
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-        ctx.fillRect(CANVAS_WIDTH/2 - barWidth/2, comboY + 18, barWidth, 4);
-        ctx.fillStyle = COLORS.gold;
-        ctx.fillRect(CANVAS_WIDTH/2 - barWidth/2, comboY + 18, barWidth * barFill, 4);
-
-        // Chain count
-        if (gameState.comboChainLength > 1) {
-            ctx.font = FONTS.pressStart10;
-            ctx.fillStyle = COLORS.limeGreen;
-            ctx.fillText(`${gameState.comboChainLength} chain`, CANVAS_WIDTH/2, comboY + 26);
-        }
+        drawComboDisplay(50, 1);
     }
 
     // Flow meter (bottom left)
     if (gameState.flowMeter > 5) {
-        const flowY = CANVAS_HEIGHT - 40;
-        const flowBarWidth = 80;
-        const flowFill = gameState.flowMeter / 100;
-
-        // Flow bar background
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-        ctx.fillRect(15, flowY, flowBarWidth, 10);
-
-        // Flow bar fill - simplified solid color for performance
-        ctx.fillStyle = COLORS.cyan;
-        ctx.fillRect(15, flowY, flowBarWidth * flowFill, 10);
-
-        // Flow label
-        ctx.font = FONTS.pressStart8;
-        ctx.textAlign = 'left';
-        ctx.fillStyle = COLORS.cyan;
-        ctx.fillText('FLOW', 15, flowY - 12);
-
-        // Flow multiplier
-        if (gameState.flowMultiplier > 1.1) {
-            ctx.fillStyle = COLORS.limeGreen;
-            ctx.fillText(`x${gameState.flowMultiplier.toFixed(1)}`, 15 + flowBarWidth + 8, flowY);
-        }
+        drawFlowMeterDisplay(15, CANVAS_HEIGHT - 52, 1);
     }
 
     // Collectibles count (bottom right)
@@ -5417,6 +5612,131 @@ function drawHUD() {
         ctx.shadowBlur = 0;
         ctx.globalAlpha = 1;
     }
+}
+
+// ============================================
+// SHARED HUD COMPONENTS
+// ============================================
+
+// Combo multiplier display
+function drawComboDisplay(y, scale) {
+    const fontSize = Math.round(14 * scale);
+    const fontKey = `pressStart${fontSize}`;
+    ctx.font = FONTS[fontKey] || `bold ${fontSize}px "Press Start 2P", monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = COLORS.gold;
+    ctx.shadowColor = COLORS.gold;
+    ctx.shadowBlur = getShadowBlur(5);
+    ctx.fillText(`x${gameState.trickMultiplier.toFixed(1)}`, CANVAS_WIDTH / 2, y);
+    ctx.shadowBlur = 0;
+
+    const barWidth = Math.round(80 * scale);
+    const barHeight = Math.max(Math.round(4 * scale), 3);
+    const barFill = gameState.trickComboTimer / 2.5;
+    const barY = y + Math.round(18 * scale);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(CANVAS_WIDTH / 2 - barWidth / 2, barY, barWidth, barHeight);
+    ctx.fillStyle = COLORS.gold;
+    ctx.fillRect(CANVAS_WIDTH / 2 - barWidth / 2, barY, barWidth * barFill, barHeight);
+
+    if (gameState.comboChainLength > 1) {
+        const chainSize = Math.round(10 * scale);
+        const chainKey = `pressStart${chainSize}`;
+        ctx.font = FONTS[chainKey] || `bold ${chainSize}px "Press Start 2P", monospace`;
+        ctx.fillStyle = COLORS.limeGreen;
+        ctx.fillText(`${gameState.comboChainLength} chain`, CANVAS_WIDTH / 2, barY + barHeight + Math.round(4 * scale));
+    }
+}
+
+// Flow meter display
+function drawFlowMeterDisplay(x, y, scale) {
+    const barWidth = Math.round(80 * scale);
+    const barHeight = Math.max(Math.round(10 * scale), 6);
+    const flowFill = gameState.flowMeter / 100;
+    const labelY = y;
+    const barY = y + Math.round(12 * scale);
+
+    const labelSize = Math.round(8 * scale);
+    const labelKey = `pressStart${labelSize}`;
+    ctx.font = FONTS[labelKey] || `bold ${labelSize}px "Press Start 2P", monospace`;
+    ctx.textAlign = 'left';
+    ctx.fillStyle = COLORS.cyan;
+    ctx.shadowColor = COLORS.cyan;
+    ctx.shadowBlur = getShadowBlur(3);
+    ctx.fillText('FLOW', x, labelY);
+    ctx.shadowBlur = 0;
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(x, barY, barWidth, barHeight);
+    ctx.fillStyle = COLORS.cyan;
+    ctx.fillRect(x, barY, barWidth * flowFill, barHeight);
+
+    if (gameState.flowMultiplier > 1.1) {
+        ctx.fillStyle = COLORS.limeGreen;
+        ctx.shadowColor = COLORS.limeGreen;
+        ctx.shadowBlur = getShadowBlur(3);
+        ctx.fillText(`x${gameState.flowMultiplier.toFixed(1)}`, x + barWidth + Math.round(8 * scale), barY);
+        ctx.shadowBlur = 0;
+    }
+}
+
+// ============================================
+// LED-STYLE TEXT RENDERING
+// ============================================
+
+function roundRectPath(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+}
+
+function drawLEDText(text, x, y, color, size, align) {
+    const fontKey = `pressStart${size}`;
+    ctx.font = FONTS[fontKey] || `bold ${size}px "Press Start 2P", monospace`;
+    ctx.textAlign = align;
+
+    const metrics = ctx.measureText(text);
+    const textWidth = metrics.width;
+    const padding = Math.max(4, Math.round(size * 0.3));
+
+    let bgX;
+    if (align === 'left') bgX = x - padding;
+    else if (align === 'right') bgX = x - textWidth - padding;
+    else bgX = x - textWidth / 2 - padding;
+
+    // Recessed display panel
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    roundRectPath(ctx, bgX, y - padding, textWidth + padding * 2, size + padding * 2, 3);
+    ctx.fill();
+
+    // Subtle border glow
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = 0.25;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    // Text with neon glow
+    ctx.shadowColor = color;
+    ctx.shadowBlur = getShadowBlur(8);
+    ctx.fillStyle = color;
+    ctx.fillText(text, x, y);
+
+    // White inner glow for LED hotspot
+    ctx.shadowBlur = getShadowBlur(3);
+    ctx.fillStyle = '#ffffff';
+    ctx.globalAlpha = 0.25;
+    ctx.fillText(text, x, y);
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
 }
 
 function drawNeonText(text, x, y, color, size, align) {
@@ -5452,7 +5772,50 @@ function drawDangerVignette() {
     ctx.globalAlpha = 1;
 }
 
+function drawDeathVignette(anim) {
+    if (!anim || !anim.active) return;
+
+    // Deep purple/indigo engulfing darkness instead of red flash
+    let alpha = 0;
+
+    if (anim.phase === 0) {
+        // Grab: edges darken 0.1 → 0.3
+        alpha = 0.1 + (anim.timer / 0.5) * 0.2;
+    } else if (anim.phase === 1) {
+        // Wind-up: hold at 0.3
+        alpha = 0.3;
+    } else if (anim.phase === 2) {
+        // Chomp: pulse 0.3 → 0.5 in sync with chomps
+        const chompPulse = Math.sin((anim.timer * 2.5) * Math.PI) * 0.1;
+        alpha = 0.35 + chompPulse + (anim.timer / 1.2) * 0.1;
+    } else if (anim.phase === 3) {
+        // Swallow: ramp to 0.6-0.7
+        alpha = 0.5 + (anim.timer / 0.3) * 0.2;
+    } else if (anim.phase === 4) {
+        // Fade: complete to full black
+        alpha = 0.7 + (anim.timer / 0.4) * 0.3;
+    }
+
+    alpha = clamp(alpha, 0, 1);
+
+    // Cache the death vignette gradient
+    if (!gradientCache.deathVignette) {
+        gradientCache.deathVignette = ctx.createRadialGradient(
+            CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, CANVAS_HEIGHT * 0.15,
+            CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, CANVAS_HEIGHT * 0.65
+        );
+        gradientCache.deathVignette.addColorStop(0, 'rgba(15, 5, 30, 0)');
+        gradientCache.deathVignette.addColorStop(1, 'rgba(15, 5, 30, 1)');
+    }
+
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = gradientCache.deathVignette;
+    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    ctx.globalAlpha = 1;
+}
+
 function drawSpeedLines() {
+    if (lowQualityFrame) return;
     const speedRatio = gameState.player.speed / PHYSICS.maxSpeed;
     const lineCount = Math.floor((speedRatio - 0.5) * 30);
     const lineAlpha = (speedRatio - 0.5) * 0.4;
@@ -5770,6 +6133,9 @@ function startDeathAnimation(cause) {
 
     gameState.screen = 'dying';
 
+    // Kill the red danger vignette
+    gameState.dangerLevel = 0;
+
     // Freeze player movement
     player.speed = 0;
     player.lateralSpeed = 0;
@@ -5846,60 +6212,95 @@ function drawDeathAnimation() {
     const easeInOutQuad = t => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 
     if (anim.phase === 0) {
-        // Phase 0: Grab - beast lunging with drama
+        // Phase 0: Grab - dark tendrils reach out and engulf the player
         const grabProgress = easeInOutQuad(Math.min(1, anim.timer / 0.5));
 
-        // Player shrinking/flinching with fear
-        ctx.fillStyle = COLORS.hotPink;
-        ctx.beginPath();
-        ctx.arc(0, -10 - grabProgress * 8, 10 * (1 - grabProgress * 0.4), 0, Math.PI * 2);
-        ctx.fill();
-
-        // Struggle animation
+        // Player shrinking as tendrils wrap around
         const struggle = Math.sin(anim.timer * 20) * (1 - grabProgress) * 3;
         ctx.fillStyle = COLORS.electricBlue;
+        ctx.globalAlpha = 1 - grabProgress * 0.6;
         ctx.beginPath();
-        ctx.arc(struggle, -20 - grabProgress * 5, 6 * (1 - grabProgress * 0.3), 0, Math.PI * 2);
+        ctx.arc(struggle, -15 - grabProgress * 5, 8 * (1 - grabProgress * 0.4), 0, Math.PI * 2);
         ctx.fill();
-
-    } else if (anim.phase === 1) {
-        // Phase 1: Wind-up - jaw opens wide for anticipation
-        const windUpProgress = easeInOutQuad(Math.min(1, anim.timer / 0.3));
-        const mouthOpen = windUpProgress * 1.0; // Opens wide
-
-        drawBeastHead(ctx, mouthOpen, false, time);
-
-        // Player visible in mouth, trembling
-        const tremble = Math.sin(anim.timer * 25) * 2;
-        ctx.fillStyle = COLORS.hotPink;
-        ctx.globalAlpha = 0.8;
+        ctx.fillStyle = COLORS.magenta;
         ctx.beginPath();
-        ctx.arc(tremble, -15, 6, 0, Math.PI * 2);
+        ctx.arc(struggle * 0.5, -25 - grabProgress * 3, 5 * (1 - grabProgress * 0.3), 0, Math.PI * 2);
         ctx.fill();
         ctx.globalAlpha = 1;
 
-    } else if (anim.phase === 2) {
-        // Phase 2: Chomp - slower, more impactful bites with eased motion
-        const chompPhase = (anim.timer * 2.5) % 1; // Slower: 2.5 chomps/sec
-        // Eased chomp motion - snaps shut faster than it opens
-        const easedChomp = chompPhase < 0.3
-            ? chompPhase / 0.3  // Quick close (0-0.3)
-            : 1 - (chompPhase - 0.3) / 0.7; // Slower open (0.3-1.0)
-        const mouthOpen = easeInOutQuad(easedChomp) * 0.9;
+        // Dark tendrils reaching from edges toward player
+        const tendrilColors = ['#1a0a2a', '#0a0515', '#150820', '#0f0618'];
+        ctx.lineWidth = 3 + grabProgress * 2;
+        for (let i = 0; i < 6; i++) {
+            const angle = (i / 6) * Math.PI * 2 + time * 0.3;
+            const startDist = 60 - grabProgress * 20;
+            const endDist = 15 - grabProgress * 10;
+            ctx.strokeStyle = tendrilColors[i % tendrilColors.length];
+            ctx.globalAlpha = 0.3 + grabProgress * 0.4;
+            ctx.beginPath();
+            ctx.moveTo(Math.cos(angle) * startDist, -15 + Math.sin(angle) * startDist * 0.6);
+            ctx.quadraticCurveTo(
+                Math.cos(angle + 0.2) * (startDist + endDist) / 2 + Math.sin(time + i) * 5,
+                -15 + Math.sin(angle + 0.2) * (startDist + endDist) / 2 * 0.6,
+                Math.cos(angle) * endDist + struggle * 0.3,
+                -15 + Math.sin(angle) * endDist * 0.6
+            );
+            ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
 
-        // Player bounces with each chomp
-        const playerBounce = Math.sin(chompPhase * Math.PI) * 5;
+    } else if (anim.phase === 1) {
+        // Phase 1: Wind-up - beast jaw opens, wisps swirl inward
+        const windUpProgress = easeInOutQuad(Math.min(1, anim.timer / 0.3));
+        const mouthOpen = windUpProgress * 1.0;
 
         drawBeastHead(ctx, mouthOpen, false, time);
 
-        // Player fragments after first chomp
+        // Player partially obscured by darkness
+        const tremble = Math.sin(anim.timer * 25) * 2;
+        ctx.fillStyle = '#2a1a3a';
+        ctx.globalAlpha = 0.5 - windUpProgress * 0.3;
+        ctx.beginPath();
+        ctx.arc(tremble, -8, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+
+        // Wisps swirling inward toward mouth
+        for (let i = 0; i < 4; i++) {
+            const wAngle = (i / 4) * Math.PI * 2 + time * 2;
+            const wDist = 50 * (1 - windUpProgress * 0.6);
+            ctx.strokeStyle = '#1a0a2a';
+            ctx.lineWidth = 2;
+            ctx.globalAlpha = 0.4 + windUpProgress * 0.2;
+            ctx.beginPath();
+            ctx.moveTo(Math.cos(wAngle) * wDist, -15 + Math.sin(wAngle) * wDist * 0.5);
+            ctx.quadraticCurveTo(
+                Math.cos(wAngle + 0.5) * wDist * 0.5,
+                -15 + Math.sin(wAngle + 0.5) * wDist * 0.3,
+                0, -8
+            );
+            ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+
+    } else if (anim.phase === 2) {
+        // Phase 2: Chomp - dark particle bursts on each chomp
+        const chompPhase = (anim.timer * 2.5) % 1;
+        const easedChomp = chompPhase < 0.3
+            ? chompPhase / 0.3
+            : 1 - (chompPhase - 0.3) / 0.7;
+        const mouthOpen = easeInOutQuad(easedChomp) * 0.9;
+
+        drawBeastHead(ctx, mouthOpen, false, time);
+
+        // Dark particle bursts on each chomp
         if (anim.chompCount >= 1) {
-            ctx.fillStyle = COLORS.hotPink;
-            for (let i = 0; i < Math.min(anim.chompCount + 1, 4); i++) {
-                const angle = (i * 1.5 + time * 1.5) % (Math.PI * 2);
-                const dist = 25 + i * 12 + anim.timer * 15;
-                const size = 4 - i * 0.5;
-                ctx.globalAlpha = Math.max(0, 1 - dist / 80);
+            for (let i = 0; i < Math.min(anim.chompCount + 1, 4) * 2; i++) {
+                const angle = (i * 1.2 + time * 1.5) % (Math.PI * 2);
+                const dist = 20 + i * 8 + anim.timer * 12;
+                const size = 3.5 - i * 0.3;
+                ctx.globalAlpha = Math.max(0, 1 - dist / 70);
+                ctx.fillStyle = i % 2 === 0 ? '#2a1a3a' : '#1a0a2a';
                 ctx.beginPath();
                 ctx.arc(Math.cos(angle) * dist, -15 + Math.sin(angle) * dist * 0.4, size, 0, Math.PI * 2);
                 ctx.fill();
@@ -5908,122 +6309,157 @@ function drawDeathAnimation() {
         }
 
     } else if (anim.phase === 3) {
-        // Phase 3: Swallow - gulp animation
+        // Phase 3: Swallow - dark bulge through shadow body
         const swallowProgress = easeInOutQuad(Math.min(1, anim.timer / 0.3));
-
-        // Throat bulge moving down
         const bulgeY = -15 + swallowProgress * 40;
 
-        drawBeastHead(ctx, 0.1, true, time); // Mouth mostly closed
+        drawBeastHead(ctx, 0.1, true, time);
 
-        // Throat bulge effect
-        ctx.fillStyle = '#d8d8e0';
+        // Throat bulge - dark tone against darker body
+        ctx.fillStyle = '#2a1a3a';
+        ctx.globalAlpha = 0.6 * (1 - swallowProgress * 0.5);
         ctx.beginPath();
-        ctx.ellipse(0, bulgeY, 12 * (1 - swallowProgress * 0.5), 8 * (1 - swallowProgress * 0.3), 0, 0, Math.PI * 2);
+        ctx.ellipse(0, bulgeY, 10 * (1 - swallowProgress * 0.5), 7 * (1 - swallowProgress * 0.3), 0, 0, Math.PI * 2);
         ctx.fill();
+        ctx.globalAlpha = 1;
 
     } else if (anim.phase === 4) {
-        // Phase 4: Fade - satisfied beast
+        // Phase 4: Fade - dark mass with dimming eyes, scene goes to black
         const fadeProgress = easeInOutQuad(Math.min(1, anim.timer / 0.4));
         ctx.globalAlpha = 1 - fadeProgress;
 
-        // Beast satisfied expression
-        ctx.fillStyle = '#e8e8f0';
-        ctx.beginPath();
-        ctx.arc(0, -15, 35, 0, Math.PI * 2);
-        ctx.fill();
+        drawBeastHead(ctx, 0, true, time);
 
-        // Happy closed eyes (satisfied)
-        ctx.strokeStyle = COLORS.cyan;
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(-12, -35, 6, Math.PI * 0.15, Math.PI * 0.85);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.arc(12, -35, 6, Math.PI * 0.15, Math.PI * 0.85);
-        ctx.stroke();
-
-        // Content smile
-        ctx.strokeStyle = '#1a1a2e';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(0, -8, 12, Math.PI * 0.15, Math.PI * 0.85);
-        ctx.stroke();
-
-        // Belly pat (paw on stomach)
-        ctx.fillStyle = '#e8e8f0';
-        ctx.beginPath();
-        ctx.ellipse(8, 20 - fadeProgress * 10, 10, 8, 0.3, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.globalAlpha = 1;
     }
 
     ctx.restore();
 }
 
-// Helper function to draw beast head with mouth
+// Helper function to draw beast head - dark shadow creature aesthetic
 function drawBeastHead(ctx, mouthOpen, satisfied, time) {
-    // Head/fur
-    ctx.fillStyle = '#e8e8f0';
-    ctx.beginPath();
-    ctx.arc(0, -15, 35, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Dark muzzle
-    ctx.fillStyle = '#1a1a2e';
-
-    // Upper jaw
-    ctx.beginPath();
-    ctx.arc(0, -30 - mouthOpen * 18, 25, 0, Math.PI);
-    ctx.fill();
-
-    // Lower jaw
-    ctx.beginPath();
-    ctx.arc(0, -2 + mouthOpen * 12, 22, Math.PI, Math.PI * 2);
-    ctx.fill();
-
-    // Teeth (upper) - sharper, more menacing
-    ctx.fillStyle = '#fff';
-    for (let i = -3; i <= 3; i++) {
-        const toothH = (i === 0) ? 14 : 10; // Center fangs longer
+    // Wispy tendrils around head
+    const tendrilColors = ['#1a0a2a', '#0a0515', '#150820'];
+    ctx.lineWidth = 3;
+    for (let i = 0; i < 5; i++) {
+        const angle = (i / 5) * Math.PI * 2 + time * 0.4;
+        const len = 35 + Math.sin(time * 1.2 + i) * 8;
+        ctx.strokeStyle = tendrilColors[i % tendrilColors.length];
+        ctx.globalAlpha = 0.3 + Math.sin(time + i * 1.5) * 0.1;
         ctx.beginPath();
-        ctx.moveTo(i * 6 - 2.5, -30 - mouthOpen * 12);
-        ctx.lineTo(i * 6, -30 - mouthOpen * 12 + toothH + mouthOpen * 4);
-        ctx.lineTo(i * 6 + 2.5, -30 - mouthOpen * 12);
+        ctx.moveTo(Math.cos(angle) * 28, -15 + Math.sin(angle) * 30);
+        ctx.quadraticCurveTo(
+            Math.cos(angle + 0.3) * 40 + Math.sin(time + i) * 5,
+            -15 + Math.sin(angle + 0.3) * 40,
+            Math.cos(angle) * len,
+            -15 + Math.sin(angle) * len
+        );
+        ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    // Head - dark amorphous mass
+    ctx.fillStyle = '#0a0515';
+    ctx.shadowColor = 'rgba(20, 5, 40, 0.6)';
+    ctx.shadowBlur = 6;
+    ctx.beginPath();
+    ctx.moveTo(-30, -45);
+    ctx.quadraticCurveTo(-38, -30, -35, -10);
+    ctx.quadraticCurveTo(-32, 5, -20, 15);
+    ctx.quadraticCurveTo(-8, 22, 0, 20);
+    ctx.quadraticCurveTo(8, 22, 20, 15);
+    ctx.quadraticCurveTo(32, 5, 35, -10);
+    ctx.quadraticCurveTo(38, -30, 30, -45);
+    ctx.quadraticCurveTo(20, -55, 0, -52);
+    ctx.quadraticCurveTo(-20, -55, -30, -45);
+    ctx.fill();
+
+    // Inner depth variation
+    ctx.fillStyle = '#1a0a2a';
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 0.4;
+    ctx.beginPath();
+    ctx.ellipse(-8, -25, 12, 16, -0.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(10, -20, 10, 14, 0.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // Mouth - dark void that opens
+    if (mouthOpen > 0.05) {
+        // Upper void
+        ctx.fillStyle = '#020005';
+        ctx.beginPath();
+        ctx.ellipse(0, -8 - mouthOpen * 6, 18 + mouthOpen * 4, 10 + mouthOpen * 8, 0, 0, Math.PI * 2);
         ctx.fill();
+
+        // Faint inner glow
+        ctx.fillStyle = `rgba(150, 0, 100, ${0.1 + mouthOpen * 0.1})`;
+        ctx.beginPath();
+        ctx.ellipse(0, -6 - mouthOpen * 4, 12 + mouthOpen * 2, 6 + mouthOpen * 5, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Faint irregular teeth - dark toned, not white
+        ctx.fillStyle = `rgba(80, 60, 100, ${0.4 + mouthOpen * 0.2})`;
+        const teethY = -14 - mouthOpen * 4;
+        for (let i = -2; i <= 2; i++) {
+            const th = 6 + mouthOpen * 4 + (i === 0 ? 3 : 0);
+            ctx.beginPath();
+            ctx.moveTo(i * 6 - 2, teethY);
+            ctx.lineTo(i * 6, teethY + th);
+            ctx.lineTo(i * 6 + 2, teethY);
+            ctx.fill();
+        }
+        // Lower teeth
+        const lowerY = -2 + mouthOpen * 4;
+        for (let i = -1; i <= 1; i++) {
+            ctx.beginPath();
+            ctx.moveTo(i * 8 - 1.5, lowerY);
+            ctx.lineTo(i * 8, lowerY - 5 - mouthOpen * 2);
+            ctx.lineTo(i * 8 + 1.5, lowerY);
+            ctx.fill();
+        }
     }
 
-    // Teeth (lower)
-    for (let i = -2; i <= 2; i++) {
-        ctx.beginPath();
-        ctx.moveTo(i * 7 - 2, -2 + mouthOpen * 10);
-        ctx.lineTo(i * 7, -10 + mouthOpen * 5);
-        ctx.lineTo(i * 7 + 2, -2 + mouthOpen * 10);
-        ctx.fill();
-    }
-
-    // Eyes - glowing and menacing
+    // Eyes
     if (!satisfied) {
+        // Small, intense cyan glowing points
         ctx.fillStyle = COLORS.cyan;
         ctx.shadowColor = COLORS.cyan;
-        ctx.shadowBlur = 5;
+        ctx.shadowBlur = 4;
         ctx.beginPath();
-        ctx.ellipse(-12, -42, 7, 5, 0, 0, Math.PI * 2);
+        ctx.ellipse(-12, -32, 4, 3.5, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.beginPath();
-        ctx.ellipse(12, -42, 7, 5, 0, 0, Math.PI * 2);
+        ctx.ellipse(12, -32, 4, 3.5, 0, 0, Math.PI * 2);
         ctx.fill();
-
-        // Angry eyebrows
-        ctx.strokeStyle = '#1a1a2e';
-        ctx.lineWidth = 3;
+        // White cores
+        ctx.fillStyle = '#ffffff';
+        ctx.shadowBlur = 2;
         ctx.beginPath();
-        ctx.moveTo(-18, -50);
-        ctx.lineTo(-6, -47);
+        ctx.arc(-12, -32, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(12, -32, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+    } else {
+        // Satisfied: narrow eye slits dimming
+        ctx.strokeStyle = COLORS.cyan;
+        ctx.shadowColor = COLORS.cyan;
+        ctx.shadowBlur = 3;
+        ctx.lineWidth = 2;
+        ctx.globalAlpha = 0.7;
+        ctx.beginPath();
+        ctx.moveTo(-16, -32);
+        ctx.lineTo(-8, -32);
         ctx.stroke();
         ctx.beginPath();
-        ctx.moveTo(18, -50);
-        ctx.lineTo(6, -47);
+        ctx.moveTo(8, -32);
+        ctx.lineTo(16, -32);
         ctx.stroke();
+        ctx.globalAlpha = 1;
         ctx.shadowBlur = 0;
     }
 }
@@ -6118,7 +6554,11 @@ function update(dt) {
 
     // Update sprite animations
     if (sprites.player) sprites.player.update(dt);
-    if (sprites.beast) sprites.beast.update(dt);
+    if (sprites.beast) {
+        // Animation speed scales with rage for more urgent feel
+        const beastAnimSpeed = 0.8 + clamp(gameState.chase.beastRage || 0, 0, 1) * 0.6;
+        sprites.beast.update(dt * beastAnimSpeed);
+    }
 }
 
 function updateLodge(dt) {
@@ -6176,6 +6616,8 @@ function gameLoop(timestamp) {
     }
     lastTime = timestamp;
 
+    lowQualityFrame = dt > performanceSettings.skipFrameThreshold;
+
     update(dt);
     draw();
 
@@ -6219,6 +6661,9 @@ function init() {
     }).catch(err => {
         console.warn('Sprites failed to load, using procedural rendering:', err);
     });
+
+    // Load HUD overlay asynchronously (falls back to text HUD)
+    loadHUDOverlay();
 
     requestAnimationFrame(gameLoop);
 }
@@ -6315,6 +6760,9 @@ function setResolution(resKey) {
     // Invalidate gradient cache on resolution change
     gradientCache.invalidate();
 
+    // Re-composite HUD bars for new resolution
+    if (hudOverlay.loaded) compositeHUDBars();
+
     try { localStorage.setItem('shredordead_resolution', resKey); } catch (e) {}
     fitCanvasToViewport();
     updateSettingsUI();
@@ -6365,6 +6813,9 @@ function fitCanvasToViewport() {
 
             // Invalidate gradient cache
             gradientCache.invalidate();
+
+            // Re-composite HUD bars for new dimensions
+            if (hudOverlay.loaded) compositeHUDBars();
 
             console.log(`Canvas adapted to screen: ${internalWidth}x${internalHeight}`);
         }
