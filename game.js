@@ -179,8 +179,107 @@ const displaySettings = {
     screenShakeEnabled: true,
     hapticsEnabled: true,
     fillScreen: true,  // When true, canvas will fill the entire screen in fullscreen mode
-    stance: 'regular'  // 'regular' (left foot forward) or 'goofy' (right foot forward)
+    stance: 'regular',  // 'regular' (left foot forward) or 'goofy' (right foot forward)
+    // Gameplay tuning settings
+    gameSpeed: 'normal',        // 'chill', 'normal', 'insane'
+    touchSensitivity: 'medium', // 'low', 'medium', 'high'
+    cameraSmoothing: 'normal'   // 'tight', 'normal', 'smooth'
 };
+
+// ============================================
+// GAME SPEED PRESETS
+// ============================================
+const SPEED_PRESETS = {
+    chill: {
+        downhillAccel: 220,
+        maxSpeed: 500,
+        minSpeed: 120,
+        tuckMultiplier: 1.8,
+        turnSpeed: 450,
+        label: 'Chill'
+    },
+    normal: {
+        downhillAccel: 280,
+        maxSpeed: 650,
+        minSpeed: 100,
+        tuckMultiplier: 2.2,
+        turnSpeed: 520,
+        label: 'Normal'
+    },
+    insane: {
+        downhillAccel: 360,
+        maxSpeed: 800,
+        minSpeed: 100,
+        tuckMultiplier: 3.0,
+        turnSpeed: 600,
+        label: 'Insane'
+    }
+};
+
+// ============================================
+// TOUCH SENSITIVITY PRESETS
+// ============================================
+const TOUCH_PRESETS = {
+    low: {
+        horizontal: 40,
+        vertical: 50,
+        proportionalRange: 120,  // px for full input
+        label: 'Low'
+    },
+    medium: {
+        horizontal: 20,
+        vertical: 30,
+        proportionalRange: 80,
+        label: 'Medium'
+    },
+    high: {
+        horizontal: 10,
+        vertical: 15,
+        proportionalRange: 50,
+        label: 'High'
+    }
+};
+
+// ============================================
+// CAMERA SMOOTHING PRESETS
+// ============================================
+const CAMERA_PRESETS = {
+    tight: {
+        lerpSpeed: 25,
+        catchUpSpeed: 30,
+        label: 'Tight'
+    },
+    normal: {
+        lerpSpeed: 12,
+        catchUpSpeed: 20,
+        label: 'Normal'
+    },
+    smooth: {
+        lerpSpeed: 6,
+        catchUpSpeed: 12,
+        label: 'Smooth'
+    }
+};
+
+// Apply current speed preset to PHYSICS constants
+function applySpeedPreset() {
+    const preset = SPEED_PRESETS[displaySettings.gameSpeed] || SPEED_PRESETS.normal;
+    PHYSICS.downhillAccel = preset.downhillAccel;
+    PHYSICS.maxSpeed = preset.maxSpeed;
+    PHYSICS.minSpeed = preset.minSpeed;
+    PHYSICS.tuckMultiplier = preset.tuckMultiplier;
+    PHYSICS.turnSpeed = preset.turnSpeed;
+}
+
+// Get current touch preset
+function getTouchPreset() {
+    return TOUCH_PRESETS[displaySettings.touchSensitivity] || TOUCH_PRESETS.medium;
+}
+
+// Get current camera preset
+function getCameraPreset() {
+    return CAMERA_PRESETS[displaySettings.cameraSmoothing] || CAMERA_PRESETS.normal;
+}
 
 // ============================================
 // MUSIC SYSTEM
@@ -360,6 +459,7 @@ const PHYSICS = {
     downhillAccel: 280,         // Faster acceleration
     maxSpeed: 650,              // Higher top speed
     minSpeed: 100,
+    tuckMultiplier: 2.2,        // Tuck speed boost (adjustable via speed presets)
     crashSpeedPenalty: 0.5,
     crashDuration: 0.8,
     stunDuration: 0.25,
@@ -755,6 +855,7 @@ let selectedMode = 'og'; // 'og' or 'slalom'
 let gameState = {
     screen: 'title', // 'title', 'playing', 'gameOver', 'lodge', 'slalomResults'
     mode: 'og', // 'og' or 'slalom'
+    paused: false,
     animationTime: 0,
 
     player: {
@@ -872,7 +973,7 @@ let gameState = {
 
     particles: [],
     celebrations: [],
-    screenShake: { x: 0, y: 0, intensity: 0, decay: 0.9 },
+    screenShake: { x: 0, y: 0, intensity: 0, decay: 0.9, time: 0, phaseX: 0, phaseY: 0 },
 
     dangerLevel: 0,
     deathCause: null,
@@ -939,12 +1040,18 @@ const touchState = {
     startTime: 0
 };
 
-// Touch sensitivity thresholds (in pixels)
+// Touch sensitivity thresholds (in pixels) - base values, overridden by TOUCH_PRESETS
 const TOUCH_THRESHOLDS = {
     horizontal: 20,      // Movement to trigger left/right
     vertical: 30,        // Movement to trigger up/down
     tapMaxDistance: 15,  // Max movement for tap gesture
     tapMaxDuration: 200  // Max ms for tap gesture
+};
+
+// Proportional touch input intensity (-1 to 1 for horizontal, 0-1 for vertical)
+const touchInput = {
+    horizontal: 0,  // -1 (full left) to 1 (full right)
+    vertical: 0     // -1 (brake) to 1 (tuck)
 };
 
 function setupInput() {
@@ -970,8 +1077,15 @@ function setupInput() {
                 input.space = true;
                 break;
             case 'Escape':
-                if (document.fullscreenElement) {
+                if (gameState.screen === 'playing' || gameState.screen === 'lodge') {
+                    togglePause();
+                } else if (document.fullscreenElement) {
                     document.exitFullscreen();
+                }
+                break;
+            case 'KeyP':
+                if (gameState.screen === 'playing' || gameState.screen === 'lodge') {
+                    togglePause();
                 }
                 break;
         }
@@ -1027,13 +1141,14 @@ function handleTouchStart(e) {
                      target.closest('input') ||
                      target.closest('select');
 
-    // Check if touching a menu/overlay area (settings, submenus)
+    // Check if touching a menu/overlay area (settings, submenus, pause menu)
     const isMenuOverlay = target.closest('.submenu') ||
                           target.closest('#settingsMenu') ||
-                          target.closest('#slalomResults');
+                          target.closest('#slalomResults') ||
+                          target.closest('#pauseMenu');
 
-    // During active gameplay, always capture touch for controls
-    if (gameState.screen === 'playing' || gameState.screen === 'lodge') {
+    // During active gameplay (not paused), always capture touch for controls
+    if ((gameState.screen === 'playing' || gameState.screen === 'lodge') && !gameState.paused) {
         e.preventDefault();
     } else if (isButton || isMenuOverlay) {
         // On menus: let native click events fire for real buttons
@@ -1086,29 +1201,39 @@ function handleTouchMove(e) {
     const deltaX = touchState.currentX - touchState.startX;
     const deltaY = touchState.currentY - touchState.startY;
 
-    // Horizontal steering (left/right)
-    if (deltaX > TOUCH_THRESHOLDS.horizontal) {
-        input.right = true;
-        input.left = false;
-    } else if (deltaX < -TOUCH_THRESHOLDS.horizontal) {
-        input.left = true;
-        input.right = false;
+    // Get current sensitivity preset
+    const preset = getTouchPreset();
+    const hThreshold = preset.horizontal;
+    const vThreshold = preset.vertical;
+    const hRange = preset.proportionalRange;
+    const vRange = preset.proportionalRange;
+
+    // Scale thresholds to screen size for consistent feel across devices
+    const screenScale = Math.max(1, window.innerWidth / 480);
+
+    // Proportional horizontal steering - smooth ramp from dead zone to full input
+    if (Math.abs(deltaX) > hThreshold * screenScale) {
+        const sign = Math.sign(deltaX);
+        const magnitude = Math.abs(deltaX) - hThreshold * screenScale;
+        touchInput.horizontal = clamp(sign * (magnitude / (hRange * screenScale)), -1, 1);
     } else {
-        input.left = false;
-        input.right = false;
+        touchInput.horizontal = 0;
     }
 
-    // Vertical speed control (up = brake, down = tuck/accelerate)
-    if (deltaY < -TOUCH_THRESHOLDS.vertical) {
-        input.up = true;
-        input.down = false;
-    } else if (deltaY > TOUCH_THRESHOLDS.vertical) {
-        input.down = true;
-        input.up = false;
+    // Proportional vertical control - smooth ramp
+    if (Math.abs(deltaY) > vThreshold * screenScale) {
+        const sign = Math.sign(deltaY);
+        const magnitude = Math.abs(deltaY) - vThreshold * screenScale;
+        touchInput.vertical = clamp(sign * (magnitude / (vRange * screenScale)), -1, 1);
     } else {
-        input.up = false;
-        input.down = false;
+        touchInput.vertical = 0;
     }
+
+    // Map proportional touch to binary input flags (for compatibility with existing physics)
+    input.right = touchInput.horizontal > 0.15;
+    input.left = touchInput.horizontal < -0.15;
+    input.down = touchInput.vertical > 0.15;
+    input.up = touchInput.vertical < -0.15;
 
 }
 
@@ -1150,6 +1275,8 @@ function handleTouchEnd(e) {
     input.right = false;
     input.up = false;
     input.down = false;
+    touchInput.horizontal = 0;
+    touchInput.vertical = 0;
 }
 
 function getInputDirection() {
@@ -1221,15 +1348,27 @@ function pollGamepad(dt) {
 
     // During gameplay: map to input directly
     if (gameState.screen === 'playing' || gameState.screen === 'lodge' || gameState.screen === 'dying') {
-        input.left = input.left || dpadLeft;
-        input.right = input.right || dpadRight;
-        input.up = input.up || dpadUp;
-        input.down = input.down || dpadDown;
+        // Start button toggles pause during gameplay
+        if (btnStart && !gamepadState._lastStart) {
+            togglePause();
+        }
 
-        // A or Start = space (for starting, confirming, etc.)
-        if ((btnA && !gamepadState._lastA) || (btnStart && !gamepadState._lastStart)) {
-            input.space = true;
-            setTimeout(() => { input.space = false; }, 100);
+        // Only process movement input when not paused
+        if (!gameState.paused) {
+            input.left = input.left || dpadLeft;
+            input.right = input.right || dpadRight;
+            input.up = input.up || dpadUp;
+            input.down = input.down || dpadDown;
+        }
+
+        // A = space (for starting, confirming, etc.)
+        if (btnA && !gamepadState._lastA) {
+            if (gameState.paused) {
+                resumeGame();
+            } else {
+                input.space = true;
+                setTimeout(() => { input.space = false; }, 100);
+            }
         }
 
         gamepadState._lastA = btnA;
@@ -1437,6 +1576,12 @@ function seededRandom(seed) {
 
 function lerp(a, b, t) {
     return a + (b - a) * t;
+}
+
+// Frame-rate independent exponential smoothing
+// Produces identical smoothing at any framerate (unlike lerp(a, b, speed * dt))
+function expLerp(a, b, speed, dt) {
+    return a + (b - a) * (1 - Math.exp(-speed * dt));
 }
 
 function clamp(val, min, max) {
@@ -2236,7 +2381,7 @@ function updateGroundPhysics(player, dt) {
         player.speed = Math.max(player.speed, PHYSICS.minSpeed);
     } else if (input.down) {
         // Crouching/tucking - rapidly accelerate toward max speed
-        player.speed += PHYSICS.downhillAccel * 3.0 * dt;
+        player.speed += PHYSICS.downhillAccel * PHYSICS.tuckMultiplier * dt;
         player.speed = Math.min(player.speed, PHYSICS.maxSpeed);
     } else {
         player.speed += PHYSICS.downhillAccel * speedMod * dt;
@@ -2414,9 +2559,11 @@ function updateGrindingPhysics(player, dt) {
 }
 
 function updateVisualPosition(player, dt) {
-    const lerpSpeed = 15;
-    player.visualX = lerp(player.visualX, player.x, lerpSpeed * dt);
-    player.visualY = lerp(player.visualY, player.y, lerpSpeed * dt);
+    // Use frame-rate independent exponential smoothing
+    // Speed 25 = very tight tracking with minimal latency
+    const lerpSpeed = 25;
+    player.visualX = expLerp(player.visualX, player.x, lerpSpeed, dt);
+    player.visualY = expLerp(player.visualY, player.y, lerpSpeed, dt);
 }
 
 function triggerJump(player, jump) {
@@ -2825,10 +2972,10 @@ function checkApproachingJump(player, dt) {
     if (nearestJump) {
         // Crouch intensifies as we get closer
         const crouchTarget = 1 - (nearestDist / lookAheadDist);
-        player.preloadCrouch = lerp(player.preloadCrouch, crouchTarget, 12 * dt);
+        player.preloadCrouch = expLerp(player.preloadCrouch, crouchTarget, 12, dt);
     } else {
         // Smoothly release crouch
-        player.preloadCrouch = lerp(player.preloadCrouch, 0, 8 * dt);
+        player.preloadCrouch = expLerp(player.preloadCrouch, 0, 8, dt);
     }
 }
 
@@ -3287,17 +3434,25 @@ function updateBeast(dt) {
 // ===================
 
 function triggerScreenShake(intensity, decay) {
+    if (!displaySettings.screenShakeEnabled) return;
     gameState.screenShake.intensity = intensity;
     gameState.screenShake.decay = decay;
+    gameState.screenShake.time = 0;
+    // Randomize phase offset so each shake feels different
+    gameState.screenShake.phaseX = Math.random() * Math.PI * 2;
+    gameState.screenShake.phaseY = Math.random() * Math.PI * 2;
 }
 
 function updateScreenShake(dt) {
     const shake = gameState.screenShake;
     if (shake.intensity > 0) {
-        shake.x = (Math.random() - 0.5) * shake.intensity * 2;
-        shake.y = (Math.random() - 0.5) * shake.intensity * 2;
-        shake.intensity *= shake.decay;
-        if (shake.intensity < 0.5) {
+        shake.time = (shake.time || 0) + dt;
+        // Damped sine wave - smooth, directional shake instead of random jitter
+        const freq = 25; // Hz - fast but smooth oscillation
+        shake.x = Math.sin(shake.time * freq + (shake.phaseX || 0)) * shake.intensity;
+        shake.y = Math.cos(shake.time * freq * 0.7 + (shake.phaseY || 0)) * shake.intensity * 0.8;
+        shake.intensity *= Math.pow(shake.decay, dt * 60); // Frame-rate independent decay
+        if (shake.intensity < 0.3) {
             shake.intensity = 0;
             shake.x = 0;
             shake.y = 0;
@@ -3380,6 +3535,7 @@ function updateCombo(dt) {
 function updateCamera(dt) {
     const camera = gameState.camera;
     const player = gameState.player;
+    const camPreset = getCameraPreset();
 
     const lookAhead = (player.speed / PHYSICS.maxSpeed) * camera.lookAhead;
     camera.targetY = player.y + lookAhead - CANVAS_HEIGHT * 0.35;
@@ -3387,9 +3543,9 @@ function updateCamera(dt) {
     // If player is very far ahead (massive jump), increase camera catch-up speed
     const distanceAhead = player.y - (camera.y + CANVAS_HEIGHT * 0.35);
     if (distanceAhead > CANVAS_HEIGHT) {
-        camera.y = lerp(camera.y, camera.targetY, 15 * dt); // Faster catch-up
+        camera.y = expLerp(camera.y, camera.targetY, camPreset.catchUpSpeed, dt);
     } else {
-        camera.y = lerp(camera.y, camera.targetY, 8 * dt);
+        camera.y = expLerp(camera.y, camera.targetY, camPreset.lerpSpeed, dt);
     }
 }
 
@@ -7125,6 +7281,132 @@ function loadHighScore() {
 }
 
 // ===================
+// PAUSE SYSTEM
+// ===================
+
+function togglePause() {
+    if (gameState.screen !== 'playing' && gameState.screen !== 'lodge') return;
+
+    gameState.paused = !gameState.paused;
+
+    if (gameState.paused) {
+        // Show in-game pause menu
+        const pauseMenu = document.getElementById('pauseMenu');
+        if (pauseMenu) pauseMenu.classList.add('active');
+        updatePauseSettingsUI();
+    } else {
+        hidePauseMenu();
+    }
+}
+
+function resumeGame() {
+    gameState.paused = false;
+    hidePauseMenu();
+}
+
+function hidePauseMenu() {
+    const pauseMenu = document.getElementById('pauseMenu');
+    if (pauseMenu) pauseMenu.classList.remove('active');
+}
+
+function pauseQuitToMenu() {
+    gameState.paused = false;
+    hidePauseMenu();
+    gameState.screen = 'title';
+    showStartScreen();
+    musicManager.stop();
+}
+
+function updatePauseSettingsUI() {
+    // Game Speed
+    const speedSelect = document.getElementById('pauseGameSpeed');
+    if (speedSelect) speedSelect.value = displaySettings.gameSpeed;
+
+    // Touch Sensitivity
+    const touchSelect = document.getElementById('pauseTouchSensitivity');
+    if (touchSelect) touchSelect.value = displaySettings.touchSensitivity;
+
+    // Camera Smoothing
+    const cameraSelect = document.getElementById('pauseCameraSmoothing');
+    if (cameraSelect) cameraSelect.value = displaySettings.cameraSmoothing;
+
+    // Screen Shake
+    const shakeToggle = document.getElementById('pauseScreenShake');
+    if (shakeToggle) shakeToggle.checked = displaySettings.screenShakeEnabled;
+
+    // Music
+    const musicToggle = document.getElementById('pauseMusic');
+    if (musicToggle) musicToggle.checked = musicManager.enabled;
+}
+
+function setPauseGameSpeed(speed) {
+    if (SPEED_PRESETS[speed]) {
+        displaySettings.gameSpeed = speed;
+        applySpeedPreset();
+        saveSettings();
+    }
+}
+
+function setPauseTouchSensitivity(sensitivity) {
+    if (TOUCH_PRESETS[sensitivity]) {
+        displaySettings.touchSensitivity = sensitivity;
+        saveSettings();
+    }
+}
+
+function setPauseCameraSmoothing(smoothing) {
+    if (CAMERA_PRESETS[smoothing]) {
+        displaySettings.cameraSmoothing = smoothing;
+        saveSettings();
+    }
+}
+
+function setPauseScreenShake(enabled) {
+    displaySettings.screenShakeEnabled = enabled;
+    if (!enabled) {
+        gameState.screenShake.intensity = 0;
+        gameState.screenShake.x = 0;
+        gameState.screenShake.y = 0;
+    }
+    saveSettings();
+}
+
+function setPauseMusic(enabled) {
+    musicManager.enabled = enabled;
+    if (!enabled) musicManager.stop();
+    else if (gameState.screen === 'playing') musicManager.play();
+    try { localStorage.setItem('shredordead_music', enabled.toString()); } catch (e) {}
+}
+
+function drawPauseOverlay() {
+    // Semi-transparent dark overlay
+    ctx.fillStyle = 'rgba(10, 5, 20, 0.75)';
+    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    const scale = displaySettings.scale || 1;
+    const centerX = CANVAS_WIDTH / 2;
+    const centerY = CANVAS_HEIGHT / 2;
+
+    // PAUSED text
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = FONTS.pressStart24 || 'bold 24px "Press Start 2P", monospace';
+    ctx.fillStyle = COLORS.cyan;
+    ctx.shadowColor = COLORS.cyan;
+    ctx.shadowBlur = 15;
+    ctx.fillText('PAUSED', centerX, centerY - 60 * scale);
+    ctx.shadowBlur = 0;
+
+    // Instructions
+    ctx.font = FONTS.pressStart8 || 'bold 8px "Press Start 2P", monospace';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    ctx.fillText('ESC / P to resume', centerX, centerY + 40 * scale);
+    ctx.fillText('Settings available in overlay', centerX, centerY + 60 * scale);
+
+    ctx.textAlign = 'left';
+}
+
+// ===================
 // MAIN LOOP
 // ===================
 
@@ -7238,16 +7520,28 @@ function updateLodge(dt) {
 
 function gameLoop(timestamp) {
     let dt = (timestamp - lastTime) / 1000;
-    if (lastTime === 0 || dt > 0.1) {
+    if (lastTime === 0) {
         dt = 0.016;
+    } else {
+        // Gentler dt cap: 33ms (2 frames at 60fps) instead of 100ms (6 frames)
+        // This prevents the massive position jump that occurs with a 6x correction
+        dt = Math.min(dt, 0.033);
     }
     lastTime = timestamp;
 
     // Poll gamepad every frame
     pollGamepad(dt);
 
-    update(dt);
+    // Skip update if paused (but still draw current frame)
+    if (!gameState.paused) {
+        update(dt);
+    }
     draw();
+
+    // Draw pause overlay on top if paused
+    if (gameState.paused && gameState.screen === 'playing') {
+        drawPauseOverlay();
+    }
 
     requestAnimationFrame(gameLoop);
 }
@@ -8223,6 +8517,16 @@ function updateSettingsUI() {
     const stanceSelect = document.getElementById('stanceSelect');
     if (stanceSelect) stanceSelect.value = displaySettings.stance;
 
+    // Gameplay settings
+    const gameSpeedSelect = document.getElementById('gameSpeedSelect');
+    if (gameSpeedSelect) gameSpeedSelect.value = displaySettings.gameSpeed;
+
+    const touchSensSelect = document.getElementById('touchSensitivitySelect');
+    if (touchSensSelect) touchSensSelect.value = displaySettings.touchSensitivity;
+
+    const cameraSmoothSelect = document.getElementById('cameraSmoothingSelect');
+    if (cameraSmoothSelect) cameraSmoothSelect.value = displaySettings.cameraSmoothing;
+
     // Gamepad status
     const gamepadStatus = document.getElementById('gamepadStatus');
     if (gamepadStatus) {
@@ -8507,11 +8811,26 @@ function loadSettings() {
         if (savedMusic !== null) {
             musicManager.enabled = savedMusic !== 'false';
         }
+        const savedGameSpeed = localStorage.getItem('shredordead_gamespeed');
+        if (savedGameSpeed && SPEED_PRESETS[savedGameSpeed]) {
+            displaySettings.gameSpeed = savedGameSpeed;
+        }
+        const savedTouchSens = localStorage.getItem('shredordead_touchsensitivity');
+        if (savedTouchSens && TOUCH_PRESETS[savedTouchSens]) {
+            displaySettings.touchSensitivity = savedTouchSens;
+        }
+        const savedCameraSmooth = localStorage.getItem('shredordead_camerasmoothing');
+        if (savedCameraSmooth && CAMERA_PRESETS[savedCameraSmooth]) {
+            displaySettings.cameraSmoothing = savedCameraSmooth;
+        }
     } catch (e) {}
 
     if (displaySettings.autoDetect) {
         displaySettings.currentResolution = autoDetectResolution();
     }
+
+    // Apply speed preset on load
+    applySpeedPreset();
 }
 
 function saveSettings() {
@@ -8520,6 +8839,9 @@ function saveSettings() {
         localStorage.setItem('shredordead_autodetect', displaySettings.autoDetect.toString());
         localStorage.setItem('shredordead_screenshake', displaySettings.screenShakeEnabled.toString());
         localStorage.setItem('shredordead_fillscreen', displaySettings.fillScreen.toString());
+        localStorage.setItem('shredordead_gamespeed', displaySettings.gameSpeed);
+        localStorage.setItem('shredordead_touchsensitivity', displaySettings.touchSensitivity);
+        localStorage.setItem('shredordead_camerasmoothing', displaySettings.cameraSmoothing);
     } catch (e) {}
 }
 
@@ -8568,6 +8890,31 @@ function toggleFillScreen(enabled) {
     }
 }
 
+function changeGameSpeed(speed) {
+    if (SPEED_PRESETS[speed]) {
+        displaySettings.gameSpeed = speed;
+        applySpeedPreset();
+        saveSettings();
+        updateSettingsUI();
+    }
+}
+
+function changeTouchSensitivity(sensitivity) {
+    if (TOUCH_PRESETS[sensitivity]) {
+        displaySettings.touchSensitivity = sensitivity;
+        saveSettings();
+        updateSettingsUI();
+    }
+}
+
+function changeCameraSmoothing(smoothing) {
+    if (CAMERA_PRESETS[smoothing]) {
+        displaySettings.cameraSmoothing = smoothing;
+        saveSettings();
+        updateSettingsUI();
+    }
+}
+
 function setStance(stance) {
     displaySettings.stance = stance;
     try {
@@ -8590,6 +8937,9 @@ function resetAllSettings() {
     displaySettings.screenShakeEnabled = true;
     displaySettings.fillScreen = true;
     displaySettings.stance = 'regular';
+    displaySettings.gameSpeed = 'normal';
+    displaySettings.touchSensitivity = 'medium';
+    displaySettings.cameraSmoothing = 'normal';
     try {
         localStorage.removeItem('shredordead_resolution');
         localStorage.removeItem('shredordead_autodetect');
@@ -8597,8 +8947,12 @@ function resetAllSettings() {
         localStorage.removeItem('shredordead_fillscreen');
         localStorage.removeItem('shredordead_stance');
         localStorage.removeItem('shredordead_music');
+        localStorage.removeItem('shredordead_gamespeed');
+        localStorage.removeItem('shredordead_touchsensitivity');
+        localStorage.removeItem('shredordead_camerasmoothing');
     } catch (e) {}
     musicManager.enabled = true;
+    applySpeedPreset();
     setResolution(autoDetectResolution());
     updateSettingsUI();
 }
