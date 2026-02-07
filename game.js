@@ -489,22 +489,23 @@ const CHASE = {
     fogStartOffset: -300,       // Starts closer
     fogBaseSpeed: 150,          // Faster
     fogAcceleration: 1.5,       // Was 1.2 - fog catches up faster
-    beastSpawnDistance: 200,    // Spawn earlier for more tension
     beastSpeed: 1.4,            // 40% faster than player!
     beastLungeInterval: 1.5,    // More frequent lunges
     beastLungeVariance: 0.5,    // Less random delay
     beastLungeDuration: 0.35,
     beastRetreatDuration: 0.4,  // Shorter retreat
-    // Crash/slow triggers
-    crashThreshold: 2,          // 2 crashes in window = beast spawns
+    // Crash triggers (beast only spawns from crashes)
+    crashThreshold: 3,          // 3 crashes in window = beast spawns
     crashWindow: 30,            // Track crashes over 30 seconds
-    slowSpeedThreshold: 150,    // Going too slow triggers beast
-    slowSpeedDuration: 1.5,     // Time needed at slow speed
     // Catch mechanics
     maxMisses: 2,               // After 2 misses, next lunge is guaranteed
     guaranteedCatchCrashes: 5,  // 5 total crashes = guaranteed catch on next lunge
     baseCatchRadius: 35,        // Normal catch radius
-    enhancedCatchRadius: 70     // Catch radius after too many crashes/misses
+    enhancedCatchRadius: 70,    // Catch radius after too many crashes/misses
+    // Avalanche visual config
+    avalancheCloudCount: 10,    // Number of billowing snow clouds
+    avalancheDebrisCount: 18,   // Snow chunks ahead of wall
+    avalancheSprayCount: 25     // Fine powder particles
 };
 
 // Ski Lodge configuration - rare safe haven from the beast
@@ -701,7 +702,7 @@ const hudPanel = {
     canvas: null,       // Offscreen canvas for composited panel
     cachedWidth: 0,
     cachedHeight: 0,
-    panelHeight: 80     // Height of panel in base resolution pixels
+    panelHeight: 72     // Height of panel in base resolution pixels — thin band for 2 rows of text
 };
 
 async function loadHUDPanel() {
@@ -806,7 +807,8 @@ let gameState = {
         chunks: [],
         nextChunkY: 0,
         seed: 0,
-        lastLodgeY: -9999  // Track last lodge spawn position
+        lastLodgeY: -9999,  // Track last lodge spawn position
+        pendingExclusions: {}  // Cross-chunk landing zone exclusions keyed by chunkIndex
     },
 
     obstacles: [],
@@ -1326,6 +1328,15 @@ function generateTerrainChunk(chunkIndex) {
     // Track cells used by clusters, jumps, rails, and landing zones to avoid overlaps
     const usedCells = new Set();
 
+    // Load any pending exclusions from previous chunk's landing zones
+    const pendingKey = chunkIndex;
+    if (gameState.terrain.pendingExclusions[pendingKey]) {
+        for (const cellKey of gameState.terrain.pendingExclusions[pendingKey]) {
+            usedCells.add(cellKey);
+        }
+        delete gameState.terrain.pendingExclusions[pendingKey];
+    }
+
     // ===== PHASE 1: Generate jumps and rails FIRST =====
     // This allows us to calculate landing zones before placing obstacles
 
@@ -1491,27 +1502,40 @@ function generateTerrainChunk(chunkIndex) {
 
     // Mark jump landing zones as used (prevents obstacles from spawning there)
     for (const jump of tempJumps) {
-        // Landing distance depends on jump power: small=80px, medium=100px, large=140px, mega=180px
-        const landingDistance = 60 + jump.launchPower * 80;
-        const landingY = jump.y + landingDistance;
-        const landingRow = Math.floor((landingY - chunk.y) / 80);
+        // Physics-accurate landing distance: matches actual airborne trajectory
+        // v0 = jumpLaunchPower * power * (speed/400), airTime = v0/gravity, dist = speed * airTime
+        const avgSpeed = 400;
+        const v0 = PHYSICS.jumpLaunchPower * jump.launchPower * (avgSpeed / 400);
+        const airTime = v0 / PHYSICS.gravity;
+        const landingDistance = avgSpeed * airTime * 1.15; // 15% safety buffer
+
         const jumpCol = Math.round((jump.x / TERRAIN.laneWidth) + gridCols / 2 - 0.5);
 
-        // Mark landing zone cells (±1 lane for safety margin, 2 rows deep)
-        for (let dx = -1; dx <= 1; dx++) {
-            for (let dy = 0; dy <= 2; dy++) {
-                const cellRow = landingRow + dy;
+        // Wider lateral exclusion for bigger jumps (air control allows drift)
+        const laneSpread = jump.launchPower >= 3.0 ? 3 : jump.launchPower >= 1.0 ? 2 : 1;
+
+        // Mark from jump cell through entire flight path to landing + buffer
+        const jumpRow = Math.floor((jump.y - chunk.y) / 80);
+        const landingRows = Math.ceil(landingDistance / 80);
+
+        for (let dx = -laneSpread; dx <= laneSpread; dx++) {
+            for (let dy = -1; dy <= landingRows + 1; dy++) {
+                const cellRow = jumpRow + dy;
                 const cellCol = jumpCol + dx;
-                if (cellRow >= 0 && cellRow < gridRows && cellCol >= 0 && cellCol < gridCols) {
-                    usedCells.add(`${cellRow},${cellCol}`);
+                if (cellCol >= 0 && cellCol < gridCols) {
+                    if (cellRow >= 0 && cellRow < gridRows) {
+                        usedCells.add(`${cellRow},${cellCol}`);
+                    } else if (cellRow >= gridRows) {
+                        // Landing zone extends into next chunk — store for propagation
+                        const nextChunkIndex = chunkIndex + 1;
+                        if (!gameState.terrain.pendingExclusions[nextChunkIndex]) {
+                            gameState.terrain.pendingExclusions[nextChunkIndex] = [];
+                        }
+                        const overflowRow = cellRow - gridRows;
+                        gameState.terrain.pendingExclusions[nextChunkIndex].push(`${overflowRow},${cellCol}`);
+                    }
                 }
             }
-        }
-
-        // Also mark the jump's own cell
-        const jumpRow = Math.floor((jump.y - chunk.y) / 80);
-        if (jumpRow >= 0 && jumpRow < gridRows) {
-            usedCells.add(`${jumpRow},${jumpCol}`);
         }
 
         // Add jump to chunk (remove temp properties)
@@ -2238,9 +2262,20 @@ function landFromJump(player) {
             scale: Math.min(1.3, 1.0 + (gameState.trickMultiplier - 1) * 0.1 + (gameState.comboChainLength - 1) * 0.03) // Cap scale at 1.3x
         });
 
+        const prevMultiplier = gameState.trickMultiplier;
         gameState.trickMultiplier = Math.min(gameState.trickMultiplier + 0.5, 5);
         gameState.trickComboTimer = 2.5; // Longer window for combos
         gameState.maxCombo = Math.max(gameState.maxCombo, gameState.trickMultiplier);
+
+        // Show multiplier growth when it crosses a threshold
+        if (gameState.trickMultiplier >= 1.5 && gameState.trickMultiplier > prevMultiplier) {
+            gameState.celebrations.push({
+                text: `\u00d7${gameState.trickMultiplier.toFixed(1)} COMBO`,
+                color: COLORS.gold,
+                timer: 0.8,
+                scale: 0.85
+            });
+        }
     } else if (player.airTime > 0.4) {
         // Even without a trick, reward hang time
         const airPoints = Math.floor(player.airTime * 25 * gameState.trickMultiplier);
@@ -2382,6 +2417,16 @@ function endGrind(player) {
     const points = Math.floor(basePoints * gameState.trickMultiplier * chainBonus);
     gameState.score += points;
 
+    // Celebrate rail chains
+    if (chainBonus > 1.0) {
+        gameState.celebrations.push({
+            text: 'RAIL CHAIN! \u00d71.5',
+            color: COLORS.magenta,
+            timer: 1.0,
+            scale: 1.0
+        });
+    }
+
     // Track combo
     if (!gameState.comboChainLength) gameState.comboChainLength = 0;
     gameState.comboChainLength++;
@@ -2400,9 +2445,20 @@ function endGrind(player) {
     }
 
     // Update multiplier
+    const prevGrindMultiplier = gameState.trickMultiplier;
     const multiplierGain = 0.3 + (typeBonus - 1) * 0.5;
     gameState.trickMultiplier = Math.min(gameState.trickMultiplier + multiplierGain, 5);
     gameState.trickComboTimer = 2.5;
+
+    // Show multiplier growth when it crosses a threshold
+    if (gameState.trickMultiplier >= 1.5 && gameState.trickMultiplier > prevGrindMultiplier) {
+        gameState.celebrations.push({
+            text: `\u00d7${gameState.trickMultiplier.toFixed(1)} COMBO`,
+            color: COLORS.gold,
+            timer: 0.8,
+            scale: 0.85
+        });
+    }
 }
 
 function triggerCrash(player) {
@@ -2680,15 +2736,19 @@ function checkNearMisses(player) {
                 // Build flow meter
                 gameState.flowMeter = Math.min(100, gameState.flowMeter + 8);
 
-                if (gameState.nearMissStreak >= 3) {
-                    gameState.celebrations.push({
-                        text: `CLOSE CALL x${gameState.nearMissStreak}!`,
-                        subtext: `+${points}`,
-                        color: COLORS.limeGreen,
-                        timer: 0.8,
-                        scale: 0.9
-                    });
-                }
+                // Celebrate every close call with escalating excitement
+                const streak = gameState.nearMissStreak;
+                const ccColor = streak >= 3 ? COLORS.limeGreen : streak >= 2 ? COLORS.gold : COLORS.warning;
+                const ccScale = streak >= 3 ? 0.9 + Math.min(streak * 0.05, 0.4) : streak >= 2 ? 0.85 : 0.75;
+                const ccText = streak >= 2 ? `CLOSE CALL x${streak}!` : 'CLOSE CALL!';
+                gameState.celebrations.push({
+                    text: ccText,
+                    subtext: `+${points}`,
+                    color: ccColor,
+                    timer: 0.8,
+                    scale: ccScale
+                });
+                triggerScreenShake(2 + Math.min(streak, 4), 0.85);
             }
         } else if (distSq > 3025) {  // (35 + 20)^2 = 55^2 = 3025
             // Reset near-miss flag when far enough away
@@ -2847,6 +2907,18 @@ function updateBeast(dt) {
             // Chase player - faster with rage
             const beastSpeed = player.speed * CHASE.beastSpeed * rageMod;
             chase.beastY += beastSpeed * dt;
+
+            // Proximity warning — escalating feedback as beast gets closer
+            const proximityDist = player.y - chase.beastY;
+            if (proximityDist < 200 && proximityDist > 0) {
+                const proximityIntensity = 1 - (proximityDist / 200); // 0 at 200px, 1 at 0px
+                const shakeAmount = proximityIntensity * 4;
+                if (shakeAmount > gameState.screenShake.intensity) {
+                    triggerScreenShake(shakeAmount, 0.92);
+                }
+                // Boost danger vignette based on beast proximity
+                gameState.dangerLevel = Math.max(gameState.dangerLevel, proximityIntensity);
+            }
 
             // Lunge check - more frequent with rage
             chase.beastLungeTimer -= dt * rageMod;
@@ -3011,6 +3083,13 @@ function updateCombo(dt) {
             gameState.score += speedBonus;
             gameState.speedBonus += speedBonus;
             gameState.flowMeter = Math.min(100, gameState.flowMeter + 3);
+            gameState.celebrations.push({
+                text: 'SPEED RUSH!',
+                subtext: `+${speedBonus}`,
+                color: COLORS.cyan,
+                timer: 0.6,
+                scale: 0.8
+            });
         }
     } else if (player.speed < PHYSICS.maxSpeed * 0.5 || player.crashed) {
         gameState.speedStreak = Math.max(0, gameState.speedStreak - dt * 2);
@@ -3054,6 +3133,12 @@ function worldToScreen(worldX, worldY) {
 // DRAWING
 // ===================
 
+// Returns the pixel height reserved for the HUD panel at current scale
+function getHUDHeight() {
+    if (!hudPanel.loaded) return 0;
+    return Math.round(hudPanel.panelHeight * getUIScale());
+}
+
 function draw() {
     // Update animation cache at start of frame for performance
     animCache.update(gameState.animationTime);
@@ -3095,6 +3180,8 @@ function draw() {
         drawDangerVignette();
         return;
     }
+
+    // HUD renders as thin overlay at bottom — no gameplay clipping needed
 
     // Draw background gradient
     drawBackground();
@@ -3144,7 +3231,7 @@ function draw() {
         drawSpeedLines();
     }
 
-    // Draw HUD last so panel sits on top of effects
+    // Draw HUD overlay at bottom of screen
     drawHUD();
 }
 
@@ -3579,6 +3666,13 @@ function drawMetalRail(startScreen, endScreen, rail) {
         // Support base plate
         ctx.fillStyle = '#555';
         ctx.fillRect(x - 5, y + railHeight - 2, 10, 4);
+
+        // Snow mound at base for visual grounding
+        ctx.fillStyle = 'rgba(230, 240, 250, 0.7)';
+        ctx.beginPath();
+        ctx.ellipse(x, y + railHeight + 1, 8, 3, 0, 0, Math.PI * 2);
+        ctx.fill();
+
         ctx.fillStyle = '#888';  // Reset for next post
     }
 
@@ -3643,7 +3737,9 @@ function drawFunbox(startScreen, endScreen, rail) {
 
     ctx.save();
     ctx.translate(midX, midY);
-    ctx.rotate(angle);  // Rotate to match rail direction
+    // Funboxes are fixed structures — limit rotation to ±10° for realism
+    const clampedAngleFB = Math.max(-0.17, Math.min(0.17, angle));
+    ctx.rotate(clampedAngleFB);
 
     // Shadow
     ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
@@ -3772,7 +3868,9 @@ function drawBench(startScreen, endScreen, rail) {
 
     ctx.save();
     ctx.translate(midX, midY);
-    ctx.rotate(angle);  // Rotate to match rail direction
+    // Benches are fixed structures — limit rotation to ±10° for realism
+    const clampedAngleB = Math.max(-0.17, Math.min(0.17, angle));
+    ctx.rotate(clampedAngleB);
 
     // Shadow
     ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
@@ -3904,10 +4002,18 @@ function drawLodges() {
         const w = lodge.width;
         const h = lodge.height;
 
-        // ===== SHADOW =====
-        ctx.fillStyle = 'rgba(60, 80, 100, 0.4)';
+        // ===== SHADOW (gradient trapezoid projecting downslope) =====
+        const shadowLength = h * 0.7;
+        const shadowGrad = ctx.createLinearGradient(screen.x, screen.y + h, screen.x, screen.y + h + shadowLength);
+        shadowGrad.addColorStop(0, 'rgba(40, 60, 80, 0.35)');
+        shadowGrad.addColorStop(1, 'rgba(40, 60, 80, 0)');
+        ctx.fillStyle = shadowGrad;
         ctx.beginPath();
-        ctx.ellipse(screen.x + 10, screen.y + h + 15, w * 0.5, 20, 0, 0, Math.PI * 2);
+        ctx.moveTo(screen.x - w / 2 + 5, screen.y + h);
+        ctx.lineTo(screen.x + w / 2 - 5, screen.y + h);
+        ctx.lineTo(screen.x + w / 2 + 15, screen.y + h + shadowLength);
+        ctx.lineTo(screen.x - w / 2 - 5, screen.y + h + shadowLength);
+        ctx.closePath();
         ctx.fill();
 
         // ===== ENTRANCE RAMP (TOP - main entry point) =====
@@ -5514,106 +5620,36 @@ function drawPanelHUD() {
     const scale = getUIScale();
     const panelH = Math.round(hudPanel.panelHeight * scale);
     const panelY = CANVAS_HEIGHT - panelH;
-    const margin = Math.round(30 * scale);   // Inset from panel frame edges
-    const centerX = CANVAS_WIDTH / 2;
 
-    // --- Draw panel frame ---
+    // --- Draw panel frame image (no background — transparent over gameplay) ---
     ctx.drawImage(hudPanel.canvas, 0, panelY);
 
-    // --- ROW 1: Distance | Speed | Score (upper area of panel) ---
-    const row1Y = panelY + Math.round(12 * scale);
-    const fontSize1 = Math.round(12 * scale);
+    // --- Grid layout: 3 columns x 2 rows, equidistant ---
+    const padX = Math.round(CANVAS_WIDTH * 0.08);
+    const usableW = CANVAS_WIDTH - padX * 2;
 
-    // Distance (left)
-    drawNeonText(`${gameState.distance}m`, margin, row1Y, COLORS.cyan, fontSize1, 'left');
+    // 3 column centers: evenly spaced
+    const col1X = padX + Math.round(usableW * (1 / 6));
+    const col2X = padX + Math.round(usableW * (3 / 6));
+    const col3X = padX + Math.round(usableW * (5 / 6));
 
-    // Speed (center)
+    // Single row vertically centered in the interior (~30% to ~60%)
+    ctx.textBaseline = 'middle';
+    const interiorCenter = panelH * 0.45;
+    const rowY = panelY + Math.round(interiorCenter);
+
+    const fontSize = Math.round(8 * scale);
+
+    // === Distance | Speed | Score ===
+    drawNeonText(`${gameState.distance}m`, col1X, rowY, COLORS.cyan, fontSize, 'center');
+
     const speedPercent = Math.floor((gameState.player.speed / PHYSICS.maxSpeed) * 100);
     const speedColor = speedPercent > 75 ? COLORS.hotPink : COLORS.electricBlue;
-    drawNeonText(`${speedPercent}%`, centerX, row1Y, speedColor, Math.round(14 * scale), 'center');
+    drawNeonText(`${speedPercent}%`, col2X, rowY, speedColor, fontSize, 'center');
 
-    // Score (right)
-    drawNeonText(gameState.score.toString().padStart(6, '0'), CANVAS_WIDTH - margin, row1Y, COLORS.magenta, fontSize1, 'right');
+    drawNeonText(gameState.score.toString().padStart(6, '0'), col3X, rowY, COLORS.magenta, fontSize, 'center');
 
-    // --- ROW 2: Flow | Combo | Collectibles (lower area of panel) ---
-    const row2Y = panelY + Math.round(38 * scale);
-    const fontSize2 = Math.round(8 * scale);
-
-    // Flow meter (left side of row 2)
-    if (gameState.flowMeter > 5) {
-        const barWidth = Math.round(70 * scale);
-        const barHeight = Math.max(Math.round(6 * scale), 4);
-        const flowFill = gameState.flowMeter / 100;
-        const flowX = margin;
-
-        // Label
-        const labelKey = `pressStart${fontSize2}`;
-        ctx.font = FONTS[labelKey] || `bold ${fontSize2}px "Press Start 2P", monospace`;
-        ctx.textAlign = 'left';
-        ctx.fillStyle = COLORS.cyan;
-        ctx.shadowColor = COLORS.cyan;
-        ctx.shadowBlur = getShadowBlur(3);
-        ctx.fillText('FLOW', flowX, row2Y);
-        ctx.shadowBlur = 0;
-
-        // Bar bg + fill
-        const barY = row2Y + Math.round(12 * scale);
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-        ctx.fillRect(flowX, barY, barWidth, barHeight);
-        ctx.fillStyle = COLORS.cyan;
-        ctx.fillRect(flowX, barY, barWidth * flowFill, barHeight);
-
-        // Multiplier
-        if (gameState.flowMultiplier > 1.1) {
-            ctx.fillStyle = COLORS.limeGreen;
-            ctx.fillText(`x${gameState.flowMultiplier.toFixed(1)}`, flowX + barWidth + Math.round(6 * scale), barY);
-        }
-    }
-
-    // Combo (center of row 2)
-    if (gameState.trickMultiplier > 1) {
-        const comboSize = Math.round(10 * scale);
-        const comboKey = `pressStart${comboSize}`;
-        ctx.font = FONTS[comboKey] || `bold ${comboSize}px "Press Start 2P", monospace`;
-        ctx.textAlign = 'center';
-        ctx.fillStyle = COLORS.gold;
-        ctx.shadowColor = COLORS.gold;
-        ctx.shadowBlur = getShadowBlur(5);
-        ctx.fillText(`x${gameState.trickMultiplier.toFixed(1)}`, centerX, row2Y);
-        ctx.shadowBlur = 0;
-
-        // Timer bar
-        const barWidth = Math.round(60 * scale);
-        const barHeight = Math.max(Math.round(3 * scale), 2);
-        const barFill = gameState.trickComboTimer / 2.5;
-        const barY = row2Y + Math.round(14 * scale);
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-        ctx.fillRect(centerX - barWidth / 2, barY, barWidth, barHeight);
-        ctx.fillStyle = COLORS.gold;
-        ctx.fillRect(centerX - barWidth / 2, barY, barWidth * barFill, barHeight);
-
-        // Chain count
-        if (gameState.comboChainLength > 1) {
-            const chainKey = `pressStart${fontSize2}`;
-            ctx.font = FONTS[chainKey] || `bold ${fontSize2}px "Press Start 2P", monospace`;
-            ctx.fillStyle = COLORS.limeGreen;
-            ctx.fillText(`${gameState.comboChainLength} chain`, centerX, barY + barHeight + Math.round(3 * scale));
-        }
-    }
-
-    // Collectibles (right side of row 2)
-    if (gameState.collectiblesCollected > 0) {
-        const collKey = `pressStart${fontSize2}`;
-        ctx.font = FONTS[collKey] || `bold ${fontSize2}px "Press Start 2P", monospace`;
-        ctx.textAlign = 'right';
-        ctx.fillStyle = COLORS.gold;
-        ctx.shadowColor = COLORS.gold;
-        ctx.shadowBlur = getShadowBlur(5);
-        ctx.fillText(`\u2744 ${gameState.collectiblesCollected}`, CANVAS_WIDTH - margin, row2Y + Math.round(4 * scale));
-        ctx.shadowBlur = 0;
-    }
-
-    // Danger warning (above the panel, in gameplay area)
+    // Danger warning (above the panel)
     if (gameState.dangerLevel > 0.5) {
         const pulse = animCache.sin10 * 0.3 + 0.7;
         ctx.globalAlpha = gameState.dangerLevel * pulse;
@@ -5626,6 +5662,9 @@ function drawPanelHUD() {
         ctx.shadowBlur = 0;
         ctx.globalAlpha = 1;
     }
+
+    // Restore textBaseline
+    ctx.textBaseline = 'top';
 }
 
 // ============================================
@@ -5709,6 +5748,16 @@ function drawNeonText(text, x, y, color, size, align) {
     const fontKey = `pressStart${size}`;
     ctx.font = FONTS[fontKey] || `bold ${size}px "Press Start 2P", monospace`;
     ctx.textAlign = align;
+
+    // Dark outline for readability on light backgrounds
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = Math.max(Math.round(size * 0.25), 2);
+    ctx.lineJoin = 'round';
+    ctx.shadowColor = '#000';
+    ctx.shadowBlur = getShadowBlur(4);
+    ctx.strokeText(text, x, y);
+
+    // Colored fill with neon glow
     ctx.shadowColor = color;
     ctx.shadowBlur = getShadowBlur(5);
     ctx.fillStyle = color;
@@ -5953,7 +6002,8 @@ function startGame() {
         chunks: [],
         nextChunkY: 0,
         seed: Math.floor(Math.random() * 100000),
-        lastLodgeY: -9999
+        lastLodgeY: -9999,
+        pendingExclusions: {}  // Cross-chunk landing zone exclusions keyed by chunkIndex
     };
 
     gameState.obstacles = [];
