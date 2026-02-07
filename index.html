@@ -535,6 +535,177 @@
             color: var(--white);
         }
 
+        /* Mode Selector */
+        .mode-selector {
+            display: flex;
+            gap: 12px;
+            width: 100%;
+        }
+
+        .mode-btn {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            padding: 14px 10px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-family: var(--font-pixel);
+            transition: all 0.2s ease;
+            outline: none;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+        }
+
+        .mode-btn:hover {
+            border-color: rgba(0, 255, 255, 0.5);
+            transform: translateY(-2px);
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.2), 0 5px 15px rgba(0, 0, 0, 0.4);
+        }
+
+        .mode-btn.mode-active {
+            background: linear-gradient(180deg, rgba(0, 255, 255, 0.15) 0%, rgba(0, 255, 255, 0.05) 100%);
+            border: 2px solid rgba(0, 255, 255, 0.8);
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.4), 0 0 40px rgba(0, 255, 255, 0.1), 0 3px 10px rgba(0, 0, 0, 0.3);
+        }
+
+        .mode-btn .mode-icon {
+            font-size: 24px;
+            line-height: 1;
+        }
+
+        .mode-btn .mode-name {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.5);
+            letter-spacing: 3px;
+        }
+
+        .mode-btn.mode-active .mode-name {
+            color: var(--cyan);
+            text-shadow: 0 0 8px rgba(0, 255, 255, 0.5);
+        }
+
+        .mode-btn .mode-desc {
+            font-size: 7px;
+            color: rgba(255, 255, 255, 0.35);
+            letter-spacing: 1px;
+            text-align: center;
+            line-height: 1.4;
+        }
+
+        .mode-btn.mode-active .mode-desc {
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        /* Slalom Results Screen */
+        #slalomResults {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 200;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #slalomResults .slalom-results-overlay {
+            background: linear-gradient(180deg, rgba(10, 10, 26, 0.95) 0%, rgba(26, 10, 46, 0.98) 100%);
+            border: 3px solid var(--cyan);
+            border-radius: 12px;
+            padding: 30px 40px;
+            text-align: center;
+            box-shadow: 0 0 40px rgba(0, 255, 255, 0.4), 0 0 80px rgba(0, 255, 255, 0.1);
+            max-width: 400px;
+            width: 90%;
+        }
+
+        #slalomResults h2 {
+            font-family: var(--font-pixel);
+            font-size: 20px;
+            color: var(--cyan);
+            text-shadow: 0 0 15px rgba(0, 255, 255, 0.7);
+            margin-bottom: 24px;
+            letter-spacing: 3px;
+        }
+
+        .slalom-stats {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 28px;
+        }
+
+        .slalom-stat-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-family: var(--font-pixel);
+            font-size: 11px;
+            padding: 6px 0;
+        }
+
+        .slalom-stat-label {
+            color: rgba(255, 255, 255, 0.6);
+            letter-spacing: 2px;
+        }
+
+        .slalom-stat-value {
+            color: var(--white);
+            text-shadow: 0 0 8px rgba(0, 255, 255, 0.3);
+        }
+
+        .slalom-stat-value.penalty {
+            color: var(--coral);
+        }
+
+        .slalom-stat-value.best {
+            color: var(--cyan);
+        }
+
+        .slalom-stat-row.final {
+            border-top: 1px solid rgba(0, 255, 255, 0.3);
+            padding-top: 12px;
+            margin-top: 4px;
+        }
+
+        .slalom-stat-row.final .slalom-stat-label {
+            color: var(--cyan);
+            font-size: 13px;
+        }
+
+        .slalom-stat-row.final .slalom-stat-value {
+            font-size: 16px;
+            color: var(--white);
+            text-shadow: 0 0 12px rgba(0, 255, 255, 0.6);
+        }
+
+        .slalom-new-best {
+            font-family: var(--font-pixel);
+            font-size: 10px;
+            color: var(--cyan);
+            text-shadow: 0 0 10px rgba(0, 255, 255, 0.8);
+            letter-spacing: 2px;
+            margin-bottom: 16px;
+            animation: tagline-pulse 1s ease-in-out infinite;
+        }
+
+        #slalomResults .button-row {
+            display: flex;
+            gap: 12px;
+            width: 100%;
+        }
+
+        #slalomResults .menu-btn {
+            font-size: 12px;
+            padding: 14px 20px;
+            flex: 1;
+            min-width: 0;
+        }
+
         /* Press Space Hint */
         .press-space {
             font-size: 12px;
@@ -1008,6 +1179,18 @@
                 padding: 14px 22px;
             }
 
+            .mode-btn .mode-name {
+                font-size: 12px;
+            }
+
+            .mode-btn .mode-desc {
+                font-size: 6px;
+            }
+
+            .mode-btn .mode-icon {
+                font-size: 20px;
+            }
+
             .press-space {
                 font-size: 10px;
             }
@@ -1102,7 +1285,20 @@
                 <!-- Menu Buttons -->
                 <div class="menu-section">
                     <p class="tagline">SHRED THE GNAR OR GET WRECKED</p>
-                    <button class="menu-btn btn-primary" id="startBtn" onclick="startGame()">
+                    <!-- Mode Selector -->
+                    <div class="mode-selector" id="modeSelector">
+                        <button class="mode-btn mode-active" id="modeOG" onclick="selectMode('og')">
+                            <span class="mode-icon">🏔️</span>
+                            <span class="mode-name">OG</span>
+                            <span class="mode-desc">Endless shred. Outrun the fog.</span>
+                        </button>
+                        <button class="mode-btn" id="modeSlalom" onclick="selectMode('slalom')">
+                            <span class="mode-icon">⛷️</span>
+                            <span class="mode-name">SLALOM</span>
+                            <span class="mode-desc">Race the gates. Beat the clock.</span>
+                        </button>
+                    </div>
+                    <button class="menu-btn btn-primary" id="startBtn" onclick="startSelectedMode()">
                         START GAME
                     </button>
                     <div class="button-row">
@@ -1126,7 +1322,7 @@
                 <div class="submenu-content">
                     <div class="submenu-section">
                         <h3>OBJECTIVE</h3>
-                        <p>Race down the mountain, dodge obstacles, and escape the mysterious fog chasing you!</p>
+                        <p>Race down the mountain, dodge obstacles, and outrun the avalanche chasing you!</p>
                     </div>
                     <div class="submenu-section">
                         <h3>KEYBOARD</h3>
@@ -1166,8 +1362,8 @@
                         <h3>HAZARDS</h3>
                         <ul>
                             <li>Trees and rocks will wreck you</li>
-                            <li>The fog is always chasing - don't slow down!</li>
-                            <li>Something lurks in the fog...</li>
+                            <li>The avalanche is always chasing - don't slow down!</li>
+                            <li>Something lurks behind the snow...</li>
                         </ul>
                     </div>
                 </div>
@@ -1205,6 +1401,40 @@
     <!-- Game Container - separate from start screen -->
     <div id="game-container">
         <canvas id="gameCanvas" width="480" height="640"></canvas>
+    </div>
+
+    <!-- Slalom Results Screen -->
+    <div id="slalomResults" style="display: none;">
+        <div class="slalom-results-overlay">
+            <h2>SLALOM COMPLETE</h2>
+            <div class="slalom-stats">
+                <div class="slalom-stat-row">
+                    <span class="slalom-stat-label">TIME</span>
+                    <span class="slalom-stat-value" id="slalomTime">0:00.0</span>
+                </div>
+                <div class="slalom-stat-row">
+                    <span class="slalom-stat-label">GATES</span>
+                    <span class="slalom-stat-value" id="slalomGates">0/0</span>
+                </div>
+                <div class="slalom-stat-row">
+                    <span class="slalom-stat-label">PENALTIES</span>
+                    <span class="slalom-stat-value penalty" id="slalomPenalties">+0.0s</span>
+                </div>
+                <div class="slalom-stat-row final">
+                    <span class="slalom-stat-label">FINAL</span>
+                    <span class="slalom-stat-value" id="slalomFinal">0:00.0</span>
+                </div>
+                <div class="slalom-stat-row">
+                    <span class="slalom-stat-label">BEST</span>
+                    <span class="slalom-stat-value best" id="slalomBest">--:--.-</span>
+                </div>
+            </div>
+            <div id="slalomNewBest" class="slalom-new-best" style="display: none;">NEW BEST TIME!</div>
+            <div class="button-row">
+                <button class="menu-btn btn-primary" onclick="startSlalom()" style="font-size:12px;padding:14px 20px;">RACE AGAIN</button>
+                <button class="menu-btn btn-secondary" onclick="slalomBackToMenu()" style="font-size:12px;padding:14px 20px;">MENU</button>
+            </div>
+        </div>
     </div>
 
     <!-- Settings Menu (Global Overlay) -->
