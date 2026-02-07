@@ -906,6 +906,28 @@ const input = {
     _lastSpace: false
 };
 
+// Gamepad state
+const gamepadState = {
+    connected: false,
+    index: -1,
+    axes: [0, 0, 0, 0],
+    buttons: {},
+    deadzone: 0.3,
+    // Menu navigation
+    menuFocusIndex: 0, // Which menu item is focused
+    menuItems: [], // Current focusable menu items
+    _lastDpadUp: false,
+    _lastDpadDown: false,
+    _lastDpadLeft: false,
+    _lastDpadRight: false,
+    _lastA: false,
+    _lastB: false,
+    _lastStart: false,
+    _repeatTimer: 0,
+    _repeatDelay: 0.35, // Seconds before repeat starts
+    _repeatRate: 0.12   // Seconds between repeats
+};
+
 // Touch control state for mobile devices
 const touchState = {
     active: false,
@@ -993,28 +1015,33 @@ function setupTouchInput() {
 }
 
 function handleTouchStart(e) {
-    // Check if touching an interactive element (button, link, input, etc.)
     const target = e.target;
-    const isInteractive = target.tagName === 'BUTTON' ||
-                          target.tagName === 'A' ||
-                          target.tagName === 'INPUT' ||
-                          target.tagName === 'SELECT' ||
-                          target.closest('button') ||
-                          target.closest('a') ||
-                          target.closest('.menu-btn') ||
-                          target.closest('.submenu') ||
-                          target.closest('#settingsMenu') ||
-                          target.closest('#startScreen');
 
-    // Only prevent default during active gameplay, allow menu interactions
+    // Check if touching a real interactive element (button, link, input)
+    const isButton = target.tagName === 'BUTTON' ||
+                     target.tagName === 'A' ||
+                     target.tagName === 'INPUT' ||
+                     target.tagName === 'SELECT' ||
+                     target.closest('button') ||
+                     target.closest('a') ||
+                     target.closest('input') ||
+                     target.closest('select');
+
+    // Check if touching a menu/overlay area (settings, submenus)
+    const isMenuOverlay = target.closest('.submenu') ||
+                          target.closest('#settingsMenu') ||
+                          target.closest('#slalomResults');
+
+    // During active gameplay, always capture touch for controls
     if (gameState.screen === 'playing' || gameState.screen === 'lodge') {
         e.preventDefault();
-    } else if (isInteractive) {
-        // Allow the touch event to pass through to buttons on menus
+    } else if (isButton || isMenuOverlay) {
+        // On menus: let native click events fire for real buttons
+        // Don't capture this touch for game input
         return;
     }
 
-    // Always take the first touch
+    // Capture touch for game input (title screen background taps, gameplay, etc.)
     const touch = e.changedTouches[0] || e.touches[0];
     if (!touch) return;
 
@@ -1130,6 +1157,263 @@ function getInputDirection() {
     if (input.left) dir -= 1;
     if (input.right) dir += 1;
     return dir;
+}
+
+// ===================
+// GAMEPAD INPUT
+// ===================
+
+function setupGamepad() {
+    window.addEventListener('gamepadconnected', (e) => {
+        console.log('Gamepad connected:', e.gamepad.id);
+        gamepadState.connected = true;
+        gamepadState.index = e.gamepad.index;
+        // Update settings UI if visible
+        const status = document.getElementById('gamepadStatus');
+        if (status) {
+            status.textContent = 'Connected';
+            status.style.color = '#00ffff';
+        }
+    });
+
+    window.addEventListener('gamepaddisconnected', (e) => {
+        console.log('Gamepad disconnected:', e.gamepad.id);
+        if (e.gamepad.index === gamepadState.index) {
+            gamepadState.connected = false;
+            gamepadState.index = -1;
+            // Clear any held inputs from gamepad
+            input.left = false;
+            input.right = false;
+            input.up = false;
+            input.down = false;
+        }
+        const status = document.getElementById('gamepadStatus');
+        if (status) {
+            status.textContent = 'Not Connected';
+            status.style.color = '#ff6b6b';
+        }
+    });
+}
+
+function pollGamepad(dt) {
+    if (!gamepadState.connected) return;
+
+    const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+    const gp = gamepads[gamepadState.index];
+    if (!gp) return;
+
+    // Standard gamepad mapping:
+    // Buttons: 0=A/X, 1=B/O, 2=X/□, 3=Y/△, 8=Select, 9=Start
+    // D-pad: 12=Up, 13=Down, 14=Left, 15=Right
+    // Axes: 0=LStickX, 1=LStickY, 2=RStickX, 3=RStickY
+
+    const dz = gamepadState.deadzone;
+    const lx = gp.axes[0] || 0;
+    const ly = gp.axes[1] || 0;
+
+    const btnA = gp.buttons[0] && gp.buttons[0].pressed;
+    const btnB = gp.buttons[1] && gp.buttons[1].pressed;
+    const btnStart = gp.buttons[9] && gp.buttons[9].pressed;
+    const dpadUp = (gp.buttons[12] && gp.buttons[12].pressed) || ly < -dz;
+    const dpadDown = (gp.buttons[13] && gp.buttons[13].pressed) || ly > dz;
+    const dpadLeft = (gp.buttons[14] && gp.buttons[14].pressed) || lx < -dz;
+    const dpadRight = (gp.buttons[15] && gp.buttons[15].pressed) || lx > dz;
+
+    // During gameplay: map to input directly
+    if (gameState.screen === 'playing' || gameState.screen === 'lodge' || gameState.screen === 'dying') {
+        input.left = input.left || dpadLeft;
+        input.right = input.right || dpadRight;
+        input.up = input.up || dpadUp;
+        input.down = input.down || dpadDown;
+
+        // A or Start = space (for starting, confirming, etc.)
+        if ((btnA && !gamepadState._lastA) || (btnStart && !gamepadState._lastStart)) {
+            input.space = true;
+            setTimeout(() => { input.space = false; }, 100);
+        }
+
+        gamepadState._lastA = btnA;
+        gamepadState._lastB = btnB;
+        gamepadState._lastStart = btnStart;
+        gamepadState._lastDpadUp = dpadUp;
+        gamepadState._lastDpadDown = dpadDown;
+        gamepadState._lastDpadLeft = dpadLeft;
+        gamepadState._lastDpadRight = dpadRight;
+        return;
+    }
+
+    // On menus: use gamepad for menu navigation
+    pollGamepadMenu(dt, btnA, btnB, btnStart, dpadUp, dpadDown, dpadLeft, dpadRight);
+
+    // Store last states
+    gamepadState._lastA = btnA;
+    gamepadState._lastB = btnB;
+    gamepadState._lastStart = btnStart;
+    gamepadState._lastDpadUp = dpadUp;
+    gamepadState._lastDpadDown = dpadDown;
+    gamepadState._lastDpadLeft = dpadLeft;
+    gamepadState._lastDpadRight = dpadRight;
+}
+
+function pollGamepadMenu(dt, btnA, btnB, btnStart, dpadUp, dpadDown, dpadLeft, dpadRight) {
+    // Build the list of focusable menu items based on current screen
+    const menuItems = getMenuItems();
+    if (menuItems.length === 0) return;
+
+    // Clamp focus index
+    if (gamepadState.menuFocusIndex >= menuItems.length) {
+        gamepadState.menuFocusIndex = 0;
+    }
+
+    // Navigate up/down (or left/right for mode selector)
+    const navUp = dpadUp && !gamepadState._lastDpadUp;
+    const navDown = dpadDown && !gamepadState._lastDpadDown;
+    const navLeft = dpadLeft && !gamepadState._lastDpadLeft;
+    const navRight = dpadRight && !gamepadState._lastDpadRight;
+
+    let moved = false;
+
+    // Check if current focus is on a mode button
+    const currentItem = menuItems[gamepadState.menuFocusIndex];
+    const isOnModeBtn = currentItem && (currentItem.id === 'modeOG' || currentItem.id === 'modeSlalom');
+
+    if (isOnModeBtn && (navLeft || navRight)) {
+        // Left/right navigates between mode buttons
+        if (navLeft) {
+            const ogIdx = menuItems.findIndex(el => el.id === 'modeOG');
+            if (ogIdx >= 0) { gamepadState.menuFocusIndex = ogIdx; moved = true; }
+        }
+        if (navRight) {
+            const slIdx = menuItems.findIndex(el => el.id === 'modeSlalom');
+            if (slIdx >= 0) { gamepadState.menuFocusIndex = slIdx; moved = true; }
+        }
+    }
+
+    if (navUp) {
+        gamepadState.menuFocusIndex--;
+        if (gamepadState.menuFocusIndex < 0) gamepadState.menuFocusIndex = menuItems.length - 1;
+        moved = true;
+    }
+    if (navDown) {
+        gamepadState.menuFocusIndex++;
+        if (gamepadState.menuFocusIndex >= menuItems.length) gamepadState.menuFocusIndex = 0;
+        moved = true;
+    }
+
+    if (moved) {
+        // Update visual focus
+        updateGamepadFocus(menuItems, gamepadState.menuFocusIndex);
+    }
+
+    // A button or Start = activate focused item
+    if ((btnA && !gamepadState._lastA) || (btnStart && !gamepadState._lastStart)) {
+        const focused = menuItems[gamepadState.menuFocusIndex];
+        if (focused) {
+            focused.click();
+        }
+    }
+
+    // B button = back on submenus
+    if (btnB && !gamepadState._lastB) {
+        // Check if a submenu is open
+        const howToPlay = document.getElementById('howToPlayMenu');
+        const highScores = document.getElementById('highScoresMenu');
+        const settings = document.getElementById('settingsMenu');
+        const slalomResults = document.getElementById('slalomResults');
+
+        if (howToPlay && howToPlay.classList.contains('active')) {
+            hideHowToPlay();
+            gamepadState.menuFocusIndex = 0;
+        } else if (highScores && highScores.classList.contains('active')) {
+            hideHighScores();
+            gamepadState.menuFocusIndex = 0;
+        } else if (settings && settings.style.display !== 'none' && settings.style.display !== '') {
+            hideSettingsMenu();
+            gamepadState.menuFocusIndex = 0;
+        } else if (slalomResults && slalomResults.style.display !== 'none') {
+            slalomBackToMenu();
+            gamepadState.menuFocusIndex = 0;
+        }
+    }
+}
+
+function getMenuItems() {
+    // Return the focusable buttons for the current screen state
+    const items = [];
+
+    // Check submenus first (they overlay the main menu)
+    const howToPlay = document.getElementById('howToPlayMenu');
+    if (howToPlay && howToPlay.classList.contains('active')) {
+        const backBtn = howToPlay.querySelector('button');
+        if (backBtn) items.push(backBtn);
+        return items;
+    }
+
+    const highScores = document.getElementById('highScoresMenu');
+    if (highScores && highScores.classList.contains('active')) {
+        const backBtn = highScores.querySelector('button');
+        if (backBtn) items.push(backBtn);
+        return items;
+    }
+
+    const settings = document.getElementById('settingsMenu');
+    if (settings && settings.style.display !== 'none' && settings.style.display !== '') {
+        settings.querySelectorAll('button').forEach(btn => items.push(btn));
+        return items;
+    }
+
+    // Slalom results screen
+    const slalomResults = document.getElementById('slalomResults');
+    if (slalomResults && slalomResults.style.display !== 'none') {
+        slalomResults.querySelectorAll('button, .menu-btn').forEach(btn => items.push(btn));
+        return items;
+    }
+
+    // Game over screen
+    if (gameState.screen === 'gameOver') {
+        // Space to restart — handled by update() already
+        return items;
+    }
+
+    // Title screen: mode buttons + start + secondary buttons
+    if (gameState.screen === 'title') {
+        const startScreen = document.getElementById('startScreen');
+        if (startScreen && startScreen.style.display !== 'none') {
+            const modeOG = document.getElementById('modeOG');
+            const modeSlalom = document.getElementById('modeSlalom');
+            const startBtn = document.getElementById('startBtn');
+
+            if (modeOG) items.push(modeOG);
+            if (modeSlalom) items.push(modeSlalom);
+            if (startBtn) items.push(startBtn);
+
+            // Secondary buttons
+            const buttonRow = startScreen.querySelector('.button-row');
+            if (buttonRow) {
+                buttonRow.querySelectorAll('button').forEach(btn => items.push(btn));
+            }
+        }
+    }
+
+    return items;
+}
+
+function updateGamepadFocus(menuItems, focusIndex) {
+    // Remove focus highlight from all
+    menuItems.forEach(item => {
+        item.classList.remove('gamepad-focus');
+    });
+    // Add to focused item
+    if (menuItems[focusIndex]) {
+        menuItems[focusIndex].classList.add('gamepad-focus');
+        menuItems[focusIndex].focus({ preventScroll: true });
+        // If focusing a mode button, also select that mode
+        if (menuItems[focusIndex].id === 'modeOG') {
+            selectMode('og');
+        } else if (menuItems[focusIndex].id === 'modeSlalom') {
+            selectMode('slalom');
+        }
+    }
 }
 
 // ===================
@@ -6959,6 +7243,9 @@ function gameLoop(timestamp) {
     }
     lastTime = timestamp;
 
+    // Poll gamepad every frame
+    pollGamepad(dt);
+
     update(dt);
     draw();
 
@@ -7862,6 +8149,7 @@ function init() {
 
     setupInput();
     setupTouchInput();
+    setupGamepad();
     loadHighScore();
     loadStance();
     musicManager.init();
