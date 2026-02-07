@@ -750,9 +750,11 @@ function compositeHUDPanel() {
 
 let canvas, ctx;
 let lastTime = 0;
+let selectedMode = 'og'; // 'og' or 'slalom'
 
 let gameState = {
-    screen: 'title', // 'title', 'playing', 'gameOver', 'lodge'
+    screen: 'title', // 'title', 'playing', 'gameOver', 'lodge', 'slalomResults'
+    mode: 'og', // 'og' or 'slalom'
     animationTime: 0,
 
     player: {
@@ -886,7 +888,8 @@ let gameState = {
         playerY: 0,
         beastX: 0,
         beastY: 0,
-        chompCount: 0       // Number of chomps completed
+        chompCount: 0,      // Number of chomps completed
+        completed: false    // Prevents re-triggering after animation plays
     }
 };
 
@@ -2840,21 +2843,6 @@ function updateChase(dt) {
     const fogDistance = player.y - chase.fogY;
     gameState.dangerLevel = clamp(1 - fogDistance / 400, 0, 1);
 
-    // Track slow speed - spawn beast if going too slow for too long
-    if (!player.crashed && !player.stunned && player.speed < CHASE.slowSpeedThreshold) {
-        chase.slowSpeedTimer += dt;
-        if (chase.slowSpeedTimer >= CHASE.slowSpeedDuration && !chase.beastActive) {
-            spawnBeast('GO FASTER!');
-        }
-    } else {
-        chase.slowSpeedTimer = Math.max(0, chase.slowSpeedTimer - dt * 2); // Recover faster
-    }
-
-    // Spawn beast based on distance
-    if (!chase.beastActive && chase.distanceTraveled >= CHASE.beastSpawnDistance) {
-        spawnBeast();
-    }
-
     // Update beast
     if (chase.beastActive) {
         updateBeast(dt);
@@ -3154,6 +3142,12 @@ function draw() {
         return;
     }
 
+    // Slalom mode rendering
+    if (gameState.mode === 'slalom' && (gameState.screen === 'playing' || gameState.screen === 'slalomResults')) {
+        drawSlalom();
+        return;
+    }
+
     if (gameState.screen === 'gameOver') {
         drawGameOverScreen();
         return;
@@ -3174,7 +3168,7 @@ function draw() {
         drawLodges();
         drawCollectibles();
         drawObstacles();
-        drawFogWall();
+        drawAvalanche();
         drawDeathAnimation();  // Draw chomp animation instead of player
         drawParticles();
         drawDangerVignette();
@@ -3205,7 +3199,7 @@ function draw() {
     drawObstacles();
 
     // Draw fog wall
-    drawFogWall();
+    drawAvalanche();
 
     // Draw beast
     if (gameState.chase.beastActive) {
@@ -5201,83 +5195,130 @@ function drawPlayer() {
     ctx.restore();
 }
 
-function drawFogWall() {
+function drawAvalanche() {
     const chase = gameState.chase;
     const screen = worldToScreen(0, chase.fogY);
     const time = gameState.animationTime;
 
-    // Multi-layer fog gradient for more depth
-    const gradient = ctx.createLinearGradient(0, screen.y - 200, 0, screen.y + 80);
-    gradient.addColorStop(0, 'rgba(20, 10, 35, 0)');
-    gradient.addColorStop(0.2, 'rgba(40, 20, 60, 0.3)');
-    gradient.addColorStop(0.4, 'rgba(60, 30, 90, 0.6)');
-    gradient.addColorStop(0.6, 'rgba(50, 25, 75, 0.8)');
-    gradient.addColorStop(0.8, 'rgba(30, 15, 50, 0.95)');
-    gradient.addColorStop(1, 'rgba(15, 5, 25, 1)');
-
+    // === Snow wall base gradient (white/icy) ===
+    const gradient = ctx.createLinearGradient(0, screen.y - 220, 0, screen.y + 80);
+    gradient.addColorStop(0, 'rgba(240, 245, 255, 0)');
+    gradient.addColorStop(0.15, 'rgba(230, 238, 248, 0.2)');
+    gradient.addColorStop(0.3, 'rgba(220, 230, 245, 0.5)');
+    gradient.addColorStop(0.5, 'rgba(210, 222, 240, 0.75)');
+    gradient.addColorStop(0.7, 'rgba(200, 215, 235, 0.9)');
+    gradient.addColorStop(0.85, 'rgba(190, 205, 225, 0.97)');
+    gradient.addColorStop(1, 'rgba(180, 195, 215, 1)');
     ctx.fillStyle = gradient;
-    ctx.fillRect(0, screen.y - 200, CANVAS_WIDTH, 300);
+    ctx.fillRect(0, screen.y - 220, CANVAS_WIDTH, 320);
 
-    // Animated tendrils with bezier curves (10 tendrils)
-    for (let i = 0; i < 10; i++) {
-        const baseX = (i * CANVAS_WIDTH / 10) + 24;
-        const phase = time * 2.5 + i * 0.8;
-        const amplitude = 30 + Math.sin(i * 1.3) * 15;
+    // === Billowing snow clouds (rolling tumble edge) ===
+    const cloudCount = CHASE.avalancheCloudCount;
+    for (let i = 0; i < cloudCount; i++) {
+        const phase = time * 1.8 + i * 1.2;
+        const baseX = (i * CANVAS_WIDTH / cloudCount) + Math.sin(phase) * 30;
+        const cloudSize = 50 + Math.sin(i * 2.1 + time * 0.5) * 30;
+        const cloudY = screen.y - 130 + Math.sin(phase * 0.7) * 20;
 
-        // Tendril color varies
-        const hue = 280 + Math.sin(time + i) * 30;
-        ctx.strokeStyle = `hsla(${hue}, 80%, 60%, ${0.2 + Math.sin(phase) * 0.1})`;
-        ctx.lineWidth = 3 + Math.sin(phase * 0.5) * 2;
+        // Each cloud is a cluster of overlapping circles
+        ctx.save();
+        const brightness = 240 + Math.sin(i * 1.7) * 15;
+        ctx.fillStyle = `rgba(${brightness}, ${brightness + 5}, ${brightness + 10}, ${0.7 + Math.sin(phase) * 0.15})`;
+
+        // Main cloud body
+        ctx.beginPath();
+        ctx.arc(baseX, cloudY, cloudSize * 0.6, 0, Math.PI * 2);
+        ctx.fill();
 
         ctx.beginPath();
-        ctx.moveTo(baseX, screen.y - 100);
+        ctx.arc(baseX - cloudSize * 0.4, cloudY + 8, cloudSize * 0.45, 0, Math.PI * 2);
+        ctx.fill();
 
-        // Bezier curve for smooth tendril
-        const cp1x = baseX + Math.sin(phase) * amplitude;
-        const cp1y = screen.y - 60;
-        const cp2x = baseX + Math.sin(phase + 1) * amplitude * 0.7;
-        const cp2y = screen.y - 20;
-        const endX = baseX + Math.sin(phase + 2) * amplitude * 0.4;
-        const endY = screen.y + 40;
+        ctx.beginPath();
+        ctx.arc(baseX + cloudSize * 0.4, cloudY + 5, cloudSize * 0.5, 0, Math.PI * 2);
+        ctx.fill();
 
-        ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, endX, endY);
-        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(baseX + cloudSize * 0.15, cloudY - cloudSize * 0.25, cloudSize * 0.35, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
     }
 
-    // Glowing edge with sine wave
-    ctx.strokeStyle = 'rgba(255, 100, 255, 0.4)';
-    ctx.lineWidth = 4;
-    ctx.shadowColor = COLORS.magenta;
-    ctx.shadowBlur = 3;
+    // === Rolling tumble edge (animated bezier bumps) ===
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+    ctx.lineWidth = 5;
+    ctx.fillStyle = 'rgba(235, 240, 250, 0.8)';
     ctx.beginPath();
-    ctx.moveTo(0, screen.y - 80);
-    for (let x = 0; x <= CANVAS_WIDTH; x += 10) {
-        const waveY = screen.y - 80 + Math.sin(x * 0.02 + time * 3) * 15 + Math.sin(x * 0.05 + time * 2) * 8;
-        ctx.lineTo(x, waveY);
+    ctx.moveTo(-10, screen.y - 80);
+    const bumpCount = 8;
+    for (let i = 0; i < bumpCount; i++) {
+        const segWidth = (CANVAS_WIDTH + 20) / bumpCount;
+        const x0 = -10 + i * segWidth;
+        const x1 = x0 + segWidth;
+        const bumpPhase = time * 2.2 + i * 1.5;
+        const bumpHeight = 25 + Math.sin(bumpPhase) * 15;
+        const cpX = x0 + segWidth / 2 + Math.sin(bumpPhase * 0.8 + i) * 15;
+
+        ctx.quadraticCurveTo(cpX, screen.y - 80 - bumpHeight, x1, screen.y - 80 + Math.sin(bumpPhase + 2) * 8);
     }
+    ctx.lineTo(CANVAS_WIDTH + 10, screen.y + 100);
+    ctx.lineTo(-10, screen.y + 100);
+    ctx.closePath();
+    ctx.fill();
     ctx.stroke();
-    ctx.shadowBlur = 0;
 
-    // Floating particle motes
-    ctx.fillStyle = 'rgba(200, 150, 255, 0.5)';
-    for (let i = 0; i < 15; i++) {
-        const moteX = (i * 37 + time * 20) % CANVAS_WIDTH;
-        const moteY = screen.y - 120 + Math.sin(time * 2 + i * 0.7) * 40;
-        const moteSize = 2 + Math.sin(time * 3 + i) * 1;
+    // === Snow debris chunks ahead of the wall ===
+    const debrisCount = CHASE.avalancheDebrisCount;
+    for (let i = 0; i < debrisCount; i++) {
+        const seed = i * 73.37;
+        const debrisPhase = time * 3 + seed;
+        const debrisX = ((seed * 7 + time * 40) % (CANVAS_WIDTH + 60)) - 30;
+        const debrisBaseY = screen.y - 160 - i * 8;
+        const debrisY = debrisBaseY + Math.sin(debrisPhase) * 20;
+        const debrisSize = 3 + Math.sin(seed * 0.3) * 3;
+        const rotation = debrisPhase * 2;
 
-        if (moteY > screen.y - 150 && moteY < screen.y) {
+        if (debrisY < screen.y - 60 && debrisY > screen.y - 280) {
+            ctx.save();
+            ctx.translate(debrisX, debrisY);
+            ctx.rotate(rotation);
+            ctx.fillStyle = `rgba(${230 + Math.floor(Math.sin(seed) * 20)}, ${238 + Math.floor(Math.sin(seed + 1) * 12)}, 250, ${0.5 + Math.sin(debrisPhase * 0.5) * 0.2})`;
+            ctx.fillRect(-debrisSize, -debrisSize * 0.6, debrisSize * 2, debrisSize * 1.2);
+            ctx.restore();
+        }
+    }
+
+    // === Powder spray (fine mist ahead of avalanche) ===
+    const sprayCount = CHASE.avalancheSprayCount;
+    for (let i = 0; i < sprayCount; i++) {
+        const seed = i * 43.71;
+        const sprayX = ((seed * 11 + time * 25) % CANVAS_WIDTH);
+        const sprayY = screen.y - 200 + Math.sin(time * 1.5 + seed) * 60;
+        const spraySize = 1.5 + Math.sin(time * 2 + seed * 0.5) * 1;
+
+        if (sprayY > screen.y - 280 && sprayY < screen.y - 100) {
+            ctx.fillStyle = `rgba(245, 248, 255, ${0.2 + Math.sin(time + seed) * 0.1})`;
             ctx.beginPath();
-            ctx.arc(moteX, moteY, moteSize, 0, Math.PI * 2);
+            ctx.arc(sprayX, sprayY, spraySize, 0, Math.PI * 2);
             ctx.fill();
         }
     }
 
-    // Inner darkness
-    const innerGrad = ctx.createLinearGradient(0, screen.y, 0, screen.y + 100);
-    innerGrad.addColorStop(0, 'rgba(10, 5, 20, 0.5)');
-    innerGrad.addColorStop(1, 'rgba(5, 0, 10, 1)');
+    // === Dense snow mass behind the leading edge ===
+    const innerGrad = ctx.createLinearGradient(0, screen.y - 40, 0, screen.y + 120);
+    innerGrad.addColorStop(0, 'rgba(200, 210, 225, 0.8)');
+    innerGrad.addColorStop(0.3, 'rgba(185, 195, 210, 0.95)');
+    innerGrad.addColorStop(1, 'rgba(160, 175, 195, 1)');
     ctx.fillStyle = innerGrad;
-    ctx.fillRect(0, screen.y, CANVAS_WIDTH, 150);
+    ctx.fillRect(0, screen.y - 40, CANVAS_WIDTH, 180);
+
+    // === Shadow at base for depth ===
+    const shadowGrad = ctx.createLinearGradient(0, screen.y + 60, 0, screen.y + 120);
+    shadowGrad.addColorStop(0, 'rgba(120, 135, 160, 0.3)');
+    shadowGrad.addColorStop(1, 'rgba(100, 115, 140, 0.6)');
+    ctx.fillStyle = shadowGrad;
+    ctx.fillRect(0, screen.y + 60, CANVAS_WIDTH, 60);
 }
 
 function drawBeast() {
@@ -5775,8 +5816,8 @@ function drawDangerVignette() {
             CANVAS_WIDTH/2, CANVAS_HEIGHT/2, CANVAS_HEIGHT * 0.3,
             CANVAS_WIDTH/2, CANVAS_HEIGHT/2, CANVAS_HEIGHT * 0.7
         );
-        gradientCache.dangerVignette.addColorStop(0, 'rgba(26, 5, 48, 0)');
-        gradientCache.dangerVignette.addColorStop(1, 'rgba(26, 5, 48, 1)');
+        gradientCache.dangerVignette.addColorStop(0, 'rgba(220, 230, 245, 0)');
+        gradientCache.dangerVignette.addColorStop(1, 'rgba(220, 230, 245, 1)');
     }
 
     // Use globalAlpha to modulate intensity instead of recreating gradient
@@ -5878,8 +5919,8 @@ function drawGameOverScreen() {
     let deathText = 'WRECKED!';
     let deathColor = COLORS.danger;
     if (gameState.deathCause === 'fog') {
-        deathText = 'SWALLOWED BY THE MOUNTAIN';
-        deathColor = COLORS.purple;
+        deathText = 'BURIED BY THE AVALANCHE';
+        deathColor = '#c8daf0';
     } else if (gameState.deathCause === 'beast') {
         deathText = 'CAUGHT BY THE BEAST';
         deathColor = COLORS.magenta;
@@ -5949,6 +5990,7 @@ function startGame() {
 
     // Reset game state
     gameState.screen = 'playing';
+    gameState.mode = 'og';
     gameState.animationTime = 0;
 
     // Start music loop
@@ -6068,9 +6110,15 @@ function startGame() {
 }
 
 function triggerGameOver(cause) {
-    // For beast kills, play chomp animation first
-    if (cause === 'beast' && !gameState.deathAnimation.active) {
+    // For beast kills, play chomp animation first (once)
+    if (cause === 'beast' && !gameState.deathAnimation.active && !gameState.deathAnimation.completed) {
         startDeathAnimation(cause);
+        return;
+    }
+
+    // For fog/avalanche kills, play avalanche engulf animation (once)
+    if (cause === 'fog' && !gameState.deathAnimation.active && !gameState.deathAnimation.completed) {
+        startDeathAnimation('avalanche');
         return;
     }
 
@@ -6101,12 +6149,23 @@ function startDeathAnimation(cause) {
         active: true,
         type: cause,
         timer: 0,
-        phase: 0,  // 0: grab, 1: chomp, 2: fade
+        phase: 0,
         playerX: player.x,
         playerY: player.y,
         beastX: chase.beastX,
         beastY: chase.beastY,
-        chompCount: 0
+        chompCount: 0,
+        // Avalanche-specific state
+        avalancheDebris: cause === 'avalanche' ? Array.from({length: 50}, (_, i) => ({
+            x: (Math.random() - 0.5) * CANVAS_WIDTH * 1.2,
+            y: -Math.random() * 200 - 50,
+            size: 2 + Math.random() * 6,
+            speed: 50 + Math.random() * 100,
+            drift: (Math.random() - 0.5) * 40,
+            rotation: Math.random() * Math.PI * 2,
+            rotSpeed: (Math.random() - 0.5) * 4
+        })) : null,
+        playerRotation: 0
     };
 
     gameState.screen = 'dying';
@@ -6122,11 +6181,17 @@ function updateDeathAnimation(dt) {
 
     anim.timer += dt;
 
-    // Improved phase timing - slower, more impactful
-    const grabDuration = 0.5;    // Beast grabs player
-    const windUpDuration = 0.3;  // NEW: Wind-up before chomp
-    const chompDuration = 1.2;   // Slower chomps (3 total)
-    const swallowDuration = 0.3; // NEW: Gulp animation
+    // Route to avalanche-specific update
+    if (anim.type === 'avalanche') {
+        updateAvalancheDeathAnimation(anim, dt);
+        return;
+    }
+
+    // Beast death phase timing
+    const grabDuration = 0.5;
+    const windUpDuration = 0.3;
+    const chompDuration = 1.2;
+    const swallowDuration = 0.3;
     const fadeDuration = 0.4;
 
     if (anim.phase === 0) {
@@ -6146,10 +6211,9 @@ function updateDeathAnimation(dt) {
         }
     } else if (anim.phase === 2) {
         // Phase 2: Chomp animation - 3 slower, impactful chomps
-        const chompCycle = Math.floor(anim.timer * 2.5); // 2.5 chomps per second = ~3 chomps in 1.2s
+        const chompCycle = Math.floor(anim.timer * 2.5);
         if (chompCycle > anim.chompCount) {
             anim.chompCount = chompCycle;
-            // Stronger shake on each chomp for impact
             gameState.screenShake.intensity = 12;
         }
 
@@ -6167,6 +6231,7 @@ function updateDeathAnimation(dt) {
         // Phase 4: Fade out
         if (anim.timer >= fadeDuration) {
             anim.active = false;
+            anim.completed = true;
             triggerGameOver(anim.type);
         }
     }
@@ -6175,6 +6240,12 @@ function updateDeathAnimation(dt) {
 function drawDeathAnimation() {
     const anim = gameState.deathAnimation;
     if (!anim.active) return;
+
+    // Route to avalanche-specific draw
+    if (anim.type === 'avalanche') {
+        drawAvalancheDeathAnimation(anim);
+        return;
+    }
 
     const screen = worldToScreen(anim.playerX, anim.playerY);
 
@@ -6334,6 +6405,201 @@ function drawDeathAnimation() {
     }
 
     ctx.restore();
+}
+
+// === Avalanche Death Animation ===
+
+function updateAvalancheDeathAnimation(anim, dt) {
+    const engulfDuration = 1.5;
+    const tumbleDuration = 1.5;
+    const whiteoutDuration = 1.0;
+    const fadeDuration = 1.0;
+
+    if (anim.phase === 0) {
+        // Phase 0: Engulf — avalanche rushes over player
+        const progress = anim.timer / engulfDuration;
+        // Increasing screen shake as avalanche approaches
+        gameState.screenShake.intensity = 4 + progress * 16;
+        // Update debris positions
+        if (anim.avalancheDebris) {
+            for (const d of anim.avalancheDebris) {
+                d.y += d.speed * dt;
+                d.x += d.drift * dt;
+                d.rotation += d.rotSpeed * dt;
+            }
+        }
+        if (anim.timer >= engulfDuration) {
+            anim.phase = 1;
+            anim.timer = 0;
+        }
+    } else if (anim.phase === 1) {
+        // Phase 1: Tumble — player rotates amid swirling snow
+        anim.playerRotation += dt * 6; // Spinning
+        gameState.screenShake.intensity = Math.max(0, 15 - anim.timer * 8);
+        if (anim.avalancheDebris) {
+            for (const d of anim.avalancheDebris) {
+                d.y += d.speed * 0.3 * dt;
+                d.x += Math.sin(anim.timer * 3 + d.rotation) * 20 * dt;
+                d.rotation += d.rotSpeed * dt;
+            }
+        }
+        if (anim.timer >= tumbleDuration) {
+            anim.phase = 2;
+            anim.timer = 0;
+        }
+    } else if (anim.phase === 2) {
+        // Phase 2: Whiteout — screen goes fully white
+        if (anim.timer >= whiteoutDuration) {
+            anim.phase = 3;
+            anim.timer = 0;
+        }
+    } else if (anim.phase === 3) {
+        // Phase 3: Fade — white fades to dark
+        if (anim.timer >= fadeDuration) {
+            anim.active = false;
+            anim.completed = true;
+            triggerGameOver('fog'); // Re-trigger as fog to reach actual game over
+        }
+    }
+}
+
+function drawAvalancheDeathAnimation(anim) {
+    const time = gameState.animationTime;
+    const easeInOutQuad = t => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+
+    if (anim.phase === 0) {
+        // Phase 0: Engulf — avalanche wall rushes over player
+        const progress = easeInOutQuad(Math.min(1, anim.timer / 1.5));
+        const screen = worldToScreen(anim.playerX, anim.playerY);
+
+        // Player still visible, being overtaken
+        ctx.save();
+        ctx.translate(screen.x, screen.y);
+        ctx.globalAlpha = 1 - progress * 0.6;
+        ctx.fillStyle = COLORS.hotPink;
+        ctx.beginPath();
+        ctx.arc(0, -10, 10, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = COLORS.electricBlue;
+        ctx.beginPath();
+        ctx.arc(0, -20, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.restore();
+
+        // Avalanche wall advancing from top
+        const wallY = -50 + progress * (CANVAS_HEIGHT + 100);
+        const wallGrad = ctx.createLinearGradient(0, wallY - 120, 0, wallY + 30);
+        wallGrad.addColorStop(0, 'rgba(200, 215, 235, 1)');
+        wallGrad.addColorStop(0.4, 'rgba(220, 230, 245, 0.95)');
+        wallGrad.addColorStop(0.7, 'rgba(240, 245, 255, 0.8)');
+        wallGrad.addColorStop(1, 'rgba(245, 248, 255, 0)');
+        ctx.fillStyle = wallGrad;
+        ctx.fillRect(0, wallY - 120, CANVAS_WIDTH, 150);
+
+        // Dense snow behind
+        ctx.fillStyle = 'rgba(210, 222, 240, 0.97)';
+        ctx.fillRect(0, 0, CANVAS_WIDTH, Math.max(0, wallY - 120));
+
+        // Rolling cloud bumps at leading edge
+        for (let i = 0; i < 8; i++) {
+            const bx = (i * CANVAS_WIDTH / 8) + Math.sin(time * 2 + i * 1.3) * 20;
+            const by = wallY + Math.sin(time * 1.8 + i * 0.9) * 12;
+            const br = 30 + Math.sin(i * 2.3 + time) * 12;
+            ctx.fillStyle = `rgba(${235 + Math.floor(Math.sin(i) * 10)}, 242, 252, 0.85)`;
+            ctx.beginPath();
+            ctx.arc(bx, by, br, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Snow debris chunks
+        if (anim.avalancheDebris) {
+            for (const d of anim.avalancheDebris) {
+                if (d.y > -100 && d.y < CANVAS_HEIGHT + 50) {
+                    ctx.save();
+                    ctx.translate(d.x + CANVAS_WIDTH / 2, d.y);
+                    ctx.rotate(d.rotation);
+                    ctx.fillStyle = `rgba(240, 245, 255, ${0.4 + Math.sin(d.rotation) * 0.2})`;
+                    ctx.fillRect(-d.size, -d.size * 0.5, d.size * 2, d.size);
+                    ctx.restore();
+                }
+            }
+        }
+
+    } else if (anim.phase === 1) {
+        // Phase 1: Tumble — player rotates and shrinks amid dense snow
+        const progress = easeInOutQuad(Math.min(1, anim.timer / 1.5));
+
+        // Full snow background
+        ctx.fillStyle = 'rgba(220, 230, 245, 0.95)';
+        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+        // Swirling debris
+        if (anim.avalancheDebris) {
+            for (const d of anim.avalancheDebris) {
+                ctx.save();
+                const dx = CANVAS_WIDTH / 2 + d.x * (1 - progress * 0.3);
+                const dy = CANVAS_HEIGHT / 2 + (d.y % CANVAS_HEIGHT) * 0.5;
+                ctx.translate(dx, dy);
+                ctx.rotate(d.rotation);
+                const alpha = 0.3 + Math.sin(d.rotation * 2) * 0.15;
+                ctx.fillStyle = `rgba(190, 205, 225, ${alpha})`;
+                ctx.fillRect(-d.size, -d.size * 0.6, d.size * 2, d.size * 1.2);
+                ctx.restore();
+            }
+        }
+
+        // Player tumbling (shrinking and spinning)
+        const playerScale = 1 - progress * 0.8;
+        const playerAlpha = 1 - progress * 0.7;
+        ctx.save();
+        ctx.translate(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+        ctx.rotate(anim.playerRotation);
+        ctx.scale(playerScale, playerScale);
+        ctx.globalAlpha = playerAlpha;
+        ctx.fillStyle = COLORS.hotPink;
+        ctx.beginPath();
+        ctx.arc(0, 5, 10, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = COLORS.electricBlue;
+        ctx.beginPath();
+        ctx.arc(0, -8, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.restore();
+
+    } else if (anim.phase === 2) {
+        // Phase 2: Whiteout — screen fully white with settling particles
+        const progress = easeInOutQuad(Math.min(1, anim.timer / 1.0));
+
+        ctx.fillStyle = `rgba(240, 245, 255, ${0.9 + progress * 0.1})`;
+        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+        // Settling snow particles drifting down slowly
+        const settleCount = 30;
+        for (let i = 0; i < settleCount; i++) {
+            const seed = i * 57.13;
+            const sx = ((seed * 13 + time * 8) % CANVAS_WIDTH);
+            const sy = ((seed * 7 + anim.timer * 30 + i * 25) % CANVAS_HEIGHT);
+            const ss = 1 + Math.sin(seed) * 0.8;
+            const alpha = (1 - progress) * 0.4;
+            ctx.fillStyle = `rgba(200, 210, 225, ${alpha})`;
+            ctx.beginPath();
+            ctx.arc(sx, sy, ss, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+    } else if (anim.phase === 3) {
+        // Phase 3: Fade — white fades to dark
+        const progress = easeInOutQuad(Math.min(1, anim.timer / 1.0));
+
+        // White background fading to black
+        const r = Math.floor(240 * (1 - progress));
+        const g = Math.floor(245 * (1 - progress));
+        const b = Math.floor(255 * (1 - progress));
+        ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    }
 }
 
 // Helper function to draw beast head with mouth - dark furry humanoid beast
@@ -6584,14 +6850,27 @@ function update(dt) {
     // Handle input for screen transitions
     if (input.space && !input._lastSpace) {
         if (gameState.screen === 'title') {
-            startGame();
+            startSelectedMode();
         } else if (gameState.screen === 'gameOver') {
             gameState.screen = 'title';
             showStartScreen();
             musicManager.stop();
+        } else if (gameState.screen === 'slalomResults') {
+            // Space on slalom results = race again
+            document.getElementById('slalomResults').style.display = 'none';
+            startSlalom();
         }
     }
     input._lastSpace = input.space;
+
+    // Handle slalom mode
+    if (gameState.mode === 'slalom' && (gameState.screen === 'playing' || gameState.screen === 'slalomResults')) {
+        if (gameState.screen === 'playing') {
+            updateSlalom(dt);
+            if (sprites.player) sprites.player.update(dt);
+        }
+        return;
+    }
 
     // Handle lodge state
     if (gameState.screen === 'lodge') {
@@ -6684,6 +6963,876 @@ function gameLoop(timestamp) {
     draw();
 
     requestAnimationFrame(gameLoop);
+}
+
+// ============================================================================
+// MODE SELECTION SYSTEM
+// ============================================================================
+
+function selectMode(mode) {
+    selectedMode = mode;
+    const ogBtn = document.getElementById('modeOG');
+    const slalomBtn = document.getElementById('modeSlalom');
+    if (ogBtn) ogBtn.classList.toggle('mode-active', mode === 'og');
+    if (slalomBtn) slalomBtn.classList.toggle('mode-active', mode === 'slalom');
+}
+
+function startSelectedMode() {
+    if (selectedMode === 'slalom') {
+        startSlalom();
+    } else {
+        startGame();
+    }
+}
+
+// ============================================================================
+// SLALOM MODE
+// ============================================================================
+
+const SLALOM = {
+    courseChunks: 20,           // Number of terrain chunks for the course
+    gateCount: 16,             // Total gates on course
+    gateSpacing: 700,          // Pixels between gates (base)
+    gateSpacingVariance: 150,  // Random variance on spacing
+    gateWidth: 130,            // Opening between poles
+    poleWidth: 12,             // Width of each pole
+    poleHeight: 40,            // Height of each pole
+    warmUpDistance: 600,        // Distance before first gate
+    waterZoneLength: 800,      // Water section at bottom
+    crowdZoneLength: 200,      // Crowd/lodge zone after water
+    missedGatePenalty: 5.0,    // Seconds added for missed gate
+    poleCrashPenalty: 2.0,     // Seconds added for hitting a pole
+    finishDeceleration: 300,   // Deceleration on water (px/s²)
+    rocksPerChunk: 1           // Sparse obstacles
+};
+
+function startSlalom() {
+    hideStartScreen();
+
+    // Hide slalom results if showing (RACE AGAIN flow)
+    const resultsEl = document.getElementById('slalomResults');
+    if (resultsEl) resultsEl.style.display = 'none';
+
+    if (canvas) {
+        canvas.style.display = 'block';
+        canvas.style.opacity = '1';
+    }
+
+    fitCanvasToViewport();
+
+    TERRAIN.slopeWidth = getTerrainSlopeWidth();
+    TERRAIN.laneWidth = getTerrainLaneWidth();
+
+    gradientCache.invalidate();
+
+    gameState.screen = 'playing';
+    gameState.mode = 'slalom';
+    gameState.animationTime = 0;
+
+    musicManager.play();
+
+    gameState.player = {
+        x: 0,
+        y: 0,
+        visualX: 0,
+        visualY: 0,
+        speed: 150,
+        lateralSpeed: 0,
+        angle: 0,
+        airborne: false,
+        altitude: 0,
+        verticalVelocity: 0,
+        airTime: 0,
+        grinding: false,
+        grindProgress: 0,
+        grindStartTime: 0,
+        grindFrames: 0,
+        grindImmunity: 0,
+        grindTrick: null,
+        grindTrickDisplayTimer: 0,
+        lastRail: null,
+        currentRail: null,
+        currentGrindable: null,
+        crashed: false,
+        crashTimer: 0,
+        stunned: 0,
+        invincible: 0,
+        trickRotation: 0,
+        autoTrick: null,
+        autoTrickProgress: 0,
+        flipRotation: 0,
+        grabPhase: 0,
+        grabTweak: 0,
+        grabPoke: 0,
+        spinDirection: 0,
+        preJumpAngle: 0,
+        jumpLaunchPower: 0,
+        preloadCrouch: 0,
+        approachingJump: null
+    };
+
+    gameState.camera = {
+        y: -CANVAS_HEIGHT * 0.35,
+        targetY: 0,
+        lookAhead: 150
+    };
+
+    // Generate slalom course
+    const course = generateSlalomCourse();
+
+    gameState.terrain = {
+        chunks: [],
+        nextChunkY: 0,
+        seed: Math.floor(Math.random() * 100000),
+        lastLodgeY: -9999,
+        pendingExclusions: {}
+    };
+
+    gameState.obstacles = course.obstacles;
+    gameState.jumps = [];
+    gameState.rails = [];
+    gameState.lodges = [];
+    gameState.collectibles = [];
+    gameState.collectiblesCollected = 0;
+
+    // No chase in slalom
+    gameState.chase = {
+        fogY: -99999, fogSpeed: 0, beastActive: false,
+        beastY: 0, beastX: 0, beastState: 'chasing',
+        beastLungeTimer: 0, lungeTargetX: 0, lungeTargetY: 0,
+        lungeProgress: 0, retreatTimer: 0, distanceTraveled: 0,
+        recentCrashes: [], totalCrashes: 0, missCount: 0,
+        slowSpeedTimer: 0, beastRage: 0
+    };
+
+    gameState.score = 0;
+    gameState.distance = 0;
+    gameState.trickScore = 0;
+    gameState.trickMultiplier = 1;
+    gameState.trickComboTimer = 0;
+    gameState.maxCombo = 1;
+    gameState.comboChainLength = 0;
+    gameState.flowMeter = 0;
+    gameState.flowMultiplier = 1;
+    gameState.nearMissStreak = 0;
+    gameState.speedStreak = 0;
+    gameState.speedBonus = 0;
+    gameState.particles = [];
+    gameState.celebrations = [];
+    gameState.screenShake = { x: 0, y: 0, intensity: 0, decay: 0.9 };
+    gameState.dangerLevel = 0;
+    gameState.deathCause = null;
+    gameState.deathAnimation = {
+        active: false, type: null, timer: 0, phase: 0,
+        playerX: 0, playerY: 0, beastX: 0, beastY: 0, chompCount: 0
+    };
+
+    // Lodge state reset
+    gameState.lodge = {
+        active: false, timeInside: 0, playerX: 0, playerY: 0,
+        currentLodge: null, warningShown: false
+    };
+
+    // Slalom-specific state
+    gameState.slalom = {
+        elapsed: 0,
+        penalties: 0,
+        gatesPassed: 0,
+        gatesMissed: 0,
+        totalGates: course.gates.length,
+        gates: course.gates,
+        gatePoles: course.gatePoles,
+        finished: false,
+        finishTime: 0,
+        bestTime: loadSlalomBestTime(),
+        courseLength: course.courseLength,
+        finishLineY: course.finishLineY,
+        waterStartY: course.waterStartY,
+        onWater: false,
+        finishAnimation: 0,
+        nextGateIndex: 0
+    };
+}
+
+function generateSlalomCourse() {
+    const halfSlope = TERRAIN.slopeWidth / 2 - 30;
+    const gates = [];
+    const gatePoles = [];
+    const obstacles = [];
+
+    let gateY = SLALOM.warmUpDistance;
+
+    for (let i = 0; i < SLALOM.gateCount; i++) {
+        const side = i % 2 === 0 ? 'left' : 'right';
+
+        // Gate center offset from slope center
+        const offsetRatio = 0.25 + seededRandom(i * 137 + 42) * 0.20;
+        const gateX = side === 'left' ? -halfSlope * offsetRatio : halfSlope * offsetRatio;
+
+        const halfGateWidth = SLALOM.gateWidth / 2;
+
+        const gate = {
+            y: gateY,
+            gateX: gateX,
+            side: side,
+            width: SLALOM.gateWidth,
+            poleLeftX: gateX - halfGateWidth,
+            poleRightX: gateX + halfGateWidth,
+            passed: false,
+            missed: false,
+            checked: false
+        };
+        gates.push(gate);
+
+        // Create pole obstacles for collision
+        gatePoles.push({
+            x: gate.poleLeftX,
+            y: gateY,
+            width: SLALOM.poleWidth,
+            height: SLALOM.poleHeight,
+            type: 'gate_pole',
+            gateSide: side,
+            gateIndex: i
+        });
+        gatePoles.push({
+            x: gate.poleRightX,
+            y: gateY,
+            width: SLALOM.poleWidth,
+            height: SLALOM.poleHeight,
+            type: 'gate_pole',
+            gateSide: side,
+            gateIndex: i
+        });
+
+        // Spacing for next gate
+        const spacing = SLALOM.gateSpacing + (seededRandom(i * 293 + 17) - 0.5) * SLALOM.gateSpacingVariance * 2;
+        gateY += spacing;
+    }
+
+    // Add sparse rocks between gates
+    const totalDistance = gateY + 200;
+    const rockCount = Math.floor(totalDistance / TERRAIN.chunkHeight * SLALOM.rocksPerChunk);
+    for (let r = 0; r < rockCount; r++) {
+        const rockSeed = r * 431 + 77;
+        const rockY = 300 + seededRandom(rockSeed) * (totalDistance - 600);
+        const rockX = (seededRandom(rockSeed + 1) - 0.5) * halfSlope * 1.4;
+
+        // Don't place rocks too close to gates
+        let tooClose = false;
+        for (const gate of gates) {
+            if (Math.abs(gate.y - rockY) < 120 && Math.abs(gate.gateX - rockX) < SLALOM.gateWidth) {
+                tooClose = true;
+                break;
+            }
+        }
+        if (!tooClose) {
+            obstacles.push({
+                x: rockX,
+                y: rockY,
+                width: 24 + seededRandom(rockSeed + 2) * 16,
+                height: 18 + seededRandom(rockSeed + 3) * 12,
+                type: 'rock'
+            });
+        }
+    }
+
+    const finishLineY = gateY + 200;
+    const waterStartY = finishLineY + 100;
+    const courseLength = waterStartY + SLALOM.waterZoneLength + SLALOM.crowdZoneLength;
+
+    return {
+        gates,
+        gatePoles,
+        obstacles,
+        finishLineY,
+        waterStartY,
+        courseLength
+    };
+}
+
+function updateSlalom(dt) {
+    const player = gameState.player;
+    const slalom = gameState.slalom;
+
+    if (slalom.finished) {
+        // Finish animation - decelerate on water
+        slalom.finishAnimation += dt;
+        if (slalom.onWater) {
+            player.speed = Math.max(0, player.speed - SLALOM.finishDeceleration * dt);
+            player.y += player.speed * dt;
+
+            // Spray particles on water
+            if (player.speed > 50 && Math.random() < 0.3) {
+                const screenPos = worldToScreen(player.x, player.y);
+                ParticlePool.spawn(
+                    screenPos.x + (Math.random() - 0.5) * 20,
+                    screenPos.y + 10,
+                    (Math.random() - 0.5) * 60,
+                    -30 - Math.random() * 40,
+                    3 + Math.random() * 3,
+                    'rgba(100, 180, 255, 0.7)',
+                    0.5 + Math.random() * 0.3,
+                    'spray'
+                );
+            }
+
+            updateVisualPosition(player, dt);
+            updateCamera(dt);
+        }
+
+        // Show results after delay
+        if (slalom.finishAnimation > 2.5 && document.getElementById('slalomResults').style.display === 'none') {
+            showSlalomResults();
+        }
+        return;
+    }
+
+    // Update stopwatch
+    slalom.elapsed += dt;
+
+    // Normal physics
+    updatePlayer(dt);
+    updateCamera(dt);
+
+    // Gate checking
+    updateSlalomGates();
+
+    // Collision with gate poles and rocks
+    checkSlalomCollisions();
+
+    // Check for water/finish
+    if (player.y >= slalom.waterStartY && !slalom.onWater) {
+        slalom.onWater = true;
+        slalom.finished = true;
+        slalom.finishTime = slalom.elapsed + slalom.penalties;
+
+        // Water entry celebration
+        addCelebration('FINISH!', COLORS.cyan);
+
+        // Big splash particles
+        const screenPos = worldToScreen(player.x, player.y);
+        for (let i = 0; i < 20; i++) {
+            const angle = (Math.random() * Math.PI * 2);
+            const speed = 40 + Math.random() * 80;
+            ParticlePool.spawn(
+                screenPos.x + (Math.random() - 0.5) * 30,
+                screenPos.y,
+                Math.cos(angle) * speed,
+                Math.sin(angle) * speed - 40,
+                2 + Math.random() * 4,
+                Math.random() < 0.5 ? 'rgba(100, 200, 255, 0.8)' : 'rgba(255, 255, 255, 0.9)',
+                0.6 + Math.random() * 0.4,
+                'spray'
+            );
+        }
+
+        gameState.screenShake = { x: 0, y: 0, intensity: 8, decay: 0.92 };
+    }
+
+    // Check if passed finish line (trigger visual)
+    if (player.y >= slalom.finishLineY && !slalom.finished) {
+        // Keep going to water
+    }
+
+    updateParticles(dt);
+    updateCelebrations(dt);
+    updateScreenShake(dt);
+}
+
+function updateSlalomGates() {
+    const player = gameState.player;
+    const slalom = gameState.slalom;
+
+    for (let i = slalom.nextGateIndex; i < slalom.gates.length; i++) {
+        const gate = slalom.gates[i];
+        if (gate.checked) continue;
+
+        // Player has passed this gate's Y position
+        if (player.y > gate.y + 30) {
+            gate.checked = true;
+            slalom.nextGateIndex = i + 1;
+
+            // Check if player passed on correct side
+            let passed = false;
+            if (gate.side === 'left') {
+                // Left gate: player should pass between the poles (through the gate opening)
+                passed = player.x > gate.poleLeftX && player.x < gate.poleRightX;
+            } else {
+                // Right gate: player should pass between the poles
+                passed = player.x > gate.poleLeftX && player.x < gate.poleRightX;
+            }
+
+            if (passed) {
+                gate.passed = true;
+                slalom.gatesPassed++;
+                addCelebration('GATE ' + slalom.gatesPassed + '/' + slalom.totalGates, '#00ff88', '');
+                gameState.screenShake = { x: 0, y: 0, intensity: 2, decay: 0.9 };
+            } else {
+                gate.missed = true;
+                slalom.gatesMissed++;
+                slalom.penalties += SLALOM.missedGatePenalty;
+                addCelebration('+' + SLALOM.missedGatePenalty.toFixed(1) + 's', COLORS.warning, 'GATE MISSED');
+                gameState.screenShake = { x: 0, y: 0, intensity: 5, decay: 0.9 };
+            }
+        } else {
+            break; // Gates are sorted by Y, so stop checking once we find one ahead
+        }
+    }
+}
+
+function checkSlalomCollisions() {
+    const player = gameState.player;
+    if (player.crashed || player.stunned > 0 || player.invincible > 0) return;
+
+    const pw = 20, ph = 20;
+
+    // Check gate poles
+    for (const pole of gameState.slalom.gatePoles) {
+        if (Math.abs(pole.y - player.y) > 50) continue;
+        if (Math.abs(pole.x - player.x) > 40) continue;
+
+        if (player.x - pw/2 < pole.x + pole.width/2 &&
+            player.x + pw/2 > pole.x - pole.width/2 &&
+            player.y - ph/2 < pole.y + pole.height/2 &&
+            player.y + ph/2 > pole.y - pole.height/2) {
+            triggerCrash(player);
+            gameState.slalom.penalties += SLALOM.poleCrashPenalty;
+            addCelebration('+' + SLALOM.poleCrashPenalty.toFixed(1) + 's', COLORS.danger, 'POLE HIT');
+            return;
+        }
+    }
+
+    // Check rocks
+    for (const obs of gameState.obstacles) {
+        if (Math.abs(obs.y - player.y) > 60) continue;
+        if (Math.abs(obs.x - player.x) > 40) continue;
+
+        if (player.x - pw/2 < obs.x + obs.width/2 &&
+            player.x + pw/2 > obs.x - obs.width/2 &&
+            player.y - ph/2 < obs.y + obs.height/2 &&
+            player.y + ph/2 > obs.y - obs.height/2) {
+            triggerCrash(player);
+            return;
+        }
+    }
+}
+
+// ============================================================================
+// SLALOM DRAWING
+// ============================================================================
+
+function drawSlalom() {
+    drawBackground();
+    drawTerrain();
+
+    // Draw finish zone if in view
+    drawSlalomFinishZone();
+
+    // Draw gate poles and flags
+    drawSlalomGates();
+
+    // Draw obstacles (rocks)
+    drawObstacles();
+
+    // Draw player
+    drawPlayer();
+
+    // Draw particles
+    drawParticles();
+
+    // Draw celebrations
+    drawCelebrations();
+
+    // Draw speed lines
+    if (gameState.player.speed > 400) {
+        drawSpeedLines();
+    }
+
+    // Draw HUD
+    drawSlalomHUD();
+}
+
+function drawSlalomGates() {
+    const camera = gameState.camera;
+    const slalom = gameState.slalom;
+    const time = gameState.animationTime;
+
+    for (let i = 0; i < slalom.gates.length; i++) {
+        const gate = slalom.gates[i];
+
+        // Skip if off screen
+        if (gate.y < camera.y - 80 || gate.y > camera.y + CANVAS_HEIGHT + 80) continue;
+
+        const leftScreen = worldToScreen(gate.poleLeftX, gate.y);
+        const rightScreen = worldToScreen(gate.poleRightX, gate.y);
+
+        // Gate colors
+        const isRed = gate.side === 'left';
+        const poleColor = gate.checked ? (gate.passed ? 'rgba(0, 255, 136, 0.4)' : 'rgba(255, 80, 80, 0.4)') :
+                          (isRed ? '#e53935' : '#1e88e5');
+        const flagColor = gate.checked ? (gate.passed ? 'rgba(0, 255, 136, 0.3)' : 'rgba(255, 80, 80, 0.3)') :
+                          (isRed ? '#ff6659' : '#64b5f6');
+
+        const alpha = gate.checked ? 0.5 : 1.0;
+        ctx.globalAlpha = alpha;
+
+        // Draw connecting line between poles
+        ctx.strokeStyle = gate.checked ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(leftScreen.x, leftScreen.y);
+        ctx.lineTo(rightScreen.x, rightScreen.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Draw left pole
+        drawSlalomPole(leftScreen.x, leftScreen.y, poleColor, flagColor, isRed, time);
+
+        // Draw right pole
+        drawSlalomPole(rightScreen.x, rightScreen.y, poleColor, flagColor, isRed, time);
+
+        // Draw gate number
+        if (!gate.checked) {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+            ctx.font = '8px "Press Start 2P", monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText((i + 1).toString(), (leftScreen.x + rightScreen.x) / 2, leftScreen.y - 30);
+        }
+
+        // Draw pass/miss indicator
+        if (gate.checked) {
+            const centerX = (leftScreen.x + rightScreen.x) / 2;
+            ctx.font = '14px "Press Start 2P", monospace';
+            ctx.textAlign = 'center';
+            if (gate.passed) {
+                ctx.fillStyle = 'rgba(0, 255, 136, 0.6)';
+                ctx.fillText('✓', centerX, leftScreen.y - 5);
+            } else {
+                ctx.fillStyle = 'rgba(255, 80, 80, 0.6)';
+                ctx.fillText('✗', centerX, leftScreen.y - 5);
+            }
+        }
+
+        ctx.globalAlpha = 1.0;
+    }
+
+    // Draw next gate direction indicator
+    drawNextGateIndicator();
+}
+
+function drawSlalomPole(x, y, poleColor, flagColor, isRed, time) {
+    // Pole shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+    ctx.beginPath();
+    ctx.ellipse(x + 4, y + 5, 6, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Pole shaft
+    ctx.fillStyle = poleColor;
+    ctx.fillRect(x - 2, y - SLALOM.poleHeight, 4, SLALOM.poleHeight);
+
+    // Flag at top (triangular, waving)
+    const wave = Math.sin(time * 4 + x * 0.1) * 3;
+    ctx.fillStyle = flagColor;
+    ctx.beginPath();
+    ctx.moveTo(x + 2, y - SLALOM.poleHeight);
+    ctx.lineTo(x + 18 + wave, y - SLALOM.poleHeight + 6);
+    ctx.lineTo(x + 2, y - SLALOM.poleHeight + 12);
+    ctx.closePath();
+    ctx.fill();
+
+    // Flag border
+    ctx.strokeStyle = poleColor;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+}
+
+function drawNextGateIndicator() {
+    const slalom = gameState.slalom;
+    if (slalom.nextGateIndex >= slalom.gates.length || slalom.finished) return;
+
+    const nextGate = slalom.gates[slalom.nextGateIndex];
+    const player = gameState.player;
+    const time = gameState.animationTime;
+
+    // Arrow at top of screen pointing toward next gate
+    const gateScreenPos = worldToScreen(nextGate.gateX, nextGate.y);
+    const arrowX = Math.max(30, Math.min(CANVAS_WIDTH - 30, gateScreenPos.x));
+
+    // Only show arrow if gate is off-screen ahead
+    if (gateScreenPos.y < -20) {
+        const pulse = 0.7 + Math.sin(time * 6) * 0.3;
+        const isRed = nextGate.side === 'left';
+        ctx.fillStyle = isRed ? `rgba(229, 57, 53, ${pulse})` : `rgba(30, 136, 229, ${pulse})`;
+
+        // Down-pointing arrow
+        ctx.beginPath();
+        ctx.moveTo(arrowX, 20);
+        ctx.lineTo(arrowX - 10, 8);
+        ctx.lineTo(arrowX + 10, 8);
+        ctx.closePath();
+        ctx.fill();
+
+        // Gate number
+        ctx.fillStyle = `rgba(255, 255, 255, ${pulse})`;
+        ctx.font = '7px "Press Start 2P", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('G' + (slalom.nextGateIndex + 1), arrowX, 5);
+    }
+}
+
+function drawSlalomFinishZone() {
+    const camera = gameState.camera;
+    const slalom = gameState.slalom;
+
+    // Finish line
+    const finishScreen = worldToScreen(0, slalom.finishLineY);
+    if (finishScreen.y > -20 && finishScreen.y < CANVAS_HEIGHT + 20) {
+        const halfSlope = TERRAIN.slopeWidth / 2;
+        const leftX = CANVAS_WIDTH / 2 - halfSlope;
+        const rightX = CANVAS_WIDTH / 2 + halfSlope;
+
+        // Checkered finish line
+        const checkerSize = 10;
+        const numChecks = Math.ceil((rightX - leftX) / checkerSize);
+        for (let c = 0; c < numChecks; c++) {
+            ctx.fillStyle = c % 2 === 0 ? '#fff' : '#222';
+            ctx.fillRect(leftX + c * checkerSize, finishScreen.y - 3, checkerSize, 6);
+        }
+
+        // "FINISH" text
+        ctx.fillStyle = '#fff';
+        ctx.font = '10px "Press Start 2P", monospace';
+        ctx.textAlign = 'center';
+        ctx.shadowColor = 'rgba(0, 255, 255, 0.8)';
+        ctx.shadowBlur = getShadowBlur(8);
+        ctx.fillText('FINISH', CANVAS_WIDTH / 2, finishScreen.y - 12);
+        ctx.shadowBlur = 0;
+    }
+
+    // Water zone
+    const waterScreenY = worldToScreen(0, slalom.waterStartY).y;
+    const waterEndScreenY = worldToScreen(0, slalom.waterStartY + SLALOM.waterZoneLength).y;
+
+    if (waterEndScreenY > 0 && waterScreenY < CANVAS_HEIGHT) {
+        const drawStartY = Math.max(0, waterScreenY);
+        const drawEndY = Math.min(CANVAS_HEIGHT, waterEndScreenY);
+        const time = gameState.animationTime;
+
+        // Water gradient
+        const waterGrad = ctx.createLinearGradient(0, drawStartY, 0, drawEndY);
+        waterGrad.addColorStop(0, 'rgba(20, 120, 200, 0.7)');
+        waterGrad.addColorStop(0.3, 'rgba(15, 90, 180, 0.8)');
+        waterGrad.addColorStop(1, 'rgba(10, 60, 140, 0.9)');
+        ctx.fillStyle = waterGrad;
+        ctx.fillRect(0, drawStartY, CANVAS_WIDTH, drawEndY - drawStartY);
+
+        // Animated wave lines
+        ctx.strokeStyle = 'rgba(100, 200, 255, 0.3)';
+        ctx.lineWidth = 1;
+        for (let wy = drawStartY; wy < drawEndY; wy += 20) {
+            ctx.beginPath();
+            for (let wx = 0; wx < CANVAS_WIDTH; wx += 5) {
+                const waveY = wy + Math.sin(wx * 0.03 + time * 2 + wy * 0.01) * 3;
+                if (wx === 0) ctx.moveTo(wx, waveY);
+                else ctx.lineTo(wx, waveY);
+            }
+            ctx.stroke();
+        }
+
+        // Water shoreline
+        ctx.strokeStyle = 'rgba(200, 230, 255, 0.5)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (let wx = 0; wx < CANVAS_WIDTH; wx += 4) {
+            const shoreY = waterScreenY + Math.sin(wx * 0.05 + time * 3) * 4;
+            if (wx === 0) ctx.moveTo(wx, shoreY);
+            else ctx.lineTo(wx, shoreY);
+        }
+        ctx.stroke();
+    }
+
+    // Crowd/lodge zone
+    const crowdStartY = slalom.waterStartY + SLALOM.waterZoneLength;
+    const crowdScreenY = worldToScreen(0, crowdStartY).y;
+    const crowdEndScreenY = worldToScreen(0, crowdStartY + SLALOM.crowdZoneLength).y;
+
+    if (crowdEndScreenY > 0 && crowdScreenY < CANVAS_HEIGHT) {
+        const drawStartY = Math.max(0, crowdScreenY);
+        const drawEndY = Math.min(CANVAS_HEIGHT, crowdEndScreenY);
+        const time = gameState.animationTime;
+
+        // Lodge deck background
+        ctx.fillStyle = '#5d4037';
+        ctx.fillRect(0, drawStartY, CANVAS_WIDTH, drawEndY - drawStartY);
+
+        // Deck planks
+        ctx.strokeStyle = '#4e342e';
+        ctx.lineWidth = 1;
+        for (let py = drawStartY; py < drawEndY; py += 12) {
+            ctx.beginPath();
+            ctx.moveTo(0, py);
+            ctx.lineTo(CANVAS_WIDTH, py);
+            ctx.stroke();
+        }
+
+        // Railing
+        ctx.fillStyle = '#795548';
+        ctx.fillRect(0, drawStartY, CANVAS_WIDTH, 6);
+        // Railing posts
+        for (let px = 20; px < CANVAS_WIDTH; px += 50) {
+            ctx.fillRect(px, drawStartY - 20, 6, 26);
+        }
+
+        // Crowd - small pixel figures
+        const crowdCount = Math.floor(CANVAS_WIDTH / 40);
+        const cheering = slalom.finished;
+        for (let c = 0; c < crowdCount; c++) {
+            const cx = 20 + c * 40 + Math.sin(c * 2.7) * 10;
+            const bobY = cheering ? Math.sin(time * 8 + c * 1.5) * 6 : 0;
+            const armY = cheering ? Math.sin(time * 6 + c * 2) * 8 : 0;
+            const baseY = drawStartY + 20;
+
+            // Body
+            const bodyColors = ['#e53935', '#1e88e5', '#43a047', '#fb8c00', '#8e24aa', '#00acc1'];
+            ctx.fillStyle = bodyColors[c % bodyColors.length];
+            ctx.fillRect(cx - 4, baseY - bobY - 12, 8, 12);
+
+            // Head
+            ctx.fillStyle = '#d4a574';
+            ctx.fillRect(cx - 3, baseY - bobY - 18, 6, 6);
+
+            // Arms (raised when cheering)
+            if (cheering) {
+                ctx.fillRect(cx - 8, baseY - bobY - 16 - armY, 4, 2);
+                ctx.fillRect(cx + 4, baseY - bobY - 16 - armY, 4, 2);
+            }
+        }
+
+        // Confetti when finished
+        if (cheering && slalom.finishAnimation > 0.5) {
+            if (Math.random() < 0.3) {
+                const confettiColors = ['#ff0', '#f0f', '#0ff', '#f00', '#0f0', '#00f'];
+                ParticlePool.spawn(
+                    Math.random() * CANVAS_WIDTH,
+                    crowdScreenY - 20,
+                    (Math.random() - 0.5) * 40,
+                    20 + Math.random() * 30,
+                    2 + Math.random() * 3,
+                    confettiColors[Math.floor(Math.random() * confettiColors.length)],
+                    1.5 + Math.random(),
+                    'confetti'
+                );
+            }
+        }
+    }
+}
+
+function drawSlalomHUD() {
+    const slalom = gameState.slalom;
+    const time = slalom.finished ? slalom.finishTime : slalom.elapsed + slalom.penalties;
+
+    // Stopwatch - top center
+    const minutes = Math.floor(time / 60);
+    const seconds = Math.floor(time % 60);
+    const tenths = Math.floor((time * 10) % 10);
+    const timeStr = minutes + ':' + seconds.toString().padStart(2, '0') + '.' + tenths;
+
+    ctx.textAlign = 'center';
+    ctx.font = '16px "Press Start 2P", monospace';
+    ctx.fillStyle = '#fff';
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+    ctx.shadowBlur = getShadowBlur(4);
+    ctx.fillText(timeStr, CANVAS_WIDTH / 2, 28);
+
+    // Penalty display below stopwatch
+    if (slalom.penalties > 0) {
+        ctx.font = '9px "Press Start 2P", monospace';
+        ctx.fillStyle = COLORS.warning;
+        ctx.fillText('(+' + slalom.penalties.toFixed(1) + 's)', CANVAS_WIDTH / 2, 44);
+    }
+
+    // Gate counter - top right
+    ctx.textAlign = 'right';
+    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.fillStyle = COLORS.cyan;
+    ctx.fillText('GATES', CANVAS_WIDTH - 15, 16);
+    ctx.fillStyle = '#fff';
+    ctx.font = '12px "Press Start 2P", monospace';
+    ctx.fillText(slalom.gatesPassed + '/' + slalom.totalGates, CANVAS_WIDTH - 15, 32);
+
+    // Speed indicator - top left
+    ctx.textAlign = 'left';
+    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.fillText('SPEED', 15, 16);
+    const speedRatio = Math.min(1, gameState.player.speed / PHYSICS.maxSpeed);
+    const barWidth = 60;
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    ctx.fillRect(15, 20, barWidth, 6);
+    ctx.fillStyle = speedRatio > 0.7 ? COLORS.cyan : '#fff';
+    ctx.fillRect(15, 20, barWidth * speedRatio, 6);
+
+    ctx.shadowBlur = 0;
+    ctx.textAlign = 'left';
+}
+
+// ============================================================================
+// SLALOM RESULTS
+// ============================================================================
+
+function formatSlalomTime(t) {
+    const minutes = Math.floor(t / 60);
+    const seconds = Math.floor(t % 60);
+    const tenths = Math.floor((t * 10) % 10);
+    return minutes + ':' + seconds.toString().padStart(2, '0') + '.' + tenths;
+}
+
+function showSlalomResults() {
+    const slalom = gameState.slalom;
+    gameState.screen = 'slalomResults';
+
+    document.getElementById('slalomTime').textContent = formatSlalomTime(slalom.elapsed);
+    document.getElementById('slalomGates').textContent = slalom.gatesPassed + '/' + slalom.totalGates;
+    document.getElementById('slalomPenalties').textContent = '+' + slalom.penalties.toFixed(1) + 's';
+    document.getElementById('slalomFinal').textContent = formatSlalomTime(slalom.finishTime);
+
+    // Check for new best
+    const isNewBest = slalom.bestTime === null || slalom.finishTime < slalom.bestTime;
+    if (isNewBest) {
+        slalom.bestTime = slalom.finishTime;
+        saveSlalomBestTime(slalom.finishTime);
+    }
+
+    document.getElementById('slalomBest').textContent = slalom.bestTime !== null ? formatSlalomTime(slalom.bestTime) : '--:--.-';
+    document.getElementById('slalomNewBest').style.display = isNewBest ? 'block' : 'none';
+    document.getElementById('slalomResults').style.display = 'flex';
+}
+
+function slalomBackToMenu() {
+    document.getElementById('slalomResults').style.display = 'none';
+    gameState.screen = 'title';
+    gameState.mode = 'og';
+    showStartScreen();
+    musicManager.stop();
+    selectedMode = 'slalom'; // Keep slalom selected for quick replay
+    selectMode('slalom');
+}
+
+function loadSlalomBestTime() {
+    try {
+        const val = localStorage.getItem('shredordead_slalom_best');
+        return val !== null ? parseFloat(val) : null;
+    } catch (e) {
+        return null;
+    }
+}
+
+function saveSlalomBestTime(time) {
+    try {
+        localStorage.setItem('shredordead_slalom_best', time.toString());
+    } catch (e) {}
 }
 
 function init() {
