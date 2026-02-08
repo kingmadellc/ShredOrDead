@@ -977,6 +977,8 @@ let gameState = {
 
     dangerLevel: 0,
     deathCause: null,
+    _gameOverButtons: null,
+    _gameOverHover: null,
     highScore: 0,
 
     // Death animation state (for beast chomp sequence)
@@ -1079,6 +1081,10 @@ function setupInput() {
             case 'Escape':
                 if (gameState.screen === 'playing' || gameState.screen === 'lodge') {
                     togglePause();
+                } else if (gameState.screen === 'gameOver') {
+                    gameState.screen = 'title';
+                    showStartScreen();
+                    musicManager.stop();
                 } else if (document.fullscreenElement) {
                     document.exitFullscreen();
                 }
@@ -1263,9 +1269,23 @@ function handleTouchEnd(e) {
     );
 
     if (duration < TOUCH_THRESHOLDS.tapMaxDuration && distance < TOUCH_THRESHOLDS.tapMaxDistance) {
-        // Fire momentary space input for tap
-        input.space = true;
-        setTimeout(() => { input.space = false; }, 100);
+        // On game over screen, route taps to button hit testing
+        if (gameState.screen === 'gameOver') {
+            const pos = screenToCanvas(touchState.currentX, touchState.currentY);
+            const action = hitTestGameOverButton(pos.x, pos.y);
+            if (action === 'restart') {
+                startSelectedMode();
+            } else if (action === 'menu') {
+                gameState.screen = 'title';
+                showStartScreen();
+                musicManager.stop();
+            }
+            // Don't fire space - buttons handle it
+        } else {
+            // Fire momentary space input for tap
+            input.space = true;
+            setTimeout(() => { input.space = false; }, 100);
+        }
     }
 
     // Reset touch state
@@ -1277,6 +1297,56 @@ function handleTouchEnd(e) {
     input.down = false;
     touchInput.horizontal = 0;
     touchInput.vertical = 0;
+}
+
+// Convert screen coordinates to canvas coordinates
+function screenToCanvas(clientX, clientY) {
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    return {
+        x: (clientX - rect.left) * (canvas.width / rect.width),
+        y: (clientY - rect.top) * (canvas.height / rect.height)
+    };
+}
+
+// Check if a point hits any game over button
+function hitTestGameOverButton(canvasX, canvasY) {
+    const buttons = gameState._gameOverButtons;
+    if (!buttons) return null;
+    for (let i = 0; i < buttons.length; i++) {
+        const b = buttons[i];
+        if (canvasX >= b.x && canvasX <= b.x + b.w && canvasY >= b.y && canvasY <= b.y + b.h) {
+            return b.action;
+        }
+    }
+    return null;
+}
+
+function setupCanvasInteraction() {
+    // Click/tap handler for game over buttons
+    canvas.addEventListener('click', (e) => {
+        if (gameState.screen !== 'gameOver') return;
+        const pos = screenToCanvas(e.clientX, e.clientY);
+        const action = hitTestGameOverButton(pos.x, pos.y);
+        if (action === 'restart') {
+            startSelectedMode();
+        } else if (action === 'menu') {
+            gameState.screen = 'title';
+            showStartScreen();
+            musicManager.stop();
+        }
+    });
+
+    // Mouse move for hover effects
+    canvas.addEventListener('mousemove', (e) => {
+        if (gameState.screen !== 'gameOver') {
+            gameState._gameOverHover = null;
+            return;
+        }
+        const pos = screenToCanvas(e.clientX, e.clientY);
+        gameState._gameOverHover = hitTestGameOverButton(pos.x, pos.y);
+        canvas.style.cursor = gameState._gameOverHover ? 'pointer' : 'default';
+    });
 }
 
 function getInputDirection() {
@@ -6349,59 +6419,136 @@ function drawTitleScreen() {
 
 function drawGameOverScreen() {
     // Darken background
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    // Death message
+    const cx = CANVAS_WIDTH / 2;
+
+    // Death message - large and prominent
     let deathText = 'WRECKED!';
     let deathColor = COLORS.danger;
     if (gameState.deathCause === 'fog') {
-        deathText = 'BURIED BY THE AVALANCHE';
+        deathText = 'BURIED BY THE';
         deathColor = '#c8daf0';
     } else if (gameState.deathCause === 'beast') {
-        deathText = 'CAUGHT BY THE BEAST';
+        deathText = 'CAUGHT BY THE';
         deathColor = COLORS.magenta;
     }
 
-    ctx.font = 'bold 18px "Press Start 2P", monospace';
+    // Main death text
+    ctx.font = 'bold 28px "Press Start 2P", monospace';
     ctx.shadowColor = deathColor;
-    ctx.shadowBlur = 3;
+    ctx.shadowBlur = 12;
     ctx.fillStyle = deathColor;
-    ctx.fillText(deathText, CANVAS_WIDTH/2, CANVAS_HEIGHT * 0.3);
+    if (gameState.deathCause === 'fog' || gameState.deathCause === 'beast') {
+        ctx.fillText(deathText, cx, CANVAS_HEIGHT * 0.2);
+        // Second line for the subject
+        const subjectText = gameState.deathCause === 'fog' ? 'AVALANCHE' : 'BEAST';
+        ctx.font = 'bold 36px "Press Start 2P", monospace';
+        ctx.fillText(subjectText, cx, CANVAS_HEIGHT * 0.27);
+    } else {
+        ctx.fillText(deathText, cx, CANVAS_HEIGHT * 0.23);
+    }
     ctx.shadowBlur = 0;
 
-    // Stats
-    ctx.font = '12px "Press Start 2P", monospace';
+    // Divider line
+    ctx.strokeStyle = deathColor;
+    ctx.globalAlpha = 0.3;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx - 140, CANVAS_HEIGHT * 0.33);
+    ctx.lineTo(cx + 140, CANVAS_HEIGHT * 0.33);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    // Stats - larger font, cleaner layout
+    const statsY = CANVAS_HEIGHT * 0.40;
+    const statsSpacing = CANVAS_HEIGHT * 0.08;
+
+    ctx.font = '16px "Press Start 2P", monospace';
+
+    // Distance
     ctx.fillStyle = COLORS.cyan;
-    ctx.fillText(`DISTANCE: ${gameState.distance}m`, CANVAS_WIDTH/2, CANVAS_HEIGHT * 0.45);
+    ctx.shadowColor = COLORS.cyan;
+    ctx.shadowBlur = 4;
+    ctx.fillText(`DISTANCE  ${gameState.distance}m`, cx, statsY);
+    ctx.shadowBlur = 0;
+
+    // Score
     ctx.fillStyle = COLORS.magenta;
-    ctx.fillText(`SCORE: ${gameState.score}`, CANVAS_WIDTH/2, CANVAS_HEIGHT * 0.52);
+    ctx.shadowColor = COLORS.magenta;
+    ctx.shadowBlur = 4;
+    ctx.fillText(`SCORE  ${gameState.score}`, cx, statsY + statsSpacing);
+    ctx.shadowBlur = 0;
+
+    // Max combo
     ctx.fillStyle = COLORS.gold;
-    ctx.fillText(`MAX COMBO: x${gameState.maxCombo.toFixed(1)}`, CANVAS_WIDTH/2, CANVAS_HEIGHT * 0.59);
+    ctx.shadowColor = COLORS.gold;
+    ctx.shadowBlur = 4;
+    ctx.fillText(`MAX COMBO  x${gameState.maxCombo.toFixed(1)}`, cx, statsY + statsSpacing * 2);
+    ctx.shadowBlur = 0;
 
     // New high score
     if (gameState.score > gameState.highScore) {
         const pulse = Math.sin(gameState.animationTime * 5) * 0.3 + 0.7;
         ctx.globalAlpha = pulse;
-        ctx.font = '14px "Press Start 2P", monospace';
+        ctx.font = 'bold 20px "Press Start 2P", monospace';
         ctx.fillStyle = COLORS.gold;
         ctx.shadowColor = COLORS.gold;
-        ctx.shadowBlur = 2;
-        ctx.fillText('NEW HIGH SCORE!', CANVAS_WIDTH/2, CANVAS_HEIGHT * 0.68);
+        ctx.shadowBlur = 10;
+        ctx.fillText('NEW HIGH SCORE!', cx, statsY + statsSpacing * 3);
         ctx.shadowBlur = 0;
         ctx.globalAlpha = 1;
     }
 
-    // Restart prompt
-    const blink = Math.floor(gameState.animationTime * 2) % 2 === 0;
-    if (blink) {
-        ctx.font = '12px "Press Start 2P", monospace';
-        ctx.fillStyle = '#fff';
-        ctx.fillText('PRESS SPACE TO RESTART', CANVAS_WIDTH/2, CANVAS_HEIGHT * 0.82);
-    }
+    // Buttons - drawn on canvas for both desktop and mobile
+    const btnW = 280;
+    const btnH = 52;
+    const btnY = CANVAS_HEIGHT * 0.75;
+    const btnSpacing = 64;
+
+    // Store button rects for click/tap detection
+    gameState._gameOverButtons = [
+        { x: cx - btnW/2, y: btnY - btnH/2, w: btnW, h: btnH, action: 'restart' },
+        { x: cx - btnW/2, y: btnY + btnSpacing - btnH/2, w: btnW, h: btnH, action: 'menu' }
+    ];
+
+    // Retry button
+    const retryHover = gameState._gameOverHover === 'restart';
+    ctx.fillStyle = retryHover ? 'rgba(0, 255, 255, 0.25)' : 'rgba(0, 255, 255, 0.12)';
+    ctx.strokeStyle = COLORS.cyan;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(cx - btnW/2, btnY - btnH/2, btnW, btnH, 6);
+    ctx.fill();
+    ctx.stroke();
+    ctx.font = 'bold 18px "Press Start 2P", monospace';
+    ctx.fillStyle = COLORS.cyan;
+    ctx.shadowColor = COLORS.cyan;
+    ctx.shadowBlur = retryHover ? 8 : 3;
+    ctx.fillText('RETRY', cx, btnY);
+    ctx.shadowBlur = 0;
+
+    // Menu button
+    const menuHover = gameState._gameOverHover === 'menu';
+    ctx.fillStyle = menuHover ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255, 255, 255, 0.06)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(cx - btnW/2, btnY + btnSpacing - btnH/2, btnW, btnH, 6);
+    ctx.fill();
+    ctx.stroke();
+    ctx.font = '16px "Press Start 2P", monospace';
+    ctx.fillStyle = '#ccc';
+    ctx.fillText('MAIN MENU', cx, btnY + btnSpacing);
+
+    // Keyboard hint (smaller, subtle)
+    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.fillText('SPACE to retry \u00B7 ESC for menu', cx, CANVAS_HEIGHT * 0.95);
 }
 
 // ===================
@@ -6411,6 +6558,9 @@ function drawGameOverScreen() {
 function startGame() {
     // Hide the HTML start screen
     hideStartScreen();
+
+    // Reset cursor from game over hover
+    if (canvas) canvas.style.cursor = 'default';
 
     // Ensure canvas is visible and properly sized for current resolution
     if (canvas) {
@@ -6792,50 +6942,18 @@ function drawDeathAnimation() {
         ctx.fill();
 
     } else if (anim.phase === 4) {
-        // Phase 4: Fade - satisfied dark beast fading to black
+        // Phase 4: Fade - satisfied beast fading to black (reuse full head)
         const fadeProgress = easeInOutQuad(Math.min(1, anim.timer / 0.4));
         ctx.globalAlpha = 1 - fadeProgress;
 
-        // Dark beast body silhouette
-        ctx.fillStyle = '#1a1a3a';
-        ctx.beginPath();
-        ctx.moveTo(-18, -48);
-        ctx.quadraticCurveTo(-28, -44, -32, -30);
-        ctx.quadraticCurveTo(-36, -16, -30, -2);
-        ctx.quadraticCurveTo(-24, 8, -14, 12);
-        ctx.quadraticCurveTo(0, 16, 14, 12);
-        ctx.quadraticCurveTo(24, 8, 30, -2);
-        ctx.quadraticCurveTo(36, -16, 32, -30);
-        ctx.quadraticCurveTo(28, -44, 18, -48);
-        ctx.quadraticCurveTo(0, -54, -18, -48);
-        ctx.fill();
+        // Draw the full beast head with mouth mostly closed, satisfied expression
+        drawBeastHead(ctx, 0.05, true, time);
 
-        // Happy closed eyes (satisfied) - dimming cyan
-        ctx.strokeStyle = COLORS.cyan;
-        ctx.lineWidth = 2.5;
-        ctx.shadowColor = COLORS.cyan;
-        ctx.shadowBlur = 4;
-        ctx.beginPath();
-        ctx.arc(-12, -38, 5, Math.PI * 0.15, Math.PI * 0.85);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.arc(12, -38, 5, Math.PI * 0.15, Math.PI * 0.85);
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-
-        // Content smile - visible against dark fur
-        ctx.strokeStyle = '#4a4a6a';
-        ctx.lineWidth = 2.5;
-        ctx.beginPath();
-        ctx.arc(0, -12, 10, Math.PI * 0.15, Math.PI * 0.85);
-        ctx.stroke();
-
-        // Belly pat (dark paw on stomach with claw detail)
+        // Belly pat (dark paw below head with claw detail)
         ctx.fillStyle = '#2a2a4a';
         ctx.beginPath();
         ctx.ellipse(8, 20 - fadeProgress * 10, 10, 8, 0.3, 0, Math.PI * 2);
         ctx.fill();
-        // Claw strokes on paw
         ctx.strokeStyle = '#3a3030';
         ctx.lineWidth = 1.5;
         const pawY = 20 - fadeProgress * 10;
@@ -7418,9 +7536,8 @@ function update(dt) {
         if (gameState.screen === 'title') {
             startSelectedMode();
         } else if (gameState.screen === 'gameOver') {
-            gameState.screen = 'title';
-            showStartScreen();
-            musicManager.stop();
+            // Retry - restart same game mode directly
+            startSelectedMode();
         } else if (gameState.screen === 'slalomResults') {
             // Space on slalom results = race again
             document.getElementById('slalomResults').style.display = 'none';
@@ -8443,6 +8560,7 @@ function init() {
 
     setupInput();
     setupTouchInput();
+    setupCanvasInteraction();
     setupGamepad();
     loadHighScore();
     loadStance();
