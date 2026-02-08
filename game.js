@@ -588,7 +588,7 @@ const AUTO_TRICKS = [
 const CHASE = {
     fogStartOffset: -300,       // Starts closer
     fogBaseSpeed: 150,          // Faster
-    fogAcceleration: 1.5,       // Was 1.2 - fog catches up faster
+    fogAcceleration: 1.5,       // Base acceleration (ramps up over time)
     beastSpeed: 1.4,            // 40% faster than player!
     beastLungeInterval: 1.5,    // More frequent lunges
     beastLungeVariance: 0.5,    // Less random delay
@@ -605,7 +605,12 @@ const CHASE = {
     // Avalanche visual config
     avalancheCloudCount: 10,    // Number of billowing snow clouds
     avalancheDebrisCount: 18,   // Snow chunks ahead of wall
-    avalancheSprayCount: 25     // Fine powder particles
+    avalancheSprayCount: 25,    // Fine powder particles
+    // Game duration / fog pressure
+    maxGameTime: 90,            // Base max game time in seconds before fog guarantees death
+    lodgeTimeBonus: 30,         // Extra seconds added per lodge visit
+    fogRampStart: 30,           // Seconds before fog starts ramping aggressively
+    fogRampAccelMultiplier: 8   // How much faster fog accelerates in final phase
 };
 
 // Ski Lodge configuration - rare safe haven from the beast
@@ -937,7 +942,11 @@ let gameState = {
         totalCrashes: 0,        // Total crashes this game session
         missCount: 0,           // Consecutive lunge misses
         slowSpeedTimer: 0,      // Time spent going slow
-        beastRage: 0            // Increases aggression (0-1)
+        beastRage: 0,           // Increases aggression (0-1)
+        // Game duration tracking
+        gameElapsed: 0,         // Total seconds of active gameplay
+        lodgeVisits: 0,         // Number of lodge visits (extends max time)
+        maxTime: CHASE.maxGameTime  // Current max time (extended by lodges)
     },
 
     // Lodge interior state
@@ -3303,6 +3312,15 @@ function exitLodge() {
     player.speed = 200;
     player.invincible = LODGE.exitInvincibility;
 
+    // Lodge visit extends game time and pushes fog back
+    const chase = gameState.chase;
+    chase.lodgeVisits++;
+    chase.maxTime += CHASE.lodgeTimeBonus;
+    // Push fog back significantly — gives breathing room
+    chase.fogY -= 800;
+    // Reduce fog speed back toward base (partial reset)
+    chase.fogSpeed = Math.max(CHASE.fogBaseSpeed, chase.fogSpeed * 0.5);
+
     // Reset lodge state
     gameState.lodge.active = false;
     gameState.lodge.currentLodge = null;
@@ -3312,6 +3330,7 @@ function exitLodge() {
 
     // Show exit message
     addCelebration('BACK TO THE SLOPE!', COLORS.gold);
+    addCelebration('+' + CHASE.lodgeTimeBonus + 's TIME!', COLORS.cyan);
 }
 
 // ===================
@@ -3322,8 +3341,22 @@ function updateChase(dt) {
     const chase = gameState.chase;
     const player = gameState.player;
 
-    // Fog accelerates over time
-    chase.fogSpeed += CHASE.fogAcceleration * dt;
+    // Track elapsed game time
+    chase.gameElapsed += dt;
+
+    // Calculate time pressure: how close to max time
+    const timeRatio = chase.gameElapsed / chase.maxTime; // 0 to 1+
+
+    // Fog acceleration ramps up dramatically as game progresses
+    // Early game (0-30s): gentle base acceleration
+    // Mid game (30-60s): acceleration increases
+    // Late game (60-90s): fog becomes inescapable
+    let accelMod = 1;
+    if (chase.gameElapsed > CHASE.fogRampStart) {
+        const rampProgress = (chase.gameElapsed - CHASE.fogRampStart) / (chase.maxTime - CHASE.fogRampStart);
+        accelMod = 1 + rampProgress * rampProgress * CHASE.fogRampAccelMultiplier;
+    }
+    chase.fogSpeed += CHASE.fogAcceleration * accelMod * dt;
 
     // Fog catches up if player is slow
     const speedDiff = chase.fogSpeed - player.speed;
@@ -3331,8 +3364,17 @@ function updateChase(dt) {
         chase.fogY += speedDiff * dt;
     }
 
-    // Fog always advances slowly
-    chase.fogY += chase.fogSpeed * 0.15 * dt;
+    // Fog always advances — rate increases with time pressure
+    // Early: 0.15x fog speed. Late game: scales up to 1.0x
+    const advanceRate = 0.15 + Math.max(0, timeRatio - 0.3) * 1.2;
+    chase.fogY += chase.fogSpeed * advanceRate * dt;
+
+    // Past max time: fog closes in rapidly regardless of player speed
+    if (chase.gameElapsed > chase.maxTime) {
+        const overtime = chase.gameElapsed - chase.maxTime;
+        // Aggressive catch-up: 200 px/s increasing by 100 px/s per second over limit
+        chase.fogY += (200 + overtime * 100) * dt;
+    }
 
     // Check if fog caught player
     if (chase.fogY >= player.y - 30) {
@@ -3340,7 +3382,7 @@ function updateChase(dt) {
         return;
     }
 
-    // Calculate danger level
+    // Calculate danger level (visual feedback)
     const fogDistance = player.y - chase.fogY;
     gameState.dangerLevel = clamp(1 - fogDistance / 400, 0, 1);
 
@@ -6660,7 +6702,10 @@ function startGame() {
         totalCrashes: 0,
         missCount: 0,
         slowSpeedTimer: 0,
-        beastRage: 0
+        beastRage: 0,
+        gameElapsed: 0,
+        lodgeVisits: 0,
+        maxTime: CHASE.maxGameTime
     };
 
     gameState.score = 0;
@@ -6697,6 +6742,11 @@ function startGame() {
 
     gameState.dangerLevel = 0;
     gameState.deathCause = null;
+    gameState.deathAnimation = {
+        active: false, type: null, timer: 0, phase: 0,
+        playerX: 0, playerY: 0, beastX: 0, beastY: 0,
+        chompCount: 0, completed: false
+    };
 }
 
 function triggerGameOver(cause) {
