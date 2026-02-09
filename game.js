@@ -475,14 +475,14 @@ const TERRAIN = {
     laneWidth: 68,
     slopeWidth: 480,            // Current slope width (updated by resolution system)
     baseSlopeWidth: 480,        // Base slope width (updated dynamically)
-    baseDensity: 0.10,          // More obstacles (trees/rocks)
-    maxDensity: 0.22,           // Denser terrain
+    baseDensity: 0.06,          // Reduced from 0.10 for performance
+    maxDensity: 0.14,           // Reduced from 0.22 for performance
     densityRampDistance: 4000,
-    jumpChance: 0.008,          // Very rare jumps (90% reduction from 0.08)
-    railChance: 0.009,          // Rare rails
-    massiveJumpChance: 0.002,   // Very rare massive jumps for 1080+ tricks
-    rockChance: 0.06,           // New: chance for large rocks
-    treeClusterChance: 0.60,    // Higher tree cluster chance
+    jumpChance: 0.005,          // Reduced from 0.008
+    railChance: 0.006,          // Reduced from 0.009
+    massiveJumpChance: 0.001,   // Reduced from 0.002
+    rockChance: 0.04,           // Reduced from 0.06
+    treeClusterChance: 0.35,    // Reduced from 0.60 for performance
     clearPathWidth: 2
 };
 
@@ -551,6 +551,11 @@ const TRICKS = {
     longGrind: { name: 'Rail Slide', minLen: 120, maxLen: 250, points: 150 },
     epicGrind: { name: 'EPIC GRIND', minLen: 250, maxLen: 9999, points: 400 }
 };
+
+// Pre-computed sorted spin tricks for landing detection (avoids per-landing allocation)
+const SORTED_SPIN_TRICKS = Object.entries(TRICKS)
+    .filter(([id, trick]) => trick.minRot)
+    .sort((a, b) => b[1].minRot - a[1].minRot);
 
 // Automatic trick animations when airborne - expanded variety
 const AUTO_TRICKS = [
@@ -2105,12 +2110,12 @@ function generateTerrainChunk(chunkIndex) {
 
     // ===== PHASE 3: Generate tree clusters (larger and more frequent) =====
 
-    // 50% chance to spawn a PRIMARY tree cluster per chunk (8-15 trees)
-    if (seededRandom(baseSeed + 777) < 0.50) {
+    // 35% chance to spawn a PRIMARY tree cluster per chunk (5-10 trees)
+    if (seededRandom(baseSeed + 777) < 0.35) {
         const clusterSeed = baseSeed + 778;
         const clusterRow = 1 + Math.floor(seededRandom(clusterSeed) * (gridRows - 3));
         const clusterCol = 1 + Math.floor(seededRandom(clusterSeed + 1) * (gridCols - 2));
-        const clusterSize = 8 + Math.floor(seededRandom(clusterSeed + 2) * 8); // 8-15 trees
+        const clusterSize = 5 + Math.floor(seededRandom(clusterSeed + 2) * 6); // 5-10 trees
 
         // Generate cluster pattern (tight group of trees with wider spread)
         for (let i = 0; i < clusterSize; i++) {
@@ -2142,12 +2147,12 @@ function generateTerrainChunk(chunkIndex) {
         }
     }
 
-    // 40% chance for SECONDARY tree cluster (6-10 trees)
-    if (seededRandom(baseSeed + 888) < 0.40) {
+    // 25% chance for SECONDARY tree cluster (4-7 trees)
+    if (seededRandom(baseSeed + 888) < 0.25) {
         const clusterSeed = baseSeed + 889;
         const clusterRow = Math.floor(gridRows / 2) + Math.floor(seededRandom(clusterSeed) * (gridRows / 2 - 1));
         const clusterCol = Math.floor(seededRandom(clusterSeed + 1) * (gridCols - 1));
-        const clusterSize = 6 + Math.floor(seededRandom(clusterSeed + 2) * 5); // 6-10 trees
+        const clusterSize = 4 + Math.floor(seededRandom(clusterSeed + 2) * 4); // 4-7 trees
 
         for (let i = 0; i < clusterSize; i++) {
             const offsetX = (seededRandom(clusterSeed + 50 + i) - 0.5) * 2.5;
@@ -2177,12 +2182,12 @@ function generateTerrainChunk(chunkIndex) {
         }
     }
 
-    // 30% chance for TERTIARY tree cluster (5-8 trees)
-    if (seededRandom(baseSeed + 666) < 0.30) {
+    // 15% chance for TERTIARY tree cluster (3-5 trees)
+    if (seededRandom(baseSeed + 666) < 0.15) {
         const clusterSeed = baseSeed + 667;
         const clusterRow = Math.floor(seededRandom(clusterSeed) * (gridRows - 2)) + 1;
         const clusterCol = Math.floor(seededRandom(clusterSeed + 1) * (gridCols - 2)) + 1;
-        const clusterSize = 5 + Math.floor(seededRandom(clusterSeed + 2) * 4); // 5-8 trees
+        const clusterSize = 3 + Math.floor(seededRandom(clusterSeed + 2) * 3); // 3-5 trees
 
         for (let i = 0; i < clusterSize; i++) {
             const offsetX = (seededRandom(clusterSeed + 80 + i) - 0.5) * 2;
@@ -2354,7 +2359,7 @@ function updateTerrain() {
     const camera = gameState.camera;
     const terrain = gameState.terrain;
 
-    while (terrain.nextChunkY < camera.y + CANVAS_HEIGHT * 2.5) {
+    while (terrain.nextChunkY < camera.y + CANVAS_HEIGHT * 1.8) {
         const chunkIndex = Math.floor(terrain.nextChunkY / TERRAIN.chunkHeight);
         const newChunk = generateTerrainChunk(chunkIndex);
         terrain.chunks.push(newChunk);
@@ -2728,12 +2733,8 @@ function landFromJump(player) {
     } else {
         // Fall back to manual spin detection - check in descending order (highest spins first)
         const absRot = Math.abs(player.trickRotation);
-        // Sort tricks by minRot descending so we match the highest applicable spin
-        const spinTricks = Object.entries(TRICKS)
-            .filter(([id, trick]) => trick.minRot)
-            .sort((a, b) => b[1].minRot - a[1].minRot);
 
-        for (const [id, trick] of spinTricks) {
+        for (const [id, trick] of SORTED_SPIN_TRICKS) {
             if (absRot >= trick.minRot) {
                 trickName = trick.name;
                 trickPoints = trick.points;
@@ -2994,10 +2995,8 @@ function triggerCrash(player) {
     gameState.chase.recentCrashes.push(now);
     gameState.chase.totalCrashes++;  // Track total crashes this session
 
-    // Remove old crashes outside the window
-    gameState.chase.recentCrashes = gameState.chase.recentCrashes.filter(
-        t => now - t < CHASE.crashWindow
-    );
+    // Remove old crashes outside the window (in-place to avoid allocation)
+    cullArrayInPlace(gameState.chase.recentCrashes, t => now - t >= CHASE.crashWindow);
 
     // If too many crashes in window, spawn beast immediately
     if (gameState.chase.recentCrashes.length >= CHASE.crashThreshold && !gameState.chase.beastActive) {
@@ -3200,19 +3199,18 @@ function collectItem(collectible) {
     // Build flow meter
     gameState.flowMeter = Math.min(100, gameState.flowMeter + (isBig ? 15 : 5));
 
-    // Spawn sparkle particles
+    // Spawn sparkle particles (use ParticlePool to avoid memory leak)
     for (let i = 0; i < (isBig ? 8 : 4); i++) {
-        gameState.particles.push({
-            x: collectible.x + (Math.random() - 0.5) * 20,
-            y: collectible.y + (Math.random() - 0.5) * 20,
-            vx: (Math.random() - 0.5) * 150,
-            vy: (Math.random() - 0.5) * 150 - 50,
-            size: isBig ? 4 : 2,
-            color: COLORS.gold,
-            alpha: 1,
-            type: 'spark',
-            life: 0.5
-        });
+        gameState.particles.push(ParticlePool.spawn(
+            collectible.x + (Math.random() - 0.5) * 20,
+            collectible.y + (Math.random() - 0.5) * 20,
+            (Math.random() - 0.5) * 150,
+            (Math.random() - 0.5) * 150 - 50,
+            isBig ? 4 : 2,
+            COLORS.gold,
+            0.5,
+            'spark'
+        ));
     }
 
     if (isBig) {
@@ -3661,12 +3659,21 @@ function updateCamera(dt) {
     }
 }
 
+// Reusable screen position objects to avoid per-call allocations
+const _screenPos = { x: 0, y: 0 };
+const _screenPos2 = { x: 0, y: 0 };
 function worldToScreen(worldX, worldY) {
     const shake = gameState.screenShake;
-    return {
-        x: CANVAS_WIDTH / 2 + worldX + shake.x,
-        y: worldY - gameState.camera.y + shake.y
-    };
+    _screenPos.x = CANVAS_WIDTH / 2 + worldX + shake.x;
+    _screenPos.y = worldY - gameState.camera.y + shake.y;
+    return _screenPos;
+}
+// Second variant for call sites that need two screen positions simultaneously
+function worldToScreen2(worldX, worldY) {
+    const shake = gameState.screenShake;
+    _screenPos2.x = CANVAS_WIDTH / 2 + worldX + shake.x;
+    _screenPos2.y = worldY - gameState.camera.y + shake.y;
+    return _screenPos2;
 }
 
 // ===================
@@ -3881,51 +3888,34 @@ function drawObstacles() {
         }
 
         if (obs.type === 'tree') {
-            // Tree trunk - simplified solid color for performance
+            // Tree trunk
             ctx.fillStyle = '#4a3728';
             ctx.fillRect(screen.x - 5, screen.y - 12, 10, 22);
 
-            // Trunk texture lines
-            ctx.strokeStyle = '#2a1a0a';
-            ctx.lineWidth = 1;
-            for (let i = 0; i < 3; i++) {
-                ctx.beginPath();
-                ctx.moveTo(screen.x - 3 + i * 3, screen.y - 10);
-                ctx.lineTo(screen.x - 3 + i * 3, screen.y + 8);
-                ctx.stroke();
-            }
+            // Simplified 2-layer foliage for performance
+            ctx.fillStyle = '#0a2a1a';
+            ctx.beginPath();
+            ctx.moveTo(screen.x, screen.y - 17);
+            ctx.lineTo(screen.x - obs.width * 0.85/2, screen.y - 5);
+            ctx.lineTo(screen.x + obs.width * 0.85/2, screen.y - 5);
+            ctx.closePath();
+            ctx.fill();
 
-            // Multi-layer foliage for depth
-            const layers = [
-                { y: -5, w: obs.width * 0.9, color: '#0a2a1a' },
-                { y: -15, w: obs.width * 0.75, color: '#1a3a2a' },
-                { y: -25, w: obs.width * 0.55, color: '#1a472a' },
-                { y: obs.height * -0.85, w: obs.width * 0.35, color: '#2a5a3a' }
-            ];
+            ctx.fillStyle = '#1a472a';
+            ctx.beginPath();
+            ctx.moveTo(screen.x, screen.y - obs.height * 0.65 - 12);
+            ctx.lineTo(screen.x - obs.width * 0.45/2, screen.y - obs.height * 0.65);
+            ctx.lineTo(screen.x + obs.width * 0.45/2, screen.y - obs.height * 0.65);
+            ctx.closePath();
+            ctx.fill();
 
-            for (const layer of layers) {
-                ctx.fillStyle = layer.color;
-                ctx.beginPath();
-                ctx.moveTo(screen.x, screen.y + layer.y - 12);
-                ctx.lineTo(screen.x - layer.w/2, screen.y + layer.y);
-                ctx.lineTo(screen.x + layer.w/2, screen.y + layer.y);
-                ctx.closePath();
-                ctx.fill();
-            }
-
-            // Snow accumulation with highlights
+            // Snow accumulation
             ctx.fillStyle = COLORS.snow;
             ctx.beginPath();
             ctx.moveTo(screen.x, screen.y - obs.height + 3);
             ctx.lineTo(screen.x - obs.width/4, screen.y - obs.height * 0.7);
             ctx.quadraticCurveTo(screen.x, screen.y - obs.height * 0.65, screen.x + obs.width/4, screen.y - obs.height * 0.7);
             ctx.closePath();
-            ctx.fill();
-
-            // Snow highlight
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-            ctx.beginPath();
-            ctx.ellipse(screen.x - 3, screen.y - obs.height + 8, 4, 2, -0.3, 0, Math.PI * 2);
             ctx.fill();
 
         } else if (obs.type === 'rock') {
@@ -4143,7 +4133,7 @@ function drawRails() {
         if (rail.endY < camera.y - 50 || rail.y > camera.y + CANVAS_HEIGHT + 50) continue;
 
         const startScreen = worldToScreen(rail.x, rail.y);
-        const endScreen = worldToScreen(rail.endX, rail.endY);
+        const endScreen = worldToScreen2(rail.endX, rail.endY);
         const grindableType = rail.grindableType || 'rail';
 
         if (grindableType === 'rail') {
@@ -6161,8 +6151,8 @@ function drawCelebrations() {
     ctx.textAlign = 'right';
     ctx.textBaseline = 'top';
 
-    // Sort by timer (newest first) and limit visible count to prevent overlap
-    const sortedCelebrations = [...gameState.celebrations].sort((a, b) => b.timer - a.timer);
+    // Limit visible count to prevent overlap (skip per-frame spread+sort allocation)
+    const sortedCelebrations = gameState.celebrations;
     const maxVisible = 3;
 
     // Position in top-right corner, below HUD (around y=50)
@@ -8212,7 +8202,7 @@ function drawSlalomGates() {
         if (gate.y < camera.y - 80 || gate.y > camera.y + CANVAS_HEIGHT + 80) continue;
 
         const leftScreen = worldToScreen(gate.poleLeftX, gate.y);
-        const rightScreen = worldToScreen(gate.poleRightX, gate.y);
+        const rightScreen = worldToScreen2(gate.poleRightX, gate.y);
 
         // Gate colors
         const isRed = gate.side === 'left';
@@ -8361,7 +8351,7 @@ function drawSlalomFinishZone() {
 
     // Water zone
     const waterScreenY = worldToScreen(0, slalom.waterStartY).y;
-    const waterEndScreenY = worldToScreen(0, slalom.waterStartY + SLALOM.waterZoneLength).y;
+    const waterEndScreenY = worldToScreen2(0, slalom.waterStartY + SLALOM.waterZoneLength).y;
 
     if (waterEndScreenY > 0 && waterScreenY < CANVAS_HEIGHT) {
         const drawStartY = Math.max(0, waterScreenY);
@@ -8404,7 +8394,7 @@ function drawSlalomFinishZone() {
     // Crowd/lodge zone
     const crowdStartY = slalom.waterStartY + SLALOM.waterZoneLength;
     const crowdScreenY = worldToScreen(0, crowdStartY).y;
-    const crowdEndScreenY = worldToScreen(0, crowdStartY + SLALOM.crowdZoneLength).y;
+    const crowdEndScreenY = worldToScreen2(0, crowdStartY + SLALOM.crowdZoneLength).y;
 
     if (crowdEndScreenY > 0 && crowdScreenY < CANVAS_HEIGHT) {
         const drawStartY = Math.max(0, crowdScreenY);
