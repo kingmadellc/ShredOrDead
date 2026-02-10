@@ -1042,7 +1042,12 @@ const gamepadState = {
     _lastStart: false,
     _repeatTimer: 0,
     _repeatDelay: 0.35, // Seconds before repeat starts
-    _repeatRate: 0.12   // Seconds between repeats
+    _repeatRate: 0.12,  // Seconds between repeats
+    // Track gamepad's own contribution to input (for clean release)
+    _gpLeft: false,
+    _gpRight: false,
+    _gpUp: false,
+    _gpDown: false
 };
 
 // Touch control state for mobile devices
@@ -1376,7 +1381,7 @@ function getInputDirection() {
 
 function setupGamepad() {
     window.addEventListener('gamepadconnected', (e) => {
-        console.log('Gamepad connected:', e.gamepad.id);
+        console.log('Gamepad connected:', e.gamepad.id, '| mapping:', e.gamepad.mapping || 'non-standard', '| index:', e.gamepad.index, '| buttons:', e.gamepad.buttons.length, '| axes:', e.gamepad.axes.length);
         gamepadState.connected = true;
         gamepadState.index = e.gamepad.index;
         // Update settings UI if visible
@@ -1397,6 +1402,10 @@ function setupGamepad() {
             input.right = false;
             input.up = false;
             input.down = false;
+            gamepadState._gpLeft = false;
+            gamepadState._gpRight = false;
+            gamepadState._gpUp = false;
+            gamepadState._gpDown = false;
         }
         const status = document.getElementById('gamepadStatus');
         if (status) {
@@ -1411,7 +1420,20 @@ function pollGamepad(dt) {
 
     const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
     const gp = gamepads[gamepadState.index];
-    if (!gp) return;
+    if (!gp) {
+        // Gamepad disappeared (sleep/wake, profile switch) - try to find it again
+        for (let i = 0; i < gamepads.length; i++) {
+            if (gamepads[i]) {
+                gamepadState.index = i;
+                break;
+            }
+        }
+        // Still nothing? Bail.
+        const gp2 = gamepads[gamepadState.index];
+        if (!gp2) return;
+        // Fall through with recovered gamepad
+    }
+    const pad = gamepads[gamepadState.index];
 
     // Standard gamepad mapping:
     // Buttons: 0=A/X, 1=B/O, 2=X/□, 3=Y/△, 8=Select, 9=Start
@@ -1419,31 +1441,53 @@ function pollGamepad(dt) {
     // Axes: 0=LStickX, 1=LStickY, 2=RStickX, 3=RStickY
 
     const dz = gamepadState.deadzone;
-    const lx = gp.axes[0] || 0;
-    const ly = gp.axes[1] || 0;
+    const lx = pad.axes[0] || 0;
+    const ly = pad.axes[1] || 0;
 
-    const btnA = gp.buttons[0] && gp.buttons[0].pressed;
-    const btnB = gp.buttons[1] && gp.buttons[1].pressed;
-    const btnStart = gp.buttons[9] && gp.buttons[9].pressed;
-    const dpadUp = (gp.buttons[12] && gp.buttons[12].pressed) || ly < -dz;
-    const dpadDown = (gp.buttons[13] && gp.buttons[13].pressed) || ly > dz;
-    const dpadLeft = (gp.buttons[14] && gp.buttons[14].pressed) || lx < -dz;
-    const dpadRight = (gp.buttons[15] && gp.buttons[15].pressed) || lx > dz;
+    // Button helpers that safely handle missing indices (non-standard mappings)
+    const btn = (i) => pad.buttons[i] && pad.buttons[i].pressed;
+
+    const btnA = btn(0);
+    const btnB = btn(1);
+    // Accept both Select (8) and Start (9) as "Start" for Ally compatibility
+    const btnStart = btn(9) || btn(8);
+    // Also check Menu button (16) which some controllers report
+    const btnMenu = btn(16);
+    const startPressed = btnStart || btnMenu;
+
+    const dpadUp = btn(12) || ly < -dz;
+    const dpadDown = btn(13) || ly > dz;
+    const dpadLeft = btn(14) || lx < -dz;
+    const dpadRight = btn(15) || lx > dz;
 
     // During gameplay: map to input directly
     if (gameState.screen === 'playing' || gameState.screen === 'lodge' || gameState.screen === 'dying') {
         // Start button toggles pause during gameplay
-        if (btnStart && !gamepadState._lastStart) {
+        if (startPressed && !gamepadState._lastStart) {
             togglePause();
         }
 
         // Only process movement input when not paused
+        // SET input from gamepad state each frame (not OR onto stale state)
+        // Keyboard keyup events will handle keyboard clearing separately
         if (!gameState.paused) {
-            input.left = input.left || dpadLeft;
-            input.right = input.right || dpadRight;
-            input.up = input.up || dpadUp;
-            input.down = input.down || dpadDown;
+            // Track gamepad contribution separately so keyboard still works
+            // Clear previous gamepad state, then apply current
+            if (gamepadState._gpLeft && !dpadLeft) input.left = false;
+            if (gamepadState._gpRight && !dpadRight) input.right = false;
+            if (gamepadState._gpUp && !dpadUp) input.up = false;
+            if (gamepadState._gpDown && !dpadDown) input.down = false;
+            // Apply current gamepad state
+            if (dpadLeft) input.left = true;
+            if (dpadRight) input.right = true;
+            if (dpadUp) input.up = true;
+            if (dpadDown) input.down = true;
         }
+        // Track what the gamepad is contributing
+        gamepadState._gpLeft = dpadLeft;
+        gamepadState._gpRight = dpadRight;
+        gamepadState._gpUp = dpadUp;
+        gamepadState._gpDown = dpadDown;
 
         // A = space (for starting, confirming, etc.)
         if (btnA && !gamepadState._lastA) {
@@ -1457,7 +1501,7 @@ function pollGamepad(dt) {
 
         gamepadState._lastA = btnA;
         gamepadState._lastB = btnB;
-        gamepadState._lastStart = btnStart;
+        gamepadState._lastStart = startPressed;
         gamepadState._lastDpadUp = dpadUp;
         gamepadState._lastDpadDown = dpadDown;
         gamepadState._lastDpadLeft = dpadLeft;
@@ -1465,13 +1509,26 @@ function pollGamepad(dt) {
         return;
     }
 
+    // Game over screen: A = retry, B = back to menu (canvas-drawn buttons, not DOM)
+    if (gameState.screen === 'gameOver') {
+        if (btnA && !gamepadState._lastA) {
+            input.space = true;
+            setTimeout(() => { input.space = false; }, 100);
+        }
+        if (btnB && !gamepadState._lastB) {
+            gameState.screen = 'title';
+            showStartScreen();
+            musicManager.stop();
+        }
+    }
+
     // On menus: use gamepad for menu navigation
-    pollGamepadMenu(dt, btnA, btnB, btnStart, dpadUp, dpadDown, dpadLeft, dpadRight);
+    pollGamepadMenu(dt, btnA, btnB, startPressed, dpadUp, dpadDown, dpadLeft, dpadRight);
 
     // Store last states
     gamepadState._lastA = btnA;
     gamepadState._lastB = btnB;
-    gamepadState._lastStart = btnStart;
+    gamepadState._lastStart = startPressed;
     gamepadState._lastDpadUp = dpadUp;
     gamepadState._lastDpadDown = dpadDown;
     gamepadState._lastDpadLeft = dpadLeft;
