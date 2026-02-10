@@ -6928,29 +6928,91 @@ function triggerGameOver(cause) {
 function startDeathAnimation(cause) {
     const player = gameState.player;
     const chase = gameState.chase;
+    const playerScreen = worldToScreen(player.x, player.y);
 
-    gameState.deathAnimation = {
-        active: true,
-        type: cause,
-        timer: 0,
-        phase: 0,
-        playerX: player.x,
-        playerY: player.y,
-        beastX: chase.beastX,
-        beastY: chase.beastY,
-        chompCount: 0,
-        // Avalanche-specific state
-        avalancheDebris: cause === 'avalanche' ? Array.from({length: 50}, (_, i) => ({
-            x: (Math.random() - 0.5) * CANVAS_WIDTH * 1.2,
-            y: -Math.random() * 200 - 50,
-            size: 2 + Math.random() * 6,
-            speed: 50 + Math.random() * 100,
-            drift: (Math.random() - 0.5) * 40,
-            rotation: Math.random() * Math.PI * 2,
-            rotSpeed: (Math.random() - 0.5) * 4
-        })) : null,
-        playerRotation: 0
-    };
+    if (cause === 'beast') {
+        gameState.deathAnimation = {
+            active: true,
+            type: cause,
+            timer: 0,
+            phase: 0,
+            playerX: player.x,
+            playerY: player.y,
+            beastX: chase.beastX,
+            beastY: chase.beastY,
+            chompCount: 0,
+            // New full-body yeti state
+            beastScreenX: CANVAS_WIDTH / 2,
+            beastScreenY: -150,
+            beastScale: 0.8,
+            beastRunPhase: 0,
+            playerLiftY: 0,
+            thrashAngle: 0,
+            fragments: [],
+            beastFacing: 1,
+            beastAlpha: 1,
+            playerAlpha: 1,
+            playerRotation: 0,
+            playerScreenX: playerScreen.x,
+            playerScreenY: playerScreen.y,
+            impactFlash: 0
+        };
+    } else {
+        // Avalanche death
+        const playerSX = playerScreen.x;
+        const playerSY = playerScreen.y;
+        gameState.deathAnimation = {
+            active: true,
+            type: cause,
+            timer: 0,
+            phase: 0,
+            playerX: player.x,
+            playerY: player.y,
+            beastX: chase.beastX,
+            beastY: chase.beastY,
+            chompCount: 0,
+            playerRotation: 0,
+            // Avalanche overhaul state
+            wallY: -10,
+            rumbleIntensity: 0,
+            avalancheDebris: Array.from({length: 80}, () => ({
+                x: (Math.random() - 0.5) * CANVAS_WIDTH * 1.4,
+                y: -Math.random() * 300 - 50,
+                size: 2 + Math.random() * 6,
+                speed: 40 + Math.random() * 80,
+                drift: (Math.random() - 0.5) * 40,
+                rotation: Math.random() * Math.PI * 2,
+                rotSpeed: (Math.random() - 0.5) * 4
+            })),
+            avalancheLeadingChunks: Array.from({length: 20}, () => ({
+                x: Math.random() * CANVAS_WIDTH,
+                y: 0,
+                size: 6 + Math.random() * 14,
+                speed: 60 + Math.random() * 80,
+                drift: (Math.random() - 0.5) * 30,
+                rotation: Math.random() * Math.PI * 2,
+                rotSpeed: (Math.random() - 0.5) * 6,
+                bouncePhase: Math.random() * Math.PI * 2
+            })),
+            avalancheBumps: Array.from({length: 16}, (_, i) => ({
+                baseX: (i / 16) * CANVAS_WIDTH,
+                phase: Math.random() * Math.PI * 2,
+                speed: 1.5 + Math.random() * 1.5,
+                amplitude: 8 + Math.random() * 12,
+                radius: 25 + Math.random() * 20,
+                layer: i < 8 ? 'back' : 'front'
+            })),
+            boardTipX: playerSX + (Math.random() - 0.5) * 30,
+            boardTipY: playerSY,
+            boardTipAngle: 0.4 + Math.random() * 0.3,
+            boardTipProgress: 0,
+            playerArmAngle: 0,
+            playerScreenX: playerSX,
+            playerScreenY: playerSY,
+            playerAlpha: 1,
+            dustParticles: []
+        };
+    }
 
     gameState.screen = 'dying';
 
@@ -6971,49 +7033,118 @@ function updateDeathAnimation(dt) {
         return;
     }
 
-    // Beast death phase timing
-    const grabDuration = 0.5;
-    const windUpDuration = 0.3;
-    const chompDuration = 1.2;
-    const swallowDuration = 0.3;
-    const fadeDuration = 0.4;
+    // === Yeti Death: 5 Cinematic Phases ===
+    const approachDur = 1.2;
+    const grabDur = 0.5;
+    const thrashDur = 1.2;
+    const devourDur = 0.8;
+    const fadeDur = 0.8;
 
     if (anim.phase === 0) {
-        // Phase 0: Beast grabs player with dramatic lunge
-        anim.beastX = lerp(anim.beastX, anim.playerX, 8 * dt);
-        anim.beastY = lerp(anim.beastY, anim.playerY, 8 * dt);
+        // Phase 0: Approach — full-body yeti gallops in from top toward player
+        const progress = Math.min(1, anim.timer / approachDur);
+        anim.beastRunPhase += dt * 12;
+        anim.beastScreenY = expLerp(anim.beastScreenY, anim.playerScreenY - 40, 2.5, dt);
+        anim.beastScale = 0.8 + progress * 0.5; // 0.8 → 1.3
+        // Ramp screen shake as beast approaches
+        triggerScreenShake(progress * 6, 0.95);
 
-        if (anim.timer >= grabDuration) {
+        if (anim.timer >= approachDur) {
             anim.phase = 1;
             anim.timer = 0;
+            anim.beastScreenY = anim.playerScreenY - 40;
         }
     } else if (anim.phase === 1) {
-        // Phase 1: Wind-up - jaw opens wide (anticipation)
-        if (anim.timer >= windUpDuration) {
+        // Phase 1: Grab — yeti lunges and claws wrap around rider
+        const progress = Math.min(1, anim.timer / grabDur);
+        anim.beastScreenY = expLerp(anim.beastScreenY, anim.playerScreenY - 10, 15, dt);
+        anim.beastScale = expLerp(anim.beastScale, 1.4, 8, dt);
+        // Impact flash and shake at moment of grab
+        if (anim.timer < 0.1) {
+            anim.impactFlash = 1;
+            triggerScreenShake(18, 0.9);
+        }
+        anim.impactFlash = Math.max(0, anim.impactFlash - dt * 6);
+        // Player trembles with decaying sin
+        anim.playerAlpha = 1 - progress * 0.3;
+
+        if (anim.timer >= grabDur) {
             anim.phase = 2;
             anim.timer = 0;
         }
     } else if (anim.phase === 2) {
-        // Phase 2: Chomp animation - 3 slower, impactful chomps
-        const chompCycle = Math.floor(anim.timer * 2.5);
-        if (chompCycle > anim.chompCount) {
-            anim.chompCount = chompCycle;
-            gameState.screenShake.intensity = 12;
+        // Phase 2: Thrash — shakes rider side-to-side, gear fragments scatter
+        const progress = Math.min(1, anim.timer / thrashDur);
+        anim.playerLiftY = expLerp(anim.playerLiftY, -30, 5, dt);
+        anim.thrashAngle = Math.sin(anim.timer * 8) * 0.4 * (1 - progress * 0.3);
+        anim.playerAlpha = Math.max(0.15, 1 - progress * 0.85);
+
+        // Spawn gear fragments every 0.15s
+        const fragmentTypes = ['board', 'board', 'goggle', 'boot', 'glove', 'binding'];
+        const fragColors = { board: COLORS.hotPink, goggle: COLORS.cyan, boot: '#2a2a3a', glove: '#3a3a4a', binding: '#4a4a5a' };
+        if (anim.fragments.length < 14 && Math.floor(anim.timer / 0.15) > anim.fragments.length) {
+            const type = fragmentTypes[anim.fragments.length % fragmentTypes.length];
+            anim.fragments.push({
+                x: anim.beastScreenX + (Math.random() - 0.5) * 20,
+                y: anim.beastScreenY + anim.playerLiftY,
+                vx: (Math.random() - 0.5) * 200,
+                vy: -80 - Math.random() * 120,
+                rot: Math.random() * Math.PI * 2,
+                rotSpd: (Math.random() - 0.5) * 10,
+                type: type,
+                color: fragColors[type] || COLORS.hotPink,
+                size: 3 + Math.random() * 5,
+                alpha: 1
+            });
         }
 
-        if (anim.timer >= chompDuration) {
+        // Update fragment physics
+        for (const f of anim.fragments) {
+            f.x += f.vx * dt;
+            f.y += f.vy * dt;
+            f.vy += 280 * dt; // gravity
+            f.rot += f.rotSpd * dt;
+            f.alpha = Math.max(0, f.alpha - dt * 0.4);
+        }
+
+        // Shake
+        triggerScreenShake(10 + Math.sin(anim.timer * 6) * 4, 0.95);
+
+        if (anim.timer >= thrashDur) {
             anim.phase = 3;
             anim.timer = 0;
         }
     } else if (anim.phase === 3) {
-        // Phase 3: Swallow - final gulp
-        if (anim.timer >= swallowDuration) {
+        // Phase 3: Devour — head closeup, drawBeastHead with chomp + throat bulge
+        const progress = Math.min(1, anim.timer / devourDur);
+        const chompCycle = Math.floor(anim.timer * 3);
+        if (chompCycle > anim.chompCount) {
+            anim.chompCount = chompCycle;
+            triggerScreenShake(8, 0.9);
+        }
+        // Continue updating fragments
+        for (const f of anim.fragments) {
+            f.x += f.vx * dt * 0.3;
+            f.y += f.vy * dt * 0.3;
+            f.vy += 100 * dt;
+            f.rot += f.rotSpd * dt * 0.5;
+            f.alpha = Math.max(0, f.alpha - dt * 0.8);
+        }
+
+        if (anim.timer >= devourDur) {
             anim.phase = 4;
             anim.timer = 0;
         }
     } else if (anim.phase === 4) {
-        // Phase 4: Fade out
-        if (anim.timer >= fadeDuration) {
+        // Phase 4: Fade — yeti turns and lumbers off-screen, fades to black
+        const progress = Math.min(1, anim.timer / fadeDur);
+        anim.beastFacing = -1;
+        anim.beastRunPhase += dt * 6; // slower walk away
+        anim.beastScreenY = expLerp(anim.beastScreenY, -200, 2, dt);
+        anim.beastScale = expLerp(anim.beastScale, 0.6, 2, dt);
+        anim.beastAlpha = 1 - progress;
+
+        if (anim.timer >= fadeDur) {
             anim.active = false;
             anim.completed = true;
             triggerGameOver(anim.type);
@@ -7031,186 +7162,328 @@ function drawDeathAnimation() {
         return;
     }
 
-    const screen = worldToScreen(anim.playerX, anim.playerY);
-
-    ctx.save();
-    ctx.translate(screen.x, screen.y);
-
     const time = gameState.animationTime;
-
-    // Easing function for smoother motion
     const easeInOutQuad = t => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    const playerScreen = worldToScreen(anim.playerX, anim.playerY);
 
-    if (anim.phase === 0) {
-        // Phase 0: Grab - massive clawed hand reaches from below
-        const grabProgress = easeInOutQuad(Math.min(1, anim.timer / 0.5));
+    // Helper: draw gear fragments
+    const drawFragments = () => {
+        for (const f of anim.fragments) {
+            if (f.alpha <= 0) continue;
+            ctx.save();
+            ctx.translate(f.x, f.y);
+            ctx.rotate(f.rot);
+            ctx.globalAlpha = f.alpha;
+            ctx.fillStyle = f.color;
+            if (f.type === 'board') {
+                // Board shard — elongated rectangle
+                ctx.fillRect(-f.size * 1.5, -f.size * 0.4, f.size * 3, f.size * 0.8);
+            } else if (f.type === 'goggle') {
+                // Goggle lens — circle
+                ctx.beginPath();
+                ctx.arc(0, 0, f.size * 0.7, 0, Math.PI * 2);
+                ctx.fill();
+                // Strap line
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(-f.size, 0);
+                ctx.lineTo(f.size, 0);
+                ctx.stroke();
+            } else {
+                // Boot/glove/binding — small square
+                ctx.fillRect(-f.size * 0.5, -f.size * 0.5, f.size, f.size);
+            }
+            ctx.globalAlpha = 1;
+            ctx.restore();
+        }
+    };
 
-        // Player shrinking/flinching
-        const struggle = Math.sin(anim.timer * 20) * (1 - grabProgress) * 3;
+    // Helper: draw small player figure
+    const drawPlayerFigure = (px, py, scale, alpha) => {
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.scale(scale, scale);
+        ctx.globalAlpha = alpha;
+        // Body
         ctx.fillStyle = COLORS.hotPink;
         ctx.beginPath();
-        ctx.arc(struggle, -10 - grabProgress * 8, 10 * (1 - grabProgress * 0.4), 0, Math.PI * 2);
+        ctx.arc(0, 0, 8, 0, Math.PI * 2);
         ctx.fill();
+        // Head
         ctx.fillStyle = COLORS.electricBlue;
         ctx.beginPath();
-        ctx.arc(struggle, -20 - grabProgress * 5, 6 * (1 - grabProgress * 0.3), 0, Math.PI * 2);
-        ctx.fill();
-
-        // Beast clawed hand reaching from below
-        const handY = 60 - grabProgress * 50;
-        ctx.fillStyle = '#1a1a3a';
-        ctx.beginPath();
-        ctx.moveTo(-20, handY + 20);
-        ctx.quadraticCurveTo(-25, handY + 5, -18, handY - 5);
-        ctx.quadraticCurveTo(-10, handY - 12, 0, handY - 14);
-        ctx.quadraticCurveTo(10, handY - 12, 18, handY - 5);
-        ctx.quadraticCurveTo(25, handY + 5, 20, handY + 20);
-        ctx.fill();
-        // Claws curling around player
-        ctx.strokeStyle = '#3a3030';
-        ctx.lineWidth = 3;
-        const clawCurl = grabProgress * 0.6;
-        ctx.beginPath(); ctx.moveTo(-18, handY - 5); ctx.lineTo(-24 + clawCurl * 10, handY - 14 + clawCurl * 6); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(-10, handY - 12); ctx.lineTo(-14 + clawCurl * 8, handY - 22 + clawCurl * 8); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(10, handY - 12); ctx.lineTo(14 - clawCurl * 8, handY - 22 + clawCurl * 8); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(18, handY - 5); ctx.lineTo(24 - clawCurl * 10, handY - 14 + clawCurl * 6); ctx.stroke();
-
-    } else if (anim.phase === 1) {
-        // Phase 1: Wind-up - jaw opens wide for anticipation
-        const windUpProgress = easeInOutQuad(Math.min(1, anim.timer / 0.3));
-        const mouthOpen = windUpProgress * 1.0; // Opens wide
-
-        drawBeastHead(ctx, mouthOpen, false, time);
-
-        // Player visible in mouth, trembling
-        const tremble = Math.sin(anim.timer * 25) * 2;
-        ctx.fillStyle = COLORS.hotPink;
-        ctx.globalAlpha = 0.8;
-        ctx.beginPath();
-        ctx.arc(tremble, -15, 6, 0, Math.PI * 2);
+        ctx.arc(0, -12, 5, 0, Math.PI * 2);
         ctx.fill();
         ctx.globalAlpha = 1;
+        ctx.restore();
+    };
+
+    if (anim.phase === 0) {
+        // Phase 0: Approach — full-body yeti runs in from top, player visible below
+        const progress = easeInOutQuad(Math.min(1, anim.timer / 1.2));
+
+        // Draw player at world position (still on slope)
+        drawPlayerFigure(playerScreen.x, playerScreen.y, 1, 1);
+
+        // Draw full-body beast approaching from above
+        drawBeastFullBody(ctx, anim.beastScreenX, anim.beastScreenY, anim.beastRunPhase, anim.beastScale, 1, 'running', time);
+
+        // Dust particles at beast feet
+        const dustY = anim.beastScreenY + anim.beastScale * 56;
+        for (let i = 0; i < 5; i++) {
+            const dx = anim.beastScreenX + (Math.random() - 0.5) * 40;
+            const dy = dustY + Math.random() * 8;
+            const ds = 2 + Math.random() * 3;
+            ctx.fillStyle = `rgba(200, 210, 230, ${0.3 * (1 - progress)})`;
+            ctx.beginPath();
+            ctx.arc(dx, dy, ds, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+    } else if (anim.phase === 1) {
+        // Phase 1: Grab — beast lunges, claws wrap around rider, impact flash
+        const progress = easeInOutQuad(Math.min(1, anim.timer / 0.5));
+
+        // Player trembling
+        const tremble = Math.sin(anim.timer * 30) * (1 - progress) * 4;
+        drawPlayerFigure(playerScreen.x + tremble, playerScreen.y, 1 - progress * 0.3, anim.playerAlpha);
+
+        // Beast with reaching arms
+        drawBeastFullBody(ctx, anim.beastScreenX, anim.beastScreenY, anim.beastRunPhase, anim.beastScale, 1, 'reaching', time);
+
+        // Brief white flash at contact
+        if (anim.impactFlash > 0) {
+            ctx.fillStyle = `rgba(255, 255, 255, ${anim.impactFlash * 0.6})`;
+            ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        }
 
     } else if (anim.phase === 2) {
-        // Phase 2: Chomp - slower, more impactful bites with eased motion
-        const chompPhase = (anim.timer * 2.5) % 1; // Slower: 2.5 chomps/sec
-        // Eased chomp motion - snaps shut faster than it opens
+        // Phase 2: Thrash — beast shakes rider side-to-side, fragments scatter
+        ctx.save();
+        ctx.translate(anim.beastScreenX, anim.beastScreenY);
+        ctx.rotate(anim.thrashAngle);
+
+        // Draw beast body with holding arms (relative to beast center)
+        drawBeastFullBody(ctx, 0, 0, 0, anim.beastScale, 1, 'holding', time);
+
+        // Small player being thrashed — lifted and shaken
+        const thrashX = Math.sin(anim.timer * 8) * 8;
+        drawPlayerFigure(thrashX, anim.playerLiftY + 10, 0.5, anim.playerAlpha);
+
+        ctx.restore();
+
+        // Gear fragments fly outward (drawn in screen space)
+        drawFragments();
+
+    } else if (anim.phase === 3) {
+        // Phase 3: Devour — head closeup, chomping, throat bulge
+        const progress = easeInOutQuad(Math.min(1, anim.timer / 0.8));
+
+        // Scale context up for dramatic closeup
+        ctx.save();
+        ctx.translate(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+        const closeupScale = 1.2 + progress * 0.1;
+        ctx.scale(closeupScale, closeupScale);
+
+        // Chomp animation
+        const chompPhase = (anim.timer * 3) % 1;
         const easedChomp = chompPhase < 0.3
-            ? chompPhase / 0.3  // Quick close (0-0.3)
-            : 1 - (chompPhase - 0.3) / 0.7; // Slower open (0.3-1.0)
-        const mouthOpen = easeInOutQuad(easedChomp) * 0.9;
+            ? chompPhase / 0.3
+            : 1 - (chompPhase - 0.3) / 0.7;
+        const mouthOpen = easeInOutQuad(easedChomp) * 0.9 * (1 - progress * 0.6);
 
-        // Player bounces with each chomp
-        const playerBounce = Math.sin(chompPhase * Math.PI) * 5;
+        drawBeastHead(ctx, mouthOpen, progress > 0.6, time);
 
-        drawBeastHead(ctx, mouthOpen, false, time);
-
-        // Player fragments after first chomp
-        if (anim.chompCount >= 1) {
+        // Small player remnant in mouth (fading)
+        if (progress < 0.7) {
+            const remnantAlpha = (0.7 - progress) / 0.7;
             ctx.fillStyle = COLORS.hotPink;
-            for (let i = 0; i < Math.min(anim.chompCount + 1, 4); i++) {
-                const angle = (i * 1.5 + time * 1.5) % (Math.PI * 2);
-                const dist = 25 + i * 12 + anim.timer * 15;
-                const size = 4 - i * 0.5;
-                ctx.globalAlpha = Math.max(0, 1 - dist / 80);
-                ctx.beginPath();
-                ctx.arc(Math.cos(angle) * dist, -15 + Math.sin(angle) * dist * 0.4, size, 0, Math.PI * 2);
-                ctx.fill();
-            }
+            ctx.globalAlpha = remnantAlpha * 0.6;
+            ctx.beginPath();
+            ctx.arc(Math.sin(anim.timer * 10) * 2, -12, 4 * (1 - progress), 0, Math.PI * 2);
+            ctx.fill();
             ctx.globalAlpha = 1;
         }
 
-    } else if (anim.phase === 3) {
-        // Phase 3: Swallow - gulp animation
-        const swallowProgress = easeInOutQuad(Math.min(1, anim.timer / 0.3));
+        // Throat bulge (after halfway)
+        if (progress > 0.5) {
+            const bulgeProgress = (progress - 0.5) / 0.5;
+            const bulgeY = -10 + bulgeProgress * 45;
+            ctx.fillStyle = '#2a2a4a';
+            ctx.beginPath();
+            ctx.ellipse(0, bulgeY, 12 * (1 - bulgeProgress * 0.5), 8 * (1 - bulgeProgress * 0.3), 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
 
-        // Throat bulge moving down
-        const bulgeY = -15 + swallowProgress * 40;
+        ctx.restore();
 
-        drawBeastHead(ctx, 0.1, true, time); // Mouth mostly closed
-
-        // Throat bulge effect - dark fur color matching beast
-        ctx.fillStyle = '#2a2a4a';
-        ctx.beginPath();
-        ctx.ellipse(0, bulgeY, 12 * (1 - swallowProgress * 0.5), 8 * (1 - swallowProgress * 0.3), 0, 0, Math.PI * 2);
-        ctx.fill();
+        // Remaining fragments drifting (screen space)
+        drawFragments();
 
     } else if (anim.phase === 4) {
-        // Phase 4: Fade - satisfied beast fading to black (reuse full head)
-        const fadeProgress = easeInOutQuad(Math.min(1, anim.timer / 0.4));
-        ctx.globalAlpha = 1 - fadeProgress;
+        // Phase 4: Fade — yeti turns and walks away, fading to black
+        const progress = easeInOutQuad(Math.min(1, anim.timer / 0.8));
 
-        // Draw the full beast head with mouth mostly closed, satisfied expression
-        drawBeastHead(ctx, 0.05, true, time);
+        ctx.globalAlpha = anim.beastAlpha;
+        drawBeastFullBody(ctx, anim.beastScreenX, anim.beastScreenY, anim.beastRunPhase, anim.beastScale, -1, 'running', time);
+        ctx.globalAlpha = 1;
 
-        // Belly pat (dark paw below head with claw detail)
-        ctx.fillStyle = '#2a2a4a';
-        ctx.beginPath();
-        ctx.ellipse(8, 20 - fadeProgress * 10, 10, 8, 0.3, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = '#3a3030';
-        ctx.lineWidth = 1.5;
-        const pawY = 20 - fadeProgress * 10;
-        ctx.beginPath(); ctx.moveTo(4, pawY - 6); ctx.lineTo(2, pawY - 10); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(8, pawY - 7); ctx.lineTo(8, pawY - 12); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(12, pawY - 6); ctx.lineTo(14, pawY - 10); ctx.stroke();
+        // Black overlay fading in
+        ctx.fillStyle = `rgba(0, 0, 0, ${progress})`;
+        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     }
-
-    ctx.restore();
 }
 
 // === Avalanche Death Animation ===
 
 function updateAvalancheDeathAnimation(anim, dt) {
-    const engulfDuration = 1.5;
-    const tumbleDuration = 1.5;
-    const whiteoutDuration = 1.0;
-    const fadeDuration = 1.0;
+    const easeInQuad = t => t * t;
+    const rumbleDur = 1.0;
+    const wallAdvanceDur = 2.0;
+    const engulfDur = 1.5;
+    const settleDur = 0.5;
+    const fadeDur = 0.5;
 
     if (anim.phase === 0) {
-        // Phase 0: Engulf — avalanche rushes over player
-        const progress = anim.timer / engulfDuration;
-        // Increasing screen shake as avalanche approaches
-        gameState.screenShake.intensity = 4 + progress * 16;
-        // Update debris positions
-        if (anim.avalancheDebris) {
-            for (const d of anim.avalancheDebris) {
-                d.y += d.speed * dt;
-                d.x += d.drift * dt;
-                d.rotation += d.rotSpeed * dt;
-            }
+        // Phase 0: Distant Rumble — gentle shake, thin white line at top, dust drifts
+        const progress = Math.min(1, anim.timer / rumbleDur);
+        anim.rumbleIntensity = progress * 4;
+        triggerScreenShake(anim.rumbleIntensity, 0.97);
+        anim.wallY = -10 + progress * 30; // barely moves
+
+        // Spawn drifting dust from top
+        if (anim.dustParticles.length < 12 && Math.random() < dt * 8) {
+            anim.dustParticles.push({
+                x: Math.random() * CANVAS_WIDTH,
+                y: -5,
+                vy: 20 + Math.random() * 30,
+                vx: (Math.random() - 0.5) * 15,
+                size: 1 + Math.random() * 2,
+                alpha: 0.3 + Math.random() * 0.3
+            });
         }
-        if (anim.timer >= engulfDuration) {
+        for (const p of anim.dustParticles) {
+            p.y += p.vy * dt;
+            p.x += p.vx * dt;
+            p.alpha -= dt * 0.15;
+        }
+        anim.dustParticles = anim.dustParticles.filter(p => p.alpha > 0 && p.y < CANVAS_HEIGHT);
+
+        if (anim.timer >= rumbleDur) {
             anim.phase = 1;
             anim.timer = 0;
         }
     } else if (anim.phase === 1) {
-        // Phase 1: Tumble — player rotates amid swirling snow
-        anim.playerRotation += dt * 6; // Spinning
-        gameState.screenShake.intensity = Math.max(0, 15 - anim.timer * 8);
-        if (anim.avalancheDebris) {
-            for (const d of anim.avalancheDebris) {
-                d.y += d.speed * 0.3 * dt;
-                d.x += Math.sin(anim.timer * 3 + d.rotation) * 20 * dt;
-                d.rotation += d.rotSpeed * dt;
-            }
+        // Phase 1: Wall Advance — avalanche creeps down (easeInQuad), bumps churn, chunks tumble
+        const progress = Math.min(1, anim.timer / wallAdvanceDur);
+        const easedProgress = easeInQuad(progress);
+        anim.wallY = 20 + easedProgress * (anim.playerScreenY - 20);
+
+        // Shake ramps
+        triggerScreenShake(3 + progress * 9, 0.95);
+
+        // Update debris
+        for (const d of anim.avalancheDebris) {
+            d.y += d.speed * dt;
+            d.x += d.drift * dt;
+            d.rotation += d.rotSpeed * dt;
         }
-        if (anim.timer >= tumbleDuration) {
+
+        // Update leading chunks — tumble ahead of wall
+        for (const c of anim.avalancheLeadingChunks) {
+            c.y = anim.wallY + 20 + Math.sin(c.bouncePhase) * 15;
+            c.bouncePhase += c.speed * 0.05 * dt;
+            c.x += c.drift * dt;
+            c.rotation += c.rotSpeed * dt;
+            // Wrap horizontally
+            if (c.x < -20) c.x = CANVAS_WIDTH + 20;
+            if (c.x > CANVAS_WIDTH + 20) c.x = -20;
+        }
+
+        // Update bumps
+        for (const b of anim.avalancheBumps) {
+            b.phase += b.speed * dt;
+        }
+
+        // Dust particles
+        if (anim.dustParticles.length < 20 && Math.random() < dt * 12) {
+            anim.dustParticles.push({
+                x: Math.random() * CANVAS_WIDTH,
+                y: anim.wallY + Math.random() * 40,
+                vy: 15 + Math.random() * 25,
+                vx: (Math.random() - 0.5) * 20,
+                size: 1 + Math.random() * 3,
+                alpha: 0.4 + Math.random() * 0.3
+            });
+        }
+        for (const p of anim.dustParticles) {
+            p.y += p.vy * dt;
+            p.x += p.vx * dt;
+            p.alpha -= dt * 0.2;
+        }
+        anim.dustParticles = anim.dustParticles.filter(p => p.alpha > 0);
+
+        if (anim.timer >= wallAdvanceDur) {
             anim.phase = 2;
             anim.timer = 0;
         }
     } else if (anim.phase === 2) {
-        // Phase 2: Whiteout — screen goes fully white
-        if (anim.timer >= whiteoutDuration) {
+        // Phase 2: Engulf — wall passes player, rider flails/tumbles, gets obscured
+        const progress = Math.min(1, anim.timer / engulfDur);
+        anim.wallY = anim.playerScreenY + progress * (CANVAS_HEIGHT - anim.playerScreenY + 50);
+        anim.playerRotation += dt * 4;
+        anim.playerArmAngle = Math.sin(anim.timer * 6) * 1.2;
+        anim.playerAlpha = Math.max(0.1, 1 - progress * 0.9);
+
+        // Heavy shake
+        triggerScreenShake(15 + Math.sin(anim.timer * 4) * 5, 0.93);
+
+        // Debris vortex around player
+        for (const d of anim.avalancheDebris) {
+            d.y += d.speed * 0.5 * dt;
+            d.x += Math.sin(anim.timer * 3 + d.rotation) * 25 * dt;
+            d.rotation += d.rotSpeed * dt;
+        }
+        for (const c of anim.avalancheLeadingChunks) {
+            c.y += c.speed * 0.3 * dt;
+            c.rotation += c.rotSpeed * dt;
+        }
+        for (const b of anim.avalancheBumps) {
+            b.phase += b.speed * dt * 0.5;
+        }
+
+        if (anim.timer >= engulfDur) {
             anim.phase = 3;
             anim.timer = 0;
         }
     } else if (anim.phase === 3) {
-        // Phase 3: Fade — white fades to dark
-        if (anim.timer >= fadeDuration) {
+        // Phase 3: Settle — snow settles to white, board tip pokes through
+        const progress = Math.min(1, anim.timer / settleDur);
+        // Shake decays
+        triggerScreenShake(Math.max(0, 4 * (1 - progress)), 0.9);
+        // Board tip slowly emerges
+        anim.boardTipProgress = progress;
+        // Slow debris
+        for (const d of anim.avalancheDebris) {
+            d.speed *= (1 - dt * 3);
+            d.y += d.speed * 0.1 * dt;
+        }
+
+        if (anim.timer >= settleDur) {
+            anim.phase = 4;
+            anim.timer = 0;
+        }
+    } else if (anim.phase === 4) {
+        // Phase 4: Fade — white fades to black, board tip visible until last moment
+        const progress = Math.min(1, anim.timer / fadeDur);
+        // Board tip stays visible
+        anim.boardTipProgress = 1;
+
+        if (anim.timer >= fadeDur) {
             anim.active = false;
             anim.completed = true;
-            triggerGameOver('fog'); // Re-trigger as fog to reach actual game over
+            triggerGameOver('fog');
         }
     }
 }
@@ -7219,15 +7492,132 @@ function drawAvalancheDeathAnimation(anim) {
     const time = gameState.animationTime;
     const easeInOutQuad = t => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 
+    // Helper: draw the snow wall, gradient zone, and bumps
+    const drawSnowWall = (wallY) => {
+        // Dense snow behind wall
+        ctx.fillStyle = 'rgba(210, 222, 240, 0.97)';
+        ctx.fillRect(0, 0, CANVAS_WIDTH, Math.max(0, wallY - 100));
+
+        // 200px gradient transition zone
+        const gradTop = Math.max(0, wallY - 100);
+        const wallGrad = ctx.createLinearGradient(0, gradTop, 0, wallY + 60);
+        wallGrad.addColorStop(0, 'rgba(200, 215, 235, 1)');
+        wallGrad.addColorStop(0.3, 'rgba(215, 225, 242, 0.95)');
+        wallGrad.addColorStop(0.6, 'rgba(230, 238, 250, 0.8)');
+        wallGrad.addColorStop(0.85, 'rgba(240, 245, 255, 0.4)');
+        wallGrad.addColorStop(1, 'rgba(245, 248, 255, 0)');
+        ctx.fillStyle = wallGrad;
+        ctx.fillRect(0, gradTop, CANVAS_WIDTH, 160);
+
+        // 2-layer cloud bumps at leading edge
+        for (const layer of ['back', 'front']) {
+            for (const b of anim.avalancheBumps) {
+                if (b.layer !== layer) continue;
+                const bx = b.baseX + Math.sin(b.phase) * b.amplitude;
+                const by = wallY + Math.sin(b.phase * 0.7) * 8;
+                const br = b.radius * (layer === 'back' ? 1.2 : 0.9);
+                const alpha = layer === 'back' ? 0.7 : 0.85;
+                const shade = layer === 'back' ? 225 : 240;
+                ctx.fillStyle = `rgba(${shade}, ${shade + 10}, 252, ${alpha})`;
+                ctx.beginPath();
+                ctx.arc(bx, by, br, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+    };
+
+    // Helper: draw debris particles
+    const drawDebris = (offsetX) => {
+        for (const d of anim.avalancheDebris) {
+            if (d.y > -100 && d.y < CANVAS_HEIGHT + 50) {
+                ctx.save();
+                ctx.translate((d.x + offsetX) % CANVAS_WIDTH, d.y);
+                ctx.rotate(d.rotation);
+                ctx.fillStyle = `rgba(240, 245, 255, ${0.3 + Math.sin(d.rotation) * 0.15})`;
+                ctx.fillRect(-d.size, -d.size * 0.5, d.size * 2, d.size);
+                ctx.restore();
+            }
+        }
+    };
+
+    // Helper: draw leading chunks
+    const drawChunks = () => {
+        for (const c of anim.avalancheLeadingChunks) {
+            if (c.y < -30 || c.y > CANVAS_HEIGHT + 30) continue;
+            ctx.save();
+            ctx.translate(c.x, c.y);
+            ctx.rotate(c.rotation);
+            const shade = 220 + Math.floor(Math.sin(c.rotation) * 15);
+            ctx.fillStyle = `rgba(${shade}, ${shade + 8}, 252, 0.7)`;
+            ctx.fillRect(-c.size * 0.6, -c.size * 0.4, c.size * 1.2, c.size * 0.8);
+            ctx.restore();
+        }
+    };
+
+    // Helper: draw snowboard tip poking through snow
+    const drawBoardTip = (progress) => {
+        if (progress <= 0) return;
+        const tipX = anim.boardTipX;
+        const tipBaseY = anim.boardTipY + 10;
+        const tipLen = 22 * progress;
+        const angle = anim.boardTipAngle;
+
+        ctx.save();
+        ctx.translate(tipX, tipBaseY);
+        ctx.rotate(-angle);
+
+        // Board tip — hotPink rounded rectangle
+        ctx.fillStyle = COLORS.hotPink;
+        ctx.beginPath();
+        ctx.roundRect(-2.5, -tipLen, 5, tipLen, 2);
+        ctx.fill();
+
+        // Edge detail
+        ctx.strokeStyle = '#cc1177';
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        ctx.moveTo(-2.5, -tipLen + 2);
+        ctx.lineTo(-2.5, 0);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(2.5, -tipLen + 2);
+        ctx.lineTo(2.5, 0);
+        ctx.stroke();
+
+        // Binding detail at base (small dark band)
+        if (progress > 0.5) {
+            ctx.fillStyle = '#333';
+            ctx.fillRect(-3, -3, 6, 3);
+        }
+
+        ctx.restore();
+
+        // Small shadow beneath board tip
+        ctx.fillStyle = `rgba(150, 160, 180, ${0.3 * progress})`;
+        ctx.beginPath();
+        ctx.ellipse(tipX + 3, tipBaseY + 2, 6 * progress, 2 * progress, 0, 0, Math.PI * 2);
+        ctx.fill();
+    };
+
+    // Helper: draw dust particles
+    const drawDust = () => {
+        for (const p of anim.dustParticles) {
+            if (p.alpha <= 0) continue;
+            ctx.fillStyle = `rgba(220, 230, 245, ${p.alpha})`;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    };
+
     if (anim.phase === 0) {
-        // Phase 0: Engulf — avalanche wall rushes over player
-        const progress = easeInOutQuad(Math.min(1, anim.timer / 1.5));
+        // Phase 0: Distant Rumble — thin white gradient at top, dust drifts
+        const progress = Math.min(1, anim.timer / 1.0);
         const screen = worldToScreen(anim.playerX, anim.playerY);
 
-        // Player still visible, being overtaken
+        // Player in "frozen" pose
         ctx.save();
         ctx.translate(screen.x, screen.y);
-        ctx.globalAlpha = 1 - progress * 0.6;
         ctx.fillStyle = COLORS.hotPink;
         ctx.beginPath();
         ctx.arc(0, -10, 10, 0, Math.PI * 2);
@@ -7236,121 +7626,150 @@ function drawAvalancheDeathAnimation(anim) {
         ctx.beginPath();
         ctx.arc(0, -20, 6, 0, Math.PI * 2);
         ctx.fill();
-        ctx.globalAlpha = 1;
         ctx.restore();
 
-        // Avalanche wall advancing from top
-        const wallY = -50 + progress * (CANVAS_HEIGHT + 100);
-        const wallGrad = ctx.createLinearGradient(0, wallY - 120, 0, wallY + 30);
-        wallGrad.addColorStop(0, 'rgba(200, 215, 235, 1)');
-        wallGrad.addColorStop(0.4, 'rgba(220, 230, 245, 0.95)');
-        wallGrad.addColorStop(0.7, 'rgba(240, 245, 255, 0.8)');
-        wallGrad.addColorStop(1, 'rgba(245, 248, 255, 0)');
-        ctx.fillStyle = wallGrad;
-        ctx.fillRect(0, wallY - 120, CANVAS_WIDTH, 150);
+        // Thin white gradient band at top
+        const bandGrad = ctx.createLinearGradient(0, 0, 0, anim.wallY + 30);
+        bandGrad.addColorStop(0, `rgba(220, 230, 245, ${0.3 + progress * 0.4})`);
+        bandGrad.addColorStop(1, 'rgba(240, 245, 255, 0)');
+        ctx.fillStyle = bandGrad;
+        ctx.fillRect(0, 0, CANVAS_WIDTH, anim.wallY + 30);
 
-        // Dense snow behind
-        ctx.fillStyle = 'rgba(210, 222, 240, 0.97)';
-        ctx.fillRect(0, 0, CANVAS_WIDTH, Math.max(0, wallY - 120));
-
-        // Rolling cloud bumps at leading edge
-        for (let i = 0; i < 8; i++) {
-            const bx = (i * CANVAS_WIDTH / 8) + Math.sin(time * 2 + i * 1.3) * 20;
-            const by = wallY + Math.sin(time * 1.8 + i * 0.9) * 12;
-            const br = 30 + Math.sin(i * 2.3 + time) * 12;
-            ctx.fillStyle = `rgba(${235 + Math.floor(Math.sin(i) * 10)}, 242, 252, 0.85)`;
-            ctx.beginPath();
-            ctx.arc(bx, by, br, 0, Math.PI * 2);
-            ctx.fill();
-        }
-
-        // Snow debris chunks
-        if (anim.avalancheDebris) {
-            for (const d of anim.avalancheDebris) {
-                if (d.y > -100 && d.y < CANVAS_HEIGHT + 50) {
-                    ctx.save();
-                    ctx.translate(d.x + CANVAS_WIDTH / 2, d.y);
-                    ctx.rotate(d.rotation);
-                    ctx.fillStyle = `rgba(240, 245, 255, ${0.4 + Math.sin(d.rotation) * 0.2})`;
-                    ctx.fillRect(-d.size, -d.size * 0.5, d.size * 2, d.size);
-                    ctx.restore();
-                }
-            }
-        }
+        // Dust particles
+        drawDust();
 
     } else if (anim.phase === 1) {
-        // Phase 1: Tumble — player rotates and shrinks amid dense snow
-        const progress = easeInOutQuad(Math.min(1, anim.timer / 1.5));
+        // Phase 1: Wall Advance — avalanche creeps down with churning bumps
+        const screen = worldToScreen(anim.playerX, anim.playerY);
 
-        // Full snow background
-        ctx.fillStyle = 'rgba(220, 230, 245, 0.95)';
-        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-
-        // Swirling debris
-        if (anim.avalancheDebris) {
-            for (const d of anim.avalancheDebris) {
-                ctx.save();
-                const dx = CANVAS_WIDTH / 2 + d.x * (1 - progress * 0.3);
-                const dy = CANVAS_HEIGHT / 2 + (d.y % CANVAS_HEIGHT) * 0.5;
-                ctx.translate(dx, dy);
-                ctx.rotate(d.rotation);
-                const alpha = 0.3 + Math.sin(d.rotation * 2) * 0.15;
-                ctx.fillStyle = `rgba(190, 205, 225, ${alpha})`;
-                ctx.fillRect(-d.size, -d.size * 0.6, d.size * 2, d.size * 1.2);
-                ctx.restore();
-            }
-        }
-
-        // Player tumbling (shrinking and spinning)
-        const playerScale = 1 - progress * 0.8;
-        const playerAlpha = 1 - progress * 0.7;
+        // Player still visible below with slight tremble
+        const tremble = Math.sin(anim.timer * 10) * 1.5;
         ctx.save();
-        ctx.translate(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
-        ctx.rotate(anim.playerRotation);
-        ctx.scale(playerScale, playerScale);
-        ctx.globalAlpha = playerAlpha;
+        ctx.translate(screen.x + tremble, screen.y);
         ctx.fillStyle = COLORS.hotPink;
         ctx.beginPath();
-        ctx.arc(0, 5, 10, 0, Math.PI * 2);
+        ctx.arc(0, -10, 10, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillStyle = COLORS.electricBlue;
         ctx.beginPath();
-        ctx.arc(0, -8, 6, 0, Math.PI * 2);
+        ctx.arc(0, -20, 6, 0, Math.PI * 2);
         ctx.fill();
-        ctx.globalAlpha = 1;
         ctx.restore();
 
-    } else if (anim.phase === 2) {
-        // Phase 2: Whiteout — screen fully white with settling particles
-        const progress = easeInOutQuad(Math.min(1, anim.timer / 1.0));
+        // Snow wall with bumps
+        drawSnowWall(anim.wallY);
 
-        ctx.fillStyle = `rgba(240, 245, 255, ${0.9 + progress * 0.1})`;
+        // Leading chunks tumbling ahead
+        drawChunks();
+
+        // Debris particles
+        drawDebris(CANVAS_WIDTH / 2);
+
+        // Dust
+        drawDust();
+
+    } else if (anim.phase === 2) {
+        // Phase 2: Engulf — wall past player, rider flails/tumbles, obscured by snow
+        const progress = Math.min(1, anim.timer / 1.5);
+
+        // Snow wall covering most of screen
+        drawSnowWall(anim.wallY);
+
+        // Swirling debris
+        drawDebris(CANVAS_WIDTH / 2);
+        drawChunks();
+
+        // Player tumbling amid snow (drawn ABOVE the wall if still visible)
+        if (anim.playerAlpha > 0.1) {
+            ctx.save();
+            ctx.translate(anim.playerScreenX, anim.playerScreenY);
+            ctx.rotate(anim.playerRotation);
+            ctx.globalAlpha = anim.playerAlpha;
+
+            // Body
+            ctx.fillStyle = COLORS.hotPink;
+            ctx.beginPath();
+            ctx.arc(0, 0, 8 * (1 - progress * 0.4), 0, Math.PI * 2);
+            ctx.fill();
+            // Head
+            ctx.fillStyle = COLORS.electricBlue;
+            ctx.beginPath();
+            ctx.arc(0, -12, 5 * (1 - progress * 0.3), 0, Math.PI * 2);
+            ctx.fill();
+            // Flailing arms
+            ctx.strokeStyle = COLORS.hotPink;
+            ctx.lineWidth = 2;
+            const armA = anim.playerArmAngle;
+            ctx.beginPath();
+            ctx.moveTo(-5, -2);
+            ctx.lineTo(-5 - Math.cos(armA) * 12, -2 + Math.sin(armA) * 12);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(5, -2);
+            ctx.lineTo(5 + Math.cos(armA + 1) * 12, -2 + Math.sin(armA + 1) * 12);
+            ctx.stroke();
+
+            ctx.globalAlpha = 1;
+            ctx.restore();
+        }
+
+        // Dense snow overlay for areas past wall
+        const overlayAlpha = Math.min(0.9, progress * 0.6);
+        ctx.fillStyle = `rgba(230, 238, 250, ${overlayAlpha})`;
         ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-        // Settling snow particles drifting down slowly
-        const settleCount = 30;
+    } else if (anim.phase === 3) {
+        // Phase 3: Settle — full white, board tip pokes through
+        const progress = Math.min(1, anim.timer / 0.5);
+
+        // White background
+        ctx.fillStyle = 'rgba(240, 245, 255, 1)';
+        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+        // Gentle settling particles
+        const settleCount = 20;
         for (let i = 0; i < settleCount; i++) {
             const seed = i * 57.13;
-            const sx = ((seed * 13 + time * 8) % CANVAS_WIDTH);
-            const sy = ((seed * 7 + anim.timer * 30 + i * 25) % CANVAS_HEIGHT);
-            const ss = 1 + Math.sin(seed) * 0.8;
-            const alpha = (1 - progress) * 0.4;
+            const sx = ((seed * 13 + time * 5) % CANVAS_WIDTH);
+            const sy = ((seed * 7 + anim.timer * 15 + i * 30) % CANVAS_HEIGHT);
+            const ss = 1 + Math.sin(seed) * 0.6;
+            const alpha = (1 - progress * 0.5) * 0.3;
             ctx.fillStyle = `rgba(200, 210, 225, ${alpha})`;
             ctx.beginPath();
             ctx.arc(sx, sy, ss, 0, Math.PI * 2);
             ctx.fill();
         }
 
-    } else if (anim.phase === 3) {
-        // Phase 3: Fade — white fades to dark
-        const progress = easeInOutQuad(Math.min(1, anim.timer / 1.0));
+        // Snowboard tip emerging from snow surface
+        drawBoardTip(anim.boardTipProgress);
 
-        // White background fading to black
+        // Subtle snow surface line across the bottom third
+        ctx.strokeStyle = 'rgba(190, 200, 220, 0.3)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, anim.boardTipY + 12);
+        for (let x = 0; x <= CANVAS_WIDTH; x += 20) {
+            ctx.lineTo(x, anim.boardTipY + 12 + Math.sin(x * 0.02 + time) * 3);
+        }
+        ctx.stroke();
+
+    } else if (anim.phase === 4) {
+        // Phase 4: Fade — white fades to black, board tip visible until last moment
+        const progress = easeInOutQuad(Math.min(1, anim.timer / 0.5));
+
+        // White-to-black interpolation
         const r = Math.floor(240 * (1 - progress));
         const g = Math.floor(245 * (1 - progress));
         const b = Math.floor(255 * (1 - progress));
         ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
         ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+        // Board tip visible until final fade
+        if (progress < 0.85) {
+            ctx.globalAlpha = 1 - progress / 0.85;
+            drawBoardTip(1);
+            ctx.globalAlpha = 1;
+        }
     }
 }
 
@@ -7547,6 +7966,220 @@ function drawBeastHead(ctx, mouthOpen, satisfied, time) {
         ctx.stroke();
         ctx.shadowBlur = 0;
     }
+}
+
+// Helper: draw full-body beast (parameterized for death animation)
+// armPose: 'running' | 'reaching' | 'holding' | 'feeding'
+// facing: 1 = toward camera, -1 = away (walking off)
+function drawBeastFullBody(ctx, x, y, runPhase, scale, facing, armPose, time) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(scale, scale);
+    if (facing < 0) ctx.scale(1, 1); // facing away: we'll dim eyes instead
+
+    // Breathing
+    const breathe = Math.sin(time * 3) * 0.03 + 1;
+    ctx.scale(breathe, 1 / breathe);
+
+    // Subtle dark aura
+    const pulseIntensity = 0.3 + Math.sin(time * 3) * 0.15;
+    ctx.fillStyle = `rgba(26, 10, 50, ${pulseIntensity * 0.15})`;
+    ctx.beginPath();
+    ctx.arc(0, 0, 75, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Walking leg animation driven by runPhase
+    const walkPhase = Math.sin(runPhase) * 6;
+
+    // Legs
+    ctx.strokeStyle = '#0d0d2a';
+    ctx.lineWidth = 13;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-12, 20);
+    ctx.lineTo(-16 - walkPhase, 42);
+    ctx.lineTo(-14 - walkPhase * 0.5, 54);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(12, 20);
+    ctx.lineTo(16 + walkPhase, 42);
+    ctx.lineTo(14 + walkPhase * 0.5, 54);
+    ctx.stroke();
+    // Feet
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.moveTo(-18 - walkPhase * 0.5, 53);
+    ctx.lineTo(-10 - walkPhase * 0.5, 56);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(10 + walkPhase * 0.5, 53);
+    ctx.lineTo(18 + walkPhase * 0.5, 56);
+    ctx.stroke();
+
+    // Torso
+    ctx.fillStyle = '#1a1a3a';
+    ctx.beginPath();
+    ctx.moveTo(-28, -18);
+    ctx.lineTo(-22, 22);
+    ctx.quadraticCurveTo(0, 26, 22, 22);
+    ctx.lineTo(28, -18);
+    ctx.quadraticCurveTo(0, -24, -28, -18);
+    ctx.fill();
+
+    // Shoulder humps
+    ctx.beginPath();
+    ctx.ellipse(-26, -16, 10, 7, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(26, -16, 10, 7, 0.3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Arms — pose-dependent
+    const armSwing = walkPhase * 0.8;
+    ctx.strokeStyle = '#0d0d2a';
+    ctx.lineWidth = 11;
+
+    if (armPose === 'running') {
+        // Normal running swing
+        ctx.beginPath(); ctx.moveTo(-28, -12); ctx.lineTo(-34 + armSwing, 6); ctx.lineTo(-32 + armSwing * 0.5, 22); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(28, -12); ctx.lineTo(34 - armSwing, 6); ctx.lineTo(32 - armSwing * 0.5, 22); ctx.stroke();
+        // Clawed hands
+        ctx.fillStyle = '#0d0d2a';
+        ctx.beginPath(); ctx.arc(-32 + armSwing * 0.5, 23, 5, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(32 - armSwing * 0.5, 23, 5, 0, Math.PI * 2); ctx.fill();
+    } else if (armPose === 'reaching') {
+        // Arms stretched forward/down to grab
+        ctx.beginPath(); ctx.moveTo(-28, -12); ctx.lineTo(-30, 8); ctx.lineTo(-22, 28); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(28, -12); ctx.lineTo(30, 8); ctx.lineTo(22, 28); ctx.stroke();
+        // Clawed hands reaching
+        ctx.fillStyle = '#0d0d2a';
+        ctx.beginPath(); ctx.arc(-22, 29, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(22, 29, 6, 0, Math.PI * 2); ctx.fill();
+        // Extended claws
+        ctx.strokeStyle = '#3a3030';
+        ctx.lineWidth = 2.5;
+        for (let side = -1; side <= 1; side += 2) {
+            const hx = side * 22;
+            for (let c = -1; c <= 1; c++) {
+                ctx.beginPath();
+                ctx.moveTo(hx + c * 3, 29);
+                ctx.lineTo(hx + c * 4 + side * 5, 38);
+                ctx.stroke();
+            }
+        }
+    } else if (armPose === 'holding') {
+        // Arms curled inward, holding something
+        ctx.beginPath(); ctx.moveTo(-28, -12); ctx.lineTo(-24, 4); ctx.lineTo(-12, 12); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(28, -12); ctx.lineTo(24, 4); ctx.lineTo(12, 12); ctx.stroke();
+        // Clenched fists inward
+        ctx.fillStyle = '#0d0d2a';
+        ctx.beginPath(); ctx.arc(-12, 13, 5, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(12, 13, 5, 0, Math.PI * 2); ctx.fill();
+    } else if (armPose === 'feeding') {
+        // Arms raised up toward mouth
+        ctx.beginPath(); ctx.moveTo(-28, -12); ctx.lineTo(-22, -18); ctx.lineTo(-10, -26); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(28, -12); ctx.lineTo(22, -18); ctx.lineTo(10, -26); ctx.stroke();
+        // Hands near head
+        ctx.fillStyle = '#0d0d2a';
+        ctx.beginPath(); ctx.arc(-10, -27, 5, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(10, -27, 5, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // Claw strokes (for running pose)
+    if (armPose === 'running') {
+        ctx.strokeStyle = '#3a3030';
+        ctx.lineWidth = 2;
+        for (let side = -1; side <= 1; side += 2) {
+            const hx = side * (32 - armSwing * 0.5 * side);
+            for (let c = -1; c <= 1; c++) {
+                ctx.beginPath();
+                ctx.moveTo(hx + c * 3, 20);
+                ctx.lineTo(hx + c * 3 + side * 3, 14);
+                ctx.stroke();
+            }
+        }
+    }
+
+    // Head
+    ctx.fillStyle = '#1a1a3a';
+    ctx.beginPath();
+    ctx.ellipse(0, -32, 16, 14, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Brow ridge
+    ctx.fillStyle = '#0d0d2a';
+    ctx.beginPath();
+    ctx.ellipse(0, -38, 14, 4, 0, Math.PI, Math.PI * 2);
+    ctx.fill();
+
+    // Fur spikes on head
+    ctx.strokeStyle = '#4a4a6a';
+    ctx.lineWidth = 2;
+    for (let i = -2; i <= 2; i++) {
+        ctx.beginPath();
+        ctx.moveTo(i * 5, -44);
+        ctx.lineTo(i * 5, -52 - Math.abs(i));
+        ctx.stroke();
+    }
+
+    // Fur texture on torso
+    ctx.strokeStyle = '#4a4a6a';
+    ctx.lineWidth = 1.2;
+    for (let i = 0; i < 6; i++) {
+        const fx = -18 + i * 7;
+        ctx.beginPath();
+        ctx.moveTo(fx, -14);
+        ctx.lineTo(fx + Math.sin(time * 2) * 2, 8);
+        ctx.stroke();
+    }
+
+    ctx.shadowBlur = 0;
+
+    // Eyes
+    if (facing > 0) {
+        // Facing camera — glowing cyan eyes
+        const eyeTrack = Math.sin(time) * 1.5;
+        ctx.fillStyle = COLORS.cyan;
+        ctx.shadowColor = COLORS.cyan;
+        ctx.shadowBlur = 6;
+        ctx.beginPath(); ctx.ellipse(-7 + eyeTrack, -34, 4, 5, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(7 + eyeTrack, -34, 4, 5, 0, 0, Math.PI * 2); ctx.fill();
+        // Eye cores
+        ctx.fillStyle = '#ffffff';
+        ctx.shadowBlur = 2;
+        ctx.beginPath(); ctx.ellipse(-7 + eyeTrack, -34, 1.5, 2, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(7 + eyeTrack, -34, 1.5, 2, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.shadowBlur = 0;
+        // Mouth
+        ctx.strokeStyle = '#0d0d2a';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-10, -24);
+        ctx.quadraticCurveTo(0, -21, 10, -24);
+        ctx.stroke();
+        // Fang tips
+        ctx.strokeStyle = '#e8e0d0';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(-6, -24); ctx.lineTo(-7, -21); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(6, -24); ctx.lineTo(7, -21); ctx.stroke();
+    } else {
+        // Facing away — just show back of head, no eyes
+        ctx.fillStyle = '#0d0d2a';
+        ctx.beginPath();
+        ctx.ellipse(0, -32, 14, 12, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Extra fur on back of head
+        ctx.strokeStyle = '#4a4a6a';
+        ctx.lineWidth = 1.5;
+        for (let i = -3; i <= 3; i++) {
+            ctx.beginPath();
+            ctx.moveTo(i * 4, -38);
+            ctx.lineTo(i * 4 + Math.sin(time + i) * 1.5, -44 - Math.abs(i) * 0.5);
+            ctx.stroke();
+        }
+    }
+
+    ctx.restore();
 }
 
 function saveHighScore() {
