@@ -1203,8 +1203,8 @@ function handleTouchStart(e) {
 }
 
 function handleTouchMove(e) {
-    // Only prevent default during active gameplay
-    if (gameState.screen === 'playing' || gameState.screen === 'lodge') {
+    // Only prevent default during active gameplay (not when paused)
+    if ((gameState.screen === 'playing' || gameState.screen === 'lodge') && !gameState.paused) {
         e.preventDefault();
     }
     if (!touchState.active) return;
@@ -1265,8 +1265,8 @@ function handleTouchMove(e) {
 }
 
 function handleTouchEnd(e) {
-    // Only prevent default during active gameplay
-    if (gameState.screen === 'playing' || gameState.screen === 'lodge') {
+    // Only prevent default during active gameplay (not when paused)
+    if ((gameState.screen === 'playing' || gameState.screen === 'lodge') && !gameState.paused) {
         e.preventDefault();
     }
 
@@ -1474,22 +1474,35 @@ function pollGamepad(dt) {
             togglePause();
         }
 
+        // When paused, delegate to menu navigation instead of gameplay input
+        if (gameState.paused) {
+            pollGamepadMenu(dt, btnA, btnB, startPressed, dpadUp, dpadDown, dpadLeft, dpadRight);
+            // Store last states and return
+            gamepadState._lastA = btnA;
+            gamepadState._lastB = btnB;
+            gamepadState._lastStart = startPressed;
+            gamepadState._lastDpadUp = dpadUp;
+            gamepadState._lastDpadDown = dpadDown;
+            gamepadState._lastDpadLeft = dpadLeft;
+            gamepadState._lastDpadRight = dpadRight;
+            return;
+        }
+
         // Only process movement input when not paused
         // SET input from gamepad state each frame (not OR onto stale state)
         // Keyboard keyup events will handle keyboard clearing separately
-        if (!gameState.paused) {
-            // Track gamepad contribution separately so keyboard still works
-            // Clear previous gamepad state, then apply current
-            if (gamepadState._gpLeft && !dpadLeft) input.left = false;
-            if (gamepadState._gpRight && !dpadRight) input.right = false;
-            if (gamepadState._gpUp && !dpadUp) input.up = false;
-            if (gamepadState._gpDown && !dpadDown) input.down = false;
-            // Apply current gamepad state
-            if (dpadLeft) input.left = true;
-            if (dpadRight) input.right = true;
-            if (dpadUp) input.up = true;
-            if (dpadDown) input.down = true;
-        }
+        // Track gamepad contribution separately so keyboard still works
+        // Clear previous gamepad state, then apply current
+        if (gamepadState._gpLeft && !dpadLeft) input.left = false;
+        if (gamepadState._gpRight && !dpadRight) input.right = false;
+        if (gamepadState._gpUp && !dpadUp) input.up = false;
+        if (gamepadState._gpDown && !dpadDown) input.down = false;
+        // Apply current gamepad state
+        if (dpadLeft) input.left = true;
+        if (dpadRight) input.right = true;
+        if (dpadUp) input.up = true;
+        if (dpadDown) input.down = true;
+
         // Track what the gamepad is contributing
         gamepadState._gpLeft = dpadLeft;
         gamepadState._gpRight = dpadRight;
@@ -1498,12 +1511,8 @@ function pollGamepad(dt) {
 
         // A = space (for starting, confirming, etc.)
         if (btnA && !gamepadState._lastA) {
-            if (gameState.paused) {
-                resumeGame();
-            } else {
-                input.space = true;
-                setTimeout(() => { input.space = false; }, 100);
-            }
+            input.space = true;
+            setTimeout(() => { input.space = false; }, 100);
         }
 
         gamepadState._lastA = btnA;
@@ -1526,6 +1535,28 @@ function pollGamepad(dt) {
             gameState.screen = 'title';
             showStartScreen();
             musicManager.stop();
+        }
+    }
+
+    // On title screen: Start button launches the selected mode directly
+    if (gameState.screen === 'title' && startPressed && !gamepadState._lastStart) {
+        // Only if no submenu is open
+        const howToPlay = document.getElementById('howToPlayMenu');
+        const highScores = document.getElementById('highScoresMenu');
+        const settings = document.getElementById('settingsMenu');
+        const noSubmenu = !(howToPlay && howToPlay.classList.contains('active')) &&
+                          !(highScores && highScores.classList.contains('active')) &&
+                          !(settings && (settings.classList.contains('active') || (settings.style.display !== 'none' && settings.style.display !== '')));
+        if (noSubmenu) {
+            startSelectedMode();
+            gamepadState._lastA = btnA;
+            gamepadState._lastB = btnB;
+            gamepadState._lastStart = startPressed;
+            gamepadState._lastDpadUp = dpadUp;
+            gamepadState._lastDpadDown = dpadDown;
+            gamepadState._lastDpadLeft = dpadLeft;
+            gamepadState._lastDpadRight = dpadRight;
+            return;
         }
     }
 
@@ -1609,11 +1640,15 @@ function pollGamepadMenu(dt, btnA, btnB, btnStart, dpadUp, dpadDown, dpadLeft, d
         updateGamepadFocus(menuItems, gamepadState.menuFocusIndex);
     }
 
-    // A button or Start = activate focused item (type-aware)
-    if ((btnA && !gamepadState._lastA) || (btnStart && !gamepadState._lastStart)) {
+    // A button = activate focused item (type-aware)
+    if (btnA && !gamepadState._lastA) {
         const focused = menuItems[gamepadState.menuFocusIndex];
         if (focused) {
-            if (focused.tagName === 'INPUT' && focused.type === 'checkbox') {
+            // Mode buttons: A selects the mode AND starts the game
+            if (focused.id === 'modeOG' || focused.id === 'modeSlalom') {
+                focused.click(); // Selects the mode
+                startSelectedMode(); // Immediately starts the game
+            } else if (focused.tagName === 'INPUT' && focused.type === 'checkbox') {
                 // Toggle checkbox and fire change event
                 focused.checked = !focused.checked;
                 focused.dispatchEvent(new Event('change'));
