@@ -174,7 +174,7 @@ const displaySettings = {
     baseHeight: BASE_HEIGHT,
     scale: 1,
     fullscreen: false,
-    currentResolution: '480x640',
+    currentResolution: '1920x1080',
     autoDetect: true,
     screenShakeEnabled: true,
     hapticsEnabled: true,
@@ -1077,6 +1077,7 @@ const touchInput = {
 
 function setupInput() {
     document.addEventListener('keydown', (e) => {
+        tryAutoFullscreen();
         switch (e.code) {
             case 'ArrowLeft':
             case 'KeyA':
@@ -1154,6 +1155,7 @@ function setupTouchInput() {
 }
 
 function handleTouchStart(e) {
+    tryAutoFullscreen();
     const target = e.target;
 
     // Check if touching a real interactive element (button, link, input)
@@ -1460,6 +1462,11 @@ function pollGamepad(dt) {
     const dpadLeft = btn(14) || lx < -dz;
     const dpadRight = btn(15) || lx > dz;
 
+    // Auto-fullscreen on first gamepad interaction
+    if (btnA || btnB || startPressed || dpadUp || dpadDown || dpadLeft || dpadRight) {
+        tryAutoFullscreen();
+    }
+
     // During gameplay: map to input directly
     if (gameState.screen === 'playing' || gameState.screen === 'lodge' || gameState.screen === 'dying') {
         // Start button toggles pause during gameplay
@@ -1545,7 +1552,7 @@ function pollGamepadMenu(dt, btnA, btnB, btnStart, dpadUp, dpadDown, dpadLeft, d
         gamepadState.menuFocusIndex = 0;
     }
 
-    // Navigate up/down (or left/right for mode selector)
+    // Rising-edge detection
     const navUp = dpadUp && !gamepadState._lastDpadUp;
     const navDown = dpadDown && !gamepadState._lastDpadDown;
     const navLeft = dpadLeft && !gamepadState._lastDpadLeft;
@@ -1553,10 +1560,12 @@ function pollGamepadMenu(dt, btnA, btnB, btnStart, dpadUp, dpadDown, dpadLeft, d
 
     let moved = false;
 
-    // Check if current focus is on a mode button
+    // Determine focused element type
     const currentItem = menuItems[gamepadState.menuFocusIndex];
     const isOnModeBtn = currentItem && (currentItem.id === 'modeOG' || currentItem.id === 'modeSlalom');
+    const isOnSelect = currentItem && currentItem.tagName === 'SELECT';
 
+    // Left/right behavior depends on element type
     if (isOnModeBtn && (navLeft || navRight)) {
         // Left/right navigates between mode buttons
         if (navLeft) {
@@ -1567,8 +1576,23 @@ function pollGamepadMenu(dt, btnA, btnB, btnStart, dpadUp, dpadDown, dpadLeft, d
             const slIdx = menuItems.findIndex(el => el.id === 'modeSlalom');
             if (slIdx >= 0) { gamepadState.menuFocusIndex = slIdx; moved = true; }
         }
+    } else if (isOnSelect && (navLeft || navRight)) {
+        // Left/right cycles through select options
+        const select = currentItem;
+        const optCount = select.options.length;
+        if (optCount > 0) {
+            if (navRight) {
+                select.selectedIndex = (select.selectedIndex + 1) % optCount;
+            }
+            if (navLeft) {
+                select.selectedIndex = (select.selectedIndex - 1 + optCount) % optCount;
+            }
+            // Fire the onchange handler
+            select.dispatchEvent(new Event('change'));
+        }
     }
 
+    // Up/down always navigates between items
     if (navUp) {
         gamepadState.menuFocusIndex--;
         if (gamepadState.menuFocusIndex < 0) gamepadState.menuFocusIndex = menuItems.length - 1;
@@ -1585,29 +1609,47 @@ function pollGamepadMenu(dt, btnA, btnB, btnStart, dpadUp, dpadDown, dpadLeft, d
         updateGamepadFocus(menuItems, gamepadState.menuFocusIndex);
     }
 
-    // A button or Start = activate focused item
+    // A button or Start = activate focused item (type-aware)
     if ((btnA && !gamepadState._lastA) || (btnStart && !gamepadState._lastStart)) {
         const focused = menuItems[gamepadState.menuFocusIndex];
         if (focused) {
-            focused.click();
+            if (focused.tagName === 'INPUT' && focused.type === 'checkbox') {
+                // Toggle checkbox and fire change event
+                focused.checked = !focused.checked;
+                focused.dispatchEvent(new Event('change'));
+            } else if (focused.tagName === 'SELECT') {
+                // Cycle forward through options (same as d-pad right)
+                const optCount = focused.options.length;
+                if (optCount > 0) {
+                    focused.selectedIndex = (focused.selectedIndex + 1) % optCount;
+                    focused.dispatchEvent(new Event('change'));
+                }
+            } else {
+                // Buttons: click as before
+                focused.click();
+            }
         }
     }
 
-    // B button = back on submenus
+    // B button = back/close on submenus
     if (btnB && !gamepadState._lastB) {
-        // Check if a submenu is open
         const howToPlay = document.getElementById('howToPlayMenu');
         const highScores = document.getElementById('highScoresMenu');
         const settings = document.getElementById('settingsMenu');
         const slalomResults = document.getElementById('slalomResults');
+        const pauseMenu = document.getElementById('pauseMenu');
 
-        if (howToPlay && howToPlay.classList.contains('active')) {
+        if (pauseMenu && pauseMenu.classList.contains('active')) {
+            // B on pause menu = resume game
+            resumeGame();
+            gamepadState.menuFocusIndex = 0;
+        } else if (howToPlay && howToPlay.classList.contains('active')) {
             hideHowToPlay();
             gamepadState.menuFocusIndex = 0;
         } else if (highScores && highScores.classList.contains('active')) {
             hideHighScores();
             gamepadState.menuFocusIndex = 0;
-        } else if (settings && settings.style.display !== 'none' && settings.style.display !== '') {
+        } else if (settings && (settings.classList.contains('active') || (settings.style.display !== 'none' && settings.style.display !== ''))) {
             hideSettingsMenu();
             gamepadState.menuFocusIndex = 0;
         } else if (slalomResults && slalomResults.style.display !== 'none') {
@@ -1618,7 +1660,7 @@ function pollGamepadMenu(dt, btnA, btnB, btnStart, dpadUp, dpadDown, dpadLeft, d
 }
 
 function getMenuItems() {
-    // Return the focusable buttons for the current screen state
+    // Return the focusable elements for the current screen state
     const items = [];
 
     // Check submenus first (they overlay the main menu)
@@ -1636,9 +1678,17 @@ function getMenuItems() {
         return items;
     }
 
+    // Pause menu (highest priority overlay during gameplay)
+    const pauseMenu = document.getElementById('pauseMenu');
+    if (pauseMenu && pauseMenu.classList.contains('active')) {
+        pauseMenu.querySelectorAll('select, input[type="checkbox"], button').forEach(el => items.push(el));
+        return items;
+    }
+
     const settings = document.getElementById('settingsMenu');
-    if (settings && settings.style.display !== 'none' && settings.style.display !== '') {
-        settings.querySelectorAll('button').forEach(btn => items.push(btn));
+    if (settings && (settings.classList.contains('active') || (settings.style.display !== 'none' && settings.style.display !== ''))) {
+        // Include selects, checkboxes, and buttons in DOM order
+        settings.querySelectorAll('select, input[type="checkbox"], button').forEach(el => items.push(el));
         return items;
     }
 
@@ -1727,6 +1777,18 @@ function expLerp(a, b, speed, dt) {
 
 function clamp(val, min, max) {
     return Math.max(min, Math.min(max, val));
+}
+
+// Catmull-Rom spline interpolation (passes through all control points)
+function catmullRom(p0, p1, p2, p3, t) {
+    const t2 = t * t;
+    const t3 = t2 * t;
+    return 0.5 * (
+        (2 * p1) +
+        (-p0 + p2) * t +
+        (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 +
+        (-p0 + 3 * p1 - 3 * p2 + p3) * t3
+    );
 }
 
 function randomRange(min, max) {
@@ -7508,6 +7570,7 @@ function togglePause() {
         // Show in-game pause menu
         const pauseMenu = document.getElementById('pauseMenu');
         if (pauseMenu) pauseMenu.classList.add('active');
+        gamepadState.menuFocusIndex = 0;
         updatePauseSettingsUI();
     } else {
         hidePauseMenu();
@@ -7945,8 +8008,23 @@ function startSlalom() {
         waterStartY: course.waterStartY,
         onWater: false,
         finishAnimation: 0,
-        nextGateIndex: 0
+        nextGateIndex: 0,
+        // Pre-computed track spline control points for drawSlalomTrack()
+        trackPoints: buildSlalomTrackPoints(course.gates, course.finishLineY)
     };
+}
+
+function buildSlalomTrackPoints(gates, finishLineY) {
+    const points = [];
+    // Start point centered above first gate
+    points.push({ x: 0, y: gates[0].y - SLALOM.warmUpDistance * 0.5 });
+    // Gate centers
+    for (const gate of gates) {
+        points.push({ x: gate.gateX, y: gate.y });
+    }
+    // End point toward finish line
+    points.push({ x: 0, y: finishLineY });
+    return points;
 }
 
 function generateSlalomCourse() {
@@ -8216,9 +8294,108 @@ function checkSlalomCollisions() {
 // SLALOM DRAWING
 // ============================================================================
 
+function drawSlalomTrack() {
+    const slalom = gameState.slalom;
+    if (!slalom || !slalom.trackPoints) return;
+    const points = slalom.trackPoints;
+    if (points.length < 2) return;
+
+    const cameraY = gameState.camera.y;
+    const viewTop = cameraY - 100;
+    const viewBottom = cameraY + CANVAS_HEIGHT + 100;
+    const trackHalfWidth = SLALOM.gateWidth * 0.75;
+
+    ctx.save();
+
+    // --- TRACK FILL (groomed snow, slightly darker than background) ---
+    // Build left edge going down, then right edge going back up
+    ctx.beginPath();
+    let started = false;
+    const leftEdge = [];
+    const rightEdge = [];
+
+    for (let i = 0; i < points.length - 1; i++) {
+        const p0 = points[Math.max(0, i - 1)];
+        const p1 = points[i];
+        const p2 = points[i + 1];
+        const p3 = points[Math.min(points.length - 1, i + 2)];
+
+        // Skip segments entirely off screen
+        const segTop = Math.min(p1.y, p2.y);
+        const segBot = Math.max(p1.y, p2.y);
+        if (segBot < viewTop || segTop > viewBottom) continue;
+
+        const steps = 16;
+        for (let s = 0; s <= steps; s++) {
+            const t = s / steps;
+            const cx = catmullRom(p0.x, p1.x, p2.x, p3.x, t);
+            const cy = catmullRom(p0.y, p1.y, p2.y, p3.y, t);
+
+            const screen = worldToScreen(cx, cy);
+            leftEdge.push({ x: screen.x - trackHalfWidth, y: screen.y });
+            rightEdge.push({ x: screen.x + trackHalfWidth, y: screen.y });
+        }
+    }
+
+    if (leftEdge.length > 0) {
+        // Draw filled track shape
+        ctx.moveTo(leftEdge[0].x, leftEdge[0].y);
+        for (let i = 1; i < leftEdge.length; i++) {
+            ctx.lineTo(leftEdge[i].x, leftEdge[i].y);
+        }
+        // Trace right edge in reverse
+        for (let i = rightEdge.length - 1; i >= 0; i--) {
+            ctx.lineTo(rightEdge[i].x, rightEdge[i].y);
+        }
+        ctx.closePath();
+
+        // Groomed snow fill
+        ctx.fillStyle = 'rgba(170, 205, 225, 0.22)';
+        ctx.fill();
+
+        // --- BERM EDGES (snow ridges on track boundaries) ---
+        // Left berm
+        ctx.beginPath();
+        ctx.moveTo(leftEdge[0].x, leftEdge[0].y);
+        for (let i = 1; i < leftEdge.length; i++) {
+            ctx.lineTo(leftEdge[i].x, leftEdge[i].y);
+        }
+        ctx.strokeStyle = 'rgba(200, 220, 240, 0.45)';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        // Right berm
+        ctx.beginPath();
+        ctx.moveTo(rightEdge[0].x, rightEdge[0].y);
+        for (let i = 1; i < rightEdge.length; i++) {
+            ctx.lineTo(rightEdge[i].x, rightEdge[i].y);
+        }
+        ctx.strokeStyle = 'rgba(200, 220, 240, 0.45)';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        // --- CENTER RACING LINE (subtle dashed guide) ---
+        ctx.beginPath();
+        ctx.moveTo((leftEdge[0].x + rightEdge[0].x) / 2, leftEdge[0].y);
+        for (let i = 1; i < leftEdge.length; i++) {
+            ctx.lineTo((leftEdge[i].x + rightEdge[i].x) / 2, leftEdge[i].y);
+        }
+        ctx.setLineDash([8, 14]);
+        ctx.strokeStyle = 'rgba(180, 200, 220, 0.25)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }
+
+    ctx.restore();
+}
+
 function drawSlalom() {
     drawBackground();
     drawTerrain();
+
+    // Draw carved track path between gates
+    drawSlalomTrack();
 
     // Draw finish zone if in view
     drawSlalomFinishZone();
@@ -8685,6 +8862,7 @@ function showSettingsMenu() {
     const menu = document.getElementById('settingsMenu');
     if (menu) {
         menu.classList.add('active');
+        gamepadState.menuFocusIndex = 0;
         updateSettingsUI();
     }
 }
@@ -8864,6 +9042,8 @@ function fitCanvasToViewport() {
 
 function toggleFullscreen() {
     if (!document.fullscreenElement) {
+        // User is manually entering fullscreen - clear opt-out preference
+        try { localStorage.removeItem('shredordead_nofullscreen'); } catch (e) {}
         document.documentElement.requestFullscreen().then(() => {
             displaySettings.fullscreen = true;
             // Add fullscreen-mode class for CSS styling
@@ -8887,6 +9067,37 @@ function toggleFullscreen() {
         // Resize start screen canvases back
         resizeStartScreenCanvases();
     }
+}
+
+// Auto-fullscreen on first user interaction
+let autoFullscreenTriggered = false;
+
+function tryAutoFullscreen() {
+    if (autoFullscreenTriggered) return;
+    autoFullscreenTriggered = true;
+
+    // Skip if already fullscreen or on mobile (mobile gets fullscreen-like mode already)
+    if (document.fullscreenElement || displaySettings.fullscreen) return;
+    const isMobile = 'ontouchstart' in window && window.innerWidth < 900;
+    if (isMobile) return;
+
+    // Respect user preference to stay windowed
+    try {
+        if (localStorage.getItem('shredordead_nofullscreen') === 'true') return;
+    } catch (e) {}
+
+    document.documentElement.requestFullscreen().then(() => {
+        displaySettings.fullscreen = true;
+        document.body.classList.add('fullscreen-mode');
+        if (displaySettings.autoDetect) {
+            const bestRes = autoDetectResolution();
+            setResolution(bestRes);
+        }
+        resizeStartScreenCanvases();
+        fitCanvasToViewport();
+    }).catch(err => {
+        console.warn('Auto-fullscreen failed:', err);
+    });
 }
 
 // Auto-detect best resolution based on screen size, aspect ratio, and device
@@ -9205,6 +9416,8 @@ document.addEventListener('fullscreenchange', () => {
         }
         // Resize start screen canvases back to normal
         resizeStartScreenCanvases();
+        // Remember user opted out of fullscreen
+        try { localStorage.setItem('shredordead_nofullscreen', 'true'); } catch (e) {}
     }
 
     setTimeout(fitCanvasToViewport, 100);
