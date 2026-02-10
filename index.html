@@ -1099,6 +1099,49 @@
             padding: 16px 32px;
         }
 
+        /* Pause menu fullscreen scaling */
+        body.fullscreen-mode .pause-overlay {
+            max-width: 520px;
+            padding: 36px 48px;
+        }
+
+        body.fullscreen-mode .pause-overlay h2 {
+            font-size: 28px;
+            margin-bottom: 24px;
+        }
+
+        body.fullscreen-mode .pause-settings-section h3 {
+            font-size: 13px;
+            margin-bottom: 12px;
+        }
+
+        body.fullscreen-mode .pause-settings-section .setting-row {
+            padding: 10px 0;
+        }
+
+        body.fullscreen-mode .pause-settings-section .setting-row label {
+            font-size: 14px;
+        }
+
+        body.fullscreen-mode .pause-settings-section select {
+            font-size: 13px;
+            padding: 8px 12px;
+        }
+
+        body.fullscreen-mode .pause-settings-section input[type="checkbox"] {
+            width: 24px;
+            height: 24px;
+        }
+
+        body.fullscreen-mode .pause-btn {
+            font-size: 15px;
+            padding: 16px 24px;
+        }
+
+        body.fullscreen-mode .pause-hint {
+            font-size: 10px;
+        }
+
         #settingsMenu h2 {
             font-family: var(--font-pixel);
             font-size: 24px;
@@ -1231,10 +1274,10 @@
         /* ============================================
            In-Game Pause Button
            ============================================ */
-        #pauseBtn {
+        #pauseBtn,
+        #exitFullscreenBtn {
             position: fixed;
             top: 12px;
-            right: 12px;
             z-index: 45;
             width: 44px;
             height: 44px;
@@ -1252,13 +1295,27 @@
             -webkit-tap-highlight-color: transparent;
         }
 
-        #pauseBtn:hover {
+        #pauseBtn {
+            right: 12px;
+        }
+
+        #exitFullscreenBtn {
+            right: 64px;
+        }
+
+        #pauseBtn:hover,
+        #exitFullscreenBtn:hover {
             background: rgba(0, 255, 255, 0.3);
             border-color: var(--cyan);
         }
 
         /* Show pause button only during gameplay */
         body:not(.menu-active) #pauseBtn {
+            display: flex;
+        }
+
+        /* Show exit fullscreen button during gameplay when in fullscreen */
+        body.fullscreen-mode:not(.menu-active) #exitFullscreenBtn {
             display: flex;
         }
 
@@ -1281,9 +1338,11 @@
 
         #pauseMenu.active {
             display: flex;
+            pointer-events: auto;
         }
 
         .pause-overlay {
+            pointer-events: auto;
             background: linear-gradient(180deg, rgba(26, 10, 46, 0.98) 0%, rgba(15, 10, 30, 0.99) 100%);
             padding: 28px 36px;
             border-radius: 12px;
@@ -1764,7 +1823,8 @@
     <!-- Game Container - separate from start screen -->
     <div id="game-container">
         <canvas id="gameCanvas" width="480" height="640"></canvas>
-        <!-- In-game pause button (touch-friendly) -->
+        <!-- In-game buttons (touch-friendly) -->
+        <button id="exitFullscreenBtn" onclick="toggleFullscreen()" aria-label="Exit fullscreen" title="Exit Fullscreen">⛶</button>
         <button id="pauseBtn" onclick="togglePause()" aria-label="Pause" title="Pause (ESC)">⏸</button>
     </div>
 
@@ -1818,7 +1878,7 @@
                 <button class="pause-btn pause-btn-quit" onclick="pauseQuitToMenu()">QUIT TO MENU</button>
             </div>
 
-            <p class="pause-hint">ESC / P / START to resume</p>
+            <p class="pause-hint">ESC / P / START to resume &nbsp;|&nbsp; D-pad navigate &nbsp;|&nbsp; A select &nbsp;|&nbsp; B resume</p>
         </div>
     </div>
 
