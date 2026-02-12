@@ -449,6 +449,62 @@ const COLORS = {
     snowShadow: '#b8d8e8'   // Cyan-tinted snow shadows
 };
 
+// Distance-based visual zones — subtle color progression as player descends
+const ZONE_THEMES = [
+    { minDist: 0,    maxDist: 500,   name: 'Summit',     treeAccent: 'rgba(0, 255, 255, 0.08)', fogTint: null },
+    { minDist: 500,  maxDist: 1500,  name: 'Alpine',     treeAccent: 'rgba(255, 20, 147, 0.08)', fogTint: 'rgba(255, 20, 147, 0.04)' },
+    { minDist: 1500, maxDist: 3000,  name: 'Timberline', treeAccent: 'rgba(0, 255, 0, 0.08)', fogTint: 'rgba(0, 255, 0, 0.03)' },
+    { minDist: 3000, maxDist: 5000,  name: 'Deep Woods', treeAccent: 'rgba(148, 0, 211, 0.08)', fogTint: 'rgba(148, 0, 211, 0.03)' },
+    { minDist: 5000, maxDist: 99999, name: 'Abyss',      treeAccent: 'rgba(255, 69, 0, 0.08)', fogTint: 'rgba(255, 69, 0, 0.03)' }
+];
+
+function getCurrentZone() {
+    const dist = gameState.distance || 0;
+    for (let i = ZONE_THEMES.length - 1; i >= 0; i--) {
+        if (dist >= ZONE_THEMES[i].minDist) return ZONE_THEMES[i];
+    }
+    return ZONE_THEMES[0];
+}
+
+// ============================================
+// MAP THEMES (OG Mode)
+// ============================================
+const MAP_THEMES = {
+    classic: {
+        name: 'Classic', emoji: '🏔️', description: 'The original mountain',
+        bgColors: null, treeColors: null, terrainMods: {},
+        ambientParticles: 'snow', scoreMult: 1.0, isFinite: false
+    },
+    nightRun: {
+        name: 'Night Run', emoji: '🌙', description: 'Shred under the stars',
+        bgColors: { dark: '#1a2a3a', mid: '#2a3a4a', light: '#3a4a5a' },
+        treeColors: { foliage1: '#050f0a', foliage2: '#0a1a10', snowCap: '#a0b0c0' },
+        terrainMods: {}, ambientParticles: 'stars', scoreMult: 1.2,
+        isFinite: false, visibilityRadius: 200, neonGlow: true
+    },
+    backcountry: {
+        name: 'Backcountry', emoji: '🌲', description: 'Tree chutes. Cliff drops.',
+        bgColors: { dark: '#b0c8b0', mid: '#d0e0d0', light: '#e8f0e8' },
+        treeColors: { foliage1: '#0a2a0a', foliage2: '#1a3a1a', snowCap: '#d8e8d8' },
+        terrainMods: { treeClusterChance: 0.55, rockChance: 0.02 },
+        ambientParticles: 'snow', scoreMult: 1.3, isFinite: false, noRails: true
+    },
+    blizzard: {
+        name: 'Blizzard', emoji: '🌨️', description: 'Zero vis. Higher score.',
+        bgColors: { dark: '#a0a8b0', mid: '#b0b8c0', light: '#c0c8d0' },
+        treeColors: { foliage1: '#182818', foliage2: '#283828', snowCap: '#d0d8e0' },
+        terrainMods: {}, ambientParticles: 'heavySnow', scoreMult: 1.5,
+        isFinite: false, visibilityRadius: 250, windGusts: true
+    },
+    xgames: {
+        name: 'X Games', emoji: '🏆', description: 'Fans. Tricks. Glory.',
+        bgColors: null, treeColors: null,
+        terrainMods: { jumpChance: 0.012, railChance: 0.015 },
+        ambientParticles: 'snow', scoreMult: 1.0,
+        isFinite: true, courseLength: 25, hasFans: true
+    }
+};
+
 const PHYSICS = {
     gravity: 1200,
     groundFriction: 0.992,      // Less drag
@@ -640,6 +696,47 @@ const LODGE = {
     warningTime: 3,             // Seconds of warning before forced exit
     exitInvincibility: 2.0      // Invincibility duration after exiting
 };
+
+// ============================================
+// LODGE SHOP ITEMS (30 items, 5 shown per visit)
+// ============================================
+const SHOP_DISPLAY_COUNT = 5;
+
+const SHOP_ITEMS = [
+    // === GEAR (Speed/Handling) ===
+    { id: 'freshWax', name: 'Fresh Wax', category: 'gear', emoji: '🏂', desc: '+10% top speed', cost: 15, effect: { type: 'speedBoost', value: 0.10 } },
+    { id: 'edgeTune', name: 'Edge Tune', category: 'gear', emoji: '🔧', desc: '+15% turn speed', cost: 20, effect: { type: 'turnBoost', value: 0.15 } },
+    { id: 'proBindings', name: 'Pro Bindings', category: 'gear', emoji: '⛷️', desc: 'Better air control', cost: 25, effect: { type: 'airControl', value: 0.3 } },
+    { id: 'helmetCam', name: 'Helmet Cam', category: 'gear', emoji: '📷', desc: '2x trick points', cost: 30, effect: { type: 'trickMultiplier', value: 2.0 } },
+    { id: 'titaniumEdges', name: 'Ti Edges', category: 'gear', emoji: '🗡️', desc: '50% faster recovery', cost: 20, effect: { type: 'crashRecovery', value: 0.5 } },
+    { id: 'carbonBoard', name: 'Carbon Board', category: 'gear', emoji: '🖤', desc: '+8% acceleration', cost: 22, effect: { type: 'accelBoost', value: 0.08 } },
+    { id: 'magnetBoots', name: 'Magnet Boots', category: 'gear', emoji: '🧲', desc: 'Grind rails longer', cost: 18, effect: { type: 'grindBonus', value: 1.5 } },
+    { id: 'aeroHelmet', name: 'Aero Helmet', category: 'gear', emoji: '🪖', desc: 'Less air drag', cost: 16, effect: { type: 'airDrag', value: 0.998 } },
+    { id: 'shockAbsorb', name: 'Shock Absorb', category: 'gear', emoji: '🦿', desc: 'Softer landings', cost: 14, effect: { type: 'landingBonus', value: 1.3 } },
+    { id: 'thermalLayer', name: 'Thermal Layer', category: 'gear', emoji: '🧥', desc: '+3s lodge time', cost: 12, effect: { type: 'lodgeTimeBonus', value: 3 } },
+    // === FOOD (Tricks/Recovery) ===
+    { id: 'burger', name: 'Burger & Fries', category: 'food', emoji: '🍔', desc: '1.5x trick points', cost: 10, effect: { type: 'trickPointBoost', value: 1.5 } },
+    { id: 'hotChocolate', name: 'Hot Chocolate', category: 'food', emoji: '☕', desc: '+5s lodge timer', cost: 8, effect: { type: 'lodgeTimeBonus', value: 5 } },
+    { id: 'energyBar', name: 'Energy Bar', category: 'food', emoji: '🥤', desc: '+20% accel 60s', cost: 12, effect: { type: 'timedAccel', value: 0.20, duration: 60 } },
+    { id: 'espresso', name: 'Dbl Espresso', category: 'food', emoji: '☕', desc: '1.15x speed 45s', cost: 18, effect: { type: 'timedSpeed', value: 1.15, duration: 45 } },
+    { id: 'proteinShake', name: 'Protein Shake', category: 'food', emoji: '🥛', desc: 'Crash = keep speed', cost: 20, effect: { type: 'crashKeepSpeed', value: 0.5 } },
+    { id: 'gummyBears', name: 'Gummy Bears', category: 'food', emoji: '🍬', desc: '+2 coins per grab', cost: 8, effect: { type: 'coinBonus', value: 2 } },
+    { id: 'trailMix', name: 'Trail Mix', category: 'food', emoji: '🥜', desc: 'Score +25%', cost: 14, effect: { type: 'scoreBoost', value: 1.25 } },
+    { id: 'pizza', name: 'Slice of Pizza', category: 'food', emoji: '🍕', desc: 'Invincible 3s on exit', cost: 16, effect: { type: 'exitInvincible', value: 3 } },
+    { id: 'nachos', name: 'Loaded Nachos', category: 'food', emoji: '🧀', desc: '+50 starting speed', cost: 10, effect: { type: 'exitSpeedBonus', value: 50 } },
+    { id: 'iceCream', name: 'Ice Cream', category: 'food', emoji: '🍦', desc: 'Fog slows 10%', cost: 22, effect: { type: 'fogSlow', value: 0.10 } },
+    // === ACCESSORIES (Visual/Fun) ===
+    { id: 'neonGoggles', name: 'Neon Goggles', category: 'accessory', emoji: '🥽', desc: 'Glow in the dark', cost: 15, effect: { type: 'visual', subtype: 'neonGoggles' } },
+    { id: 'confettiBoard', name: 'Confetti Board', category: 'accessory', emoji: '🎉', desc: 'Tricks pop confetti', cost: 12, effect: { type: 'visual', subtype: 'confetti' } },
+    { id: 'fireTrail', name: 'Fire Trail', category: 'accessory', emoji: '🔥', desc: 'Leave flame trail', cost: 22, effect: { type: 'visual', subtype: 'fireTrail' } },
+    { id: 'rainbowSnow', name: 'Rainbow Spray', category: 'accessory', emoji: '🌈', desc: 'Colorful snow spray', cost: 10, effect: { type: 'visual', subtype: 'rainbowSpray' } },
+    { id: 'ghostTrail', name: 'Ghost Trail', category: 'accessory', emoji: '👻', desc: 'Spooky afterimage', cost: 14, effect: { type: 'visual', subtype: 'ghostTrail' } },
+    { id: 'sparkleBoard', name: 'Sparkle Board', category: 'accessory', emoji: '✨', desc: 'Board sparkles', cost: 8, effect: { type: 'visual', subtype: 'sparkleBoard' } },
+    { id: 'thunderLand', name: 'Thunder Land', category: 'accessory', emoji: '⚡', desc: 'Lightning on landing', cost: 16, effect: { type: 'visual', subtype: 'thunderLanding' } },
+    { id: 'discoMode', name: 'Disco Mode', category: 'accessory', emoji: '🪩', desc: 'Color cycling rider', cost: 18, effect: { type: 'visual', subtype: 'discoMode' } },
+    { id: 'smokeTrail', name: 'Smoke Trail', category: 'accessory', emoji: '💨', desc: 'Smoky carve trail', cost: 10, effect: { type: 'visual', subtype: 'smokeTrail' } },
+    { id: 'starBurst', name: 'Star Burst', category: 'accessory', emoji: '⭐', desc: 'Stars on big tricks', cost: 14, effect: { type: 'visual', subtype: 'starBurst' } }
+];
 
 // ===================
 // SPRITE SYSTEM
@@ -860,11 +957,12 @@ function compositeHUDPanel() {
 
 let canvas, ctx;
 let lastTime = 0;
-let selectedMode = 'og'; // 'og' or 'slalom'
+let selectedMode = 'og'; // 'og', 'slalom', or 'olympics'
+let selectedMap = 'classic'; // Map theme for OG mode
 
 let gameState = {
-    screen: 'title', // 'title', 'playing', 'gameOver', 'lodge', 'slalomResults'
-    mode: 'og', // 'og' or 'slalom'
+    screen: 'title', // 'title', 'playing', 'gameOver', 'lodge', 'slalomResults', 'olympicsResults'
+    mode: 'og', // 'og', 'slalom', or 'olympics'
     paused: false,
     animationTime: 0,
 
@@ -902,6 +1000,7 @@ let gameState = {
         grabPhase: 0,
         grabTweak: 0,      // Extra tweak extension for styled grabs
         grabPoke: 0,       // Poked leg extension
+        comboPhase: -1,    // Combo trick phase: 0=tuck, 1=rotate, 2=extend
         // Jump animation state
         spinDirection: 0,   // -1 = left, 0 = none, 1 = right
         preJumpAngle: 0,    // Angle before jumping (to maintain orientation)
@@ -913,7 +1012,9 @@ let gameState = {
     camera: {
         y: 0,
         targetY: 0,
-        lookAhead: 150
+        lookAhead: 150,
+        zoom: 1.0,
+        targetZoom: 1.0
     },
 
     terrain: {
@@ -961,7 +1062,15 @@ let gameState = {
         playerX: 0,
         playerY: 0,
         currentLodge: null,     // Reference to the lodge we entered
-        warningShown: false
+        warningShown: false,
+        // Shop state
+        shopItems: [],          // 5 random items for this lodge visit
+        shopCursor: 0,          // Currently highlighted item
+        shopMode: false,        // Whether player is browsing shop
+        purchasedItems: [],     // Items bought this run (active effects)
+        lastUp: false,          // Rising edge tracking for shop navigation
+        lastDown: false,
+        lastSpace: false
     },
 
     score: 0,
@@ -1525,16 +1634,44 @@ function pollGamepad(dt) {
         return;
     }
 
-    // Game over screen: A = retry, B = back to menu (canvas-drawn buttons, not DOM)
+    // Game over screen: D-pad navigates canvas buttons, A activates, Start = retry
     if (gameState.screen === 'gameOver') {
-        if (btnA && !gamepadState._lastA) {
-            input.space = true;
-            setTimeout(() => { input.space = false; }, 100);
+        // Initialize focus if not set
+        if (!gameState._gameOverHover) gameState._gameOverHover = 'restart';
+
+        // D-pad up/down toggles between restart and menu
+        if (dpadUp && !gamepadState._lastDpadUp) {
+            gameState._gameOverHover = 'restart';
         }
+        if (dpadDown && !gamepadState._lastDpadDown) {
+            gameState._gameOverHover = 'menu';
+        }
+
+        // A = activate focused button
+        if (btnA && !gamepadState._lastA) {
+            if (gameState._gameOverHover === 'menu') {
+                gameState._gameOverHover = null;
+                gameState.screen = 'title';
+                showStartScreen();
+                musicManager.stop();
+            } else {
+                gameState._gameOverHover = null;
+                startSelectedMode();
+            }
+        }
+
+        // B = back to menu
         if (btnB && !gamepadState._lastB) {
+            gameState._gameOverHover = null;
             gameState.screen = 'title';
             showStartScreen();
             musicManager.stop();
+        }
+
+        // Start = quick retry
+        if (startPressed && !gamepadState._lastStart) {
+            gameState._gameOverHover = null;
+            startSelectedMode();
         }
     }
 
@@ -2088,7 +2225,8 @@ function generateTerrainChunk(chunkIndex) {
                         row: row
                     });
                 }
-            } else if (rng >= density + TERRAIN.massiveJumpChance + TERRAIN.jumpChance &&
+            } else if (!(gameState.currentMap && gameState.currentMap.noRails) &&
+                       rng >= density + TERRAIN.massiveJumpChance + TERRAIN.jumpChance &&
                        rng < density + TERRAIN.massiveJumpChance + TERRAIN.jumpChance + TERRAIN.railChance) {
                 // Rails - must be mostly VERTICAL (player goes DOWN the mountain)
                 const railLength = 100 + seededRandom(cellSeed + 0.8) * 150;
@@ -2437,7 +2575,8 @@ function generateTerrainChunk(chunkIndex) {
     const distanceFromStart = chunk.y;
     const distanceFromLastLodge = chunkCenterY - gameState.terrain.lastLodgeY;
 
-    if (distanceFromStart >= LODGE.minSpawnDistance &&
+    if (gameState.mode === 'og' &&
+        distanceFromStart >= LODGE.minSpawnDistance &&
         distanceFromLastLodge >= LODGE.minLodgeSpacing &&
         seededRandom(baseSeed + 5555) < LODGE.spawnChance) {
 
@@ -2692,6 +2831,13 @@ function updateAirbornePhysics(player, dt) {
             // Flip tricks - rotate around X axis (forward/back flip)
             player.flipRotation += (trick.flipSpeed || 0) * dt;
         }
+        // Combo phase tracking for multi-phase animation
+        if (trick.type === 'combo') {
+            player.comboPhase = player.autoTrickProgress < 0.3 ? 0 :
+                                 player.autoTrickProgress < 0.7 ? 1 : 2;
+        } else {
+            player.comboPhase = -1;
+        }
         if (trick.type === 'grab') {
             // Grab tricks - oscillate grab phase (tweak/poke adds extra motion)
             const basePhase = Math.sin(player.autoTrickProgress * Math.PI);
@@ -2908,7 +3054,8 @@ function landFromJump(player) {
 
     if (trickLanded) {
         const basePoints = Math.floor(trickPoints * bigAirBonus);
-        const points = Math.floor(basePoints * gameState.trickMultiplier);
+        const mapMult = gameState.mapScoreMult || 1;
+        const points = Math.floor(basePoints * gameState.trickMultiplier * mapMult);
         gameState.score += points;
 
         // Enhanced celebration for combos
@@ -3082,7 +3229,8 @@ function endGrind(player) {
     // Calculate points
     const chainBonus = gameState.trickComboTimer > 1.5 ? 1.5 : 1.0;
     const basePoints = Math.floor(trick.points * typeBonus);
-    const points = Math.floor(basePoints * gameState.trickMultiplier * chainBonus);
+    const mapMult = gameState.mapScoreMult || 1;
+    const points = Math.floor(basePoints * gameState.trickMultiplier * chainBonus * mapMult);
     gameState.score += points;
 
     // Celebrate rail chains
@@ -3446,6 +3594,9 @@ function enterLodge(lodge) {
     // Change game state
     gameState.screen = 'lodge';
 
+    // Initialize shop with random items
+    initLodgeShop();
+
     // Show entry message
     addCelebration('SAFE HAVEN!', COLORS.cyan);
 }
@@ -3480,9 +3631,146 @@ function exitLodge() {
     // Return to playing state
     gameState.screen = 'playing';
 
+    // Apply exit-specific item effects
+    const purchased = gameState.lodge.purchasedItems;
+    for (const item of purchased) {
+        if (item.effect.type === 'exitInvincible') {
+            player.invincible = Math.max(player.invincible, item.effect.value);
+        }
+        if (item.effect.type === 'exitSpeedBonus') {
+            player.speed += item.effect.value;
+        }
+    }
+
     // Show exit message
     addCelebration('BACK TO THE SLOPE!', COLORS.gold);
     addCelebration('+' + CHASE.lodgeTimeBonus + 's TIME!', COLORS.cyan);
+}
+
+// ===================
+// LODGE SHOP
+// ===================
+
+function initLodgeShop() {
+    const lodge = gameState.lodge;
+    // Filter out items already purchased this run
+    const available = SHOP_ITEMS.filter(item =>
+        !lodge.purchasedItems.some(p => p.id === item.id)
+    );
+    // Shuffle using Fisher-Yates
+    const shuffled = [...available];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    lodge.shopItems = shuffled.slice(0, SHOP_DISPLAY_COUNT);
+    lodge.shopCursor = 0;
+    lodge.shopMode = false;
+}
+
+function purchaseItem(item) {
+    if (!item) return;
+    const lodge = gameState.lodge;
+
+    // Already purchased?
+    if (lodge.purchasedItems.some(p => p.id === item.id)) {
+        addCelebration('ALREADY OWNED', COLORS.warning);
+        return;
+    }
+    // Can afford?
+    if (gameState.collectiblesCollected < item.cost) {
+        addCelebration('NEED ' + item.cost + ' ❄️', COLORS.warning);
+        return;
+    }
+
+    // Purchase!
+    gameState.collectiblesCollected -= item.cost;
+    lodge.purchasedItems.push(item);
+    applyItemEffect(item);
+    addCelebration(item.emoji + ' ' + item.name + '!', COLORS.gold);
+}
+
+function applyItemEffect(item) {
+    const fx = item.effect;
+    switch (fx.type) {
+        case 'speedBoost':
+            PHYSICS.maxSpeed *= (1 + fx.value);
+            break;
+        case 'turnBoost':
+            PHYSICS.turnSpeed *= (1 + fx.value);
+            break;
+        case 'airControl':
+            PHYSICS.airControlFactor = Math.min(1.0, PHYSICS.airControlFactor + fx.value);
+            break;
+        case 'trickMultiplier':
+            gameState.shopTrickMult = (gameState.shopTrickMult || 1) * fx.value;
+            break;
+        case 'crashRecovery':
+            PHYSICS.crashDuration = (PHYSICS.crashDuration || 1.0) * (1 - fx.value);
+            break;
+        case 'accelBoost':
+            PHYSICS.downhillAccel *= (1 + fx.value);
+            break;
+        case 'airDrag':
+            PHYSICS.airFriction = Math.min(0.9999, fx.value);
+            break;
+        case 'trickPointBoost':
+            gameState.shopTrickPointsMult = (gameState.shopTrickPointsMult || 1) * fx.value;
+            break;
+        case 'lodgeTimeBonus':
+            LODGE.maxStayTime += fx.value;
+            break;
+        case 'scoreBoost':
+            gameState.shopScoreMult = (gameState.shopScoreMult || 1) * fx.value;
+            break;
+        case 'fogSlow':
+            gameState.shopFogSlow = (gameState.shopFogSlow || 0) + fx.value;
+            break;
+        // Timed effects are checked in the update loop
+        case 'timedAccel':
+        case 'timedSpeed':
+            item._timerRemaining = fx.duration;
+            break;
+        // Visual effects are checked in draw functions
+        case 'visual':
+            break;
+        // These effects are applied contextually (on exit, on crash, on grind, etc.)
+        default:
+            break;
+    }
+}
+
+function hasShopItem(itemId) {
+    return gameState.lodge.purchasedItems.some(p => p.id === itemId);
+}
+
+function hasShopEffect(effectType) {
+    return gameState.lodge.purchasedItems.some(p => p.effect.type === effectType);
+}
+
+function hasVisualEffect(subtype) {
+    return gameState.lodge.purchasedItems.some(p => p.effect.type === 'visual' && p.effect.subtype === subtype);
+}
+
+function updateTimedShopEffects(dt) {
+    for (const item of gameState.lodge.purchasedItems) {
+        if (item._timerRemaining !== undefined && item._timerRemaining > 0) {
+            item._timerRemaining -= dt;
+            if (item._timerRemaining <= 0) {
+                addCelebration(item.name + ' WORE OFF', COLORS.warning);
+            }
+        }
+    }
+}
+
+function resetShopEffects() {
+    // Restore physics to base values (called on game over)
+    gameState.lodge.purchasedItems = [];
+    gameState.shopTrickMult = 1;
+    gameState.shopTrickPointsMult = 1;
+    gameState.shopScoreMult = 1;
+    gameState.shopFogSlow = 0;
+    // Physics are re-initialized in startGame() so no manual reset needed
 }
 
 // ===================
@@ -3490,6 +3778,9 @@ function exitLodge() {
 // ===================
 
 function updateChase(dt) {
+    // Disable chase in X Games finite mode
+    if (gameState.currentMap && gameState.currentMap.isFinite) return;
+
     const chase = gameState.chase;
     const player = gameState.player;
 
@@ -3804,6 +4095,24 @@ function updateCamera(dt) {
     const lookAhead = (player.speed / PHYSICS.maxSpeed) * camera.lookAhead;
     camera.targetY = player.y + lookAhead - CANVAS_HEIGHT * 0.35;
 
+    // Altitude-based camera adjustment: shift camera up to keep player visible on big jumps
+    if (player.airborne && player.altitude > 100) {
+        // altitude * 0.5 matches drawPlayer's drawY offset; shift camera by 60% of that
+        const altitudeScreenOffset = player.altitude * 0.5;
+        const maxCameraShift = CANVAS_HEIGHT * 0.4;
+        const cameraShift = Math.min(altitudeScreenOffset * 0.6, maxCameraShift);
+        camera.targetY -= cameraShift;
+    }
+
+    // Zoom out for extreme altitude so player + ground stay in frame
+    if (player.airborne && player.altitude > 400) {
+        const zoomOutAmount = Math.min(0.3, (player.altitude - 400) / 2000);
+        camera.targetZoom = 1.0 - zoomOutAmount; // Range: 1.0 to 0.7
+    } else {
+        camera.targetZoom = 1.0;
+    }
+    camera.zoom = expLerp(camera.zoom, camera.targetZoom, 8, dt);
+
     // If player is very far ahead (massive jump), increase camera catch-up speed
     const distanceAhead = player.y - (camera.y + CANVAS_HEIGHT * 0.35);
     if (distanceAhead > CANVAS_HEIGHT) {
@@ -3861,6 +4170,12 @@ function draw() {
         return;
     }
 
+    // Olympics mode rendering
+    if (gameState.mode === 'olympics' && gameState.screen === 'playing') {
+        drawOlympics();
+        return;
+    }
+
     if (gameState.screen === 'gameOver') {
         drawGameOverScreen();
         return;
@@ -3889,6 +4204,16 @@ function draw() {
     }
 
     // HUD renders as thin overlay at bottom — no gameplay clipping needed
+
+    // Apply zoom for big jumps (scene only, not HUD)
+    const isZoomed = gameState.camera.zoom < 0.999;
+    if (isZoomed) {
+        ctx.save();
+        const z = gameState.camera.zoom;
+        ctx.translate(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+        ctx.scale(z, z);
+        ctx.translate(-CANVAS_WIDTH / 2, -CANVAS_HEIGHT / 2);
+    }
 
     // Draw background gradient
     drawBackground();
@@ -3938,21 +4263,65 @@ function draw() {
         drawSpeedLines();
     }
 
+    // Map visibility effect — spotlight for Night Run / Blizzard
+    if (gameState.currentMap && gameState.currentMap.visibilityRadius) {
+        drawVisibilitySpotlight();
+    }
+
+    // X Games fans along the sides
+    if (gameState.currentMap && gameState.currentMap.hasFans) {
+        drawXGamesFans();
+    }
+
+    // End zoom transform before HUD
+    if (isZoomed) {
+        ctx.restore();
+    }
+
+    // X Games finish banner
+    if (gameState.currentMap && gameState.currentMap.isFinite && !gameState.xgamesFinished) {
+        drawXGamesProgress();
+    }
+
+    // Draw altitude meter during big air
+    drawAltitudeMeter();
+
     // Draw HUD overlay at bottom of screen
     drawHUD();
+
+    // X Games photo finish overlay
+    if (gameState.xgamesFinished) {
+        drawXGamesPhotoFinish();
+    }
 }
 
 function drawBackground() {
     // Use cached gradient for performance - snow palette with subtle cyan/pink
     if (!gradientCache.background) {
         gradientCache.background = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
-        gradientCache.background.addColorStop(0, COLORS.bgLight);    // Bright snow at top
-        gradientCache.background.addColorStop(0.4, COLORS.bgMid);    // Mid-tone
-        gradientCache.background.addColorStop(0.7, COLORS.snowCyan); // Cyan hint
-        gradientCache.background.addColorStop(1, COLORS.bgDark);     // Slightly shadowed at bottom
+        const mapBg = gameState.currentMap && gameState.currentMap.bgColors;
+        if (mapBg) {
+            gradientCache.background.addColorStop(0, mapBg.light);
+            gradientCache.background.addColorStop(0.5, mapBg.mid);
+            gradientCache.background.addColorStop(1, mapBg.dark);
+        } else {
+            gradientCache.background.addColorStop(0, COLORS.bgLight);    // Bright snow at top
+            gradientCache.background.addColorStop(0.4, COLORS.bgMid);    // Mid-tone
+            gradientCache.background.addColorStop(0.7, COLORS.snowCyan); // Cyan hint
+            gradientCache.background.addColorStop(1, COLORS.bgDark);     // Slightly shadowed at bottom
+        }
     }
     ctx.fillStyle = gradientCache.background;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    // Zone color tint — subtle shift as player descends
+    if (gameState.mode === 'og') {
+        const zone = getCurrentZone();
+        if (zone.fogTint) {
+            ctx.fillStyle = zone.fogTint;
+            ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        }
+    }
 
     // PERFORMANCE: Removed decorative background line loops (was ~40 stroke calls per frame)
     // The gradient background provides sufficient visual appeal
@@ -3985,6 +4354,263 @@ function drawBackground() {
             mountainGradR.addColorStop(1, 'transparent');
             ctx.fillStyle = mountainGradR;
             ctx.fillRect(CANVAS_WIDTH - marginWidth, 0, marginWidth, CANVAS_HEIGHT);
+        }
+    }
+}
+
+// ============================================
+// MAP-SPECIFIC DRAWING FUNCTIONS
+// ============================================
+
+function drawVisibilitySpotlight() {
+    const map = gameState.currentMap;
+    if (!map || !map.visibilityRadius) return;
+
+    const player = gameState.player;
+    const screenPos = worldToScreen(player.visualX, player.visualY);
+    const playerScreenY = screenPos.y - (player.airborne ? player.altitude * 0.5 : 0);
+    const radius = map.visibilityRadius;
+
+    // Create radial gradient: transparent at center, dark at edges
+    const gradient = ctx.createRadialGradient(
+        screenPos.x, playerScreenY, radius * 0.15,
+        screenPos.x, playerScreenY, radius
+    );
+    gradient.addColorStop(0, 'transparent');
+    gradient.addColorStop(0.6, 'transparent');
+    gradient.addColorStop(0.85, 'rgba(0, 0, 0, 0.6)');
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0.92)');
+
+    // Draw full-screen darkness with spotlight hole
+    ctx.save();
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    // For Night Run: add a warm headlamp glow at the center
+    if (map.neonGlow) {
+        const glowGrad = ctx.createRadialGradient(
+            screenPos.x, playerScreenY, 0,
+            screenPos.x, playerScreenY, radius * 0.4
+        );
+        glowGrad.addColorStop(0, 'rgba(255, 220, 140, 0.12)');
+        glowGrad.addColorStop(0.5, 'rgba(255, 200, 100, 0.05)');
+        glowGrad.addColorStop(1, 'transparent');
+        ctx.fillStyle = glowGrad;
+        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    }
+    ctx.restore();
+}
+
+function drawXGamesFans() {
+    const slopeWidth = TERRAIN.slopeWidth;
+    const leftEdge = CANVAS_WIDTH / 2 - slopeWidth / 2;
+    const rightEdge = CANVAS_WIDTH / 2 + slopeWidth / 2;
+    const cameraY = gameState.camera.y;
+    const time = gameState.animationTime;
+
+    // Draw fans every 120px along the sides
+    const startY = Math.floor(cameraY / 120) * 120;
+    const endY = startY + CANVAS_HEIGHT + 240;
+
+    for (let fy = startY; fy < endY; fy += 120) {
+        const screenY = fy - cameraY;
+        if (screenY < -40 || screenY > CANVAS_HEIGHT + 40) continue;
+
+        // Seeded fan colors for consistency
+        const seed = Math.abs(fy * 137 + 42);
+
+        // Left side fans
+        for (let i = 0; i < 3; i++) {
+            const fanSeed = seed + i * 31;
+            const fanX = leftEdge - 20 - i * 18;
+            const bounce = Math.sin(time * 3 + fanSeed) * 4;
+            const fanColor = ['#ff4444', '#4488ff', '#ffcc00', '#44ff44', '#ff44ff'][(fanSeed) % 5];
+
+            // Body
+            ctx.fillStyle = fanColor;
+            ctx.fillRect(fanX - 4, screenY - 12 + bounce, 8, 12);
+            // Head
+            ctx.beginPath();
+            ctx.arc(fanX, screenY - 16 + bounce, 5, 0, Math.PI * 2);
+            ctx.fill();
+            // Arms waving
+            const armAngle = Math.sin(time * 4 + fanSeed * 2) * 0.5;
+            ctx.strokeStyle = fanColor;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(fanX - 4, screenY - 8 + bounce);
+            ctx.lineTo(fanX - 10, screenY - 16 + bounce + armAngle * 8);
+            ctx.moveTo(fanX + 4, screenY - 8 + bounce);
+            ctx.lineTo(fanX + 10, screenY - 16 + bounce - armAngle * 8);
+            ctx.stroke();
+        }
+
+        // Right side fans
+        for (let i = 0; i < 3; i++) {
+            const fanSeed = seed + i * 47 + 100;
+            const fanX = rightEdge + 20 + i * 18;
+            const bounce = Math.sin(time * 3 + fanSeed) * 4;
+            const fanColor = ['#ff4444', '#4488ff', '#ffcc00', '#44ff44', '#ff44ff'][(fanSeed) % 5];
+
+            ctx.fillStyle = fanColor;
+            ctx.fillRect(fanX - 4, screenY - 12 + bounce, 8, 12);
+            ctx.beginPath();
+            ctx.arc(fanX, screenY - 16 + bounce, 5, 0, Math.PI * 2);
+            ctx.fill();
+            const armAngle = Math.sin(time * 4 + fanSeed * 2) * 0.5;
+            ctx.strokeStyle = fanColor;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(fanX - 4, screenY - 8 + bounce);
+            ctx.lineTo(fanX - 10, screenY - 16 + bounce + armAngle * 8);
+            ctx.moveTo(fanX + 4, screenY - 8 + bounce);
+            ctx.lineTo(fanX + 10, screenY - 16 + bounce - armAngle * 8);
+            ctx.stroke();
+        }
+    }
+}
+
+function drawXGamesProgress() {
+    const map = gameState.currentMap;
+    if (!map || !map.isFinite) return;
+
+    const finishDist = map.courseLength * TERRAIN.chunkHeight / 100;
+    const progress = Math.min(gameState.distance / finishDist, 1);
+
+    // Progress bar at top of screen
+    const barW = CANVAS_WIDTH * 0.5;
+    const barH = 8;
+    const barX = (CANVAS_WIDTH - barW) / 2;
+    const barY = 12;
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(barX - 2, barY - 2, barW + 4, barH + 4);
+    ctx.fillStyle = '#333';
+    ctx.fillRect(barX, barY, barW, barH);
+
+    const fillColor = progress > 0.9 ? COLORS.gold : COLORS.cyan;
+    ctx.fillStyle = fillColor;
+    ctx.fillRect(barX, barY, barW * progress, barH);
+
+    // Distance label
+    ctx.font = FONTS.pressStart8;
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${Math.floor(progress * 100)}% — X GAMES`, CANVAS_WIDTH / 2, barY + barH + 14);
+
+    // Draw finish banner on the terrain
+    const finishWorldY = finishDist * 100;
+    const finishScreenY = finishWorldY - gameState.camera.y;
+    if (finishScreenY > -50 && finishScreenY < CANVAS_HEIGHT + 50) {
+        ctx.save();
+        ctx.strokeStyle = COLORS.gold;
+        ctx.lineWidth = 4;
+        ctx.setLineDash([12, 6]);
+        ctx.beginPath();
+        ctx.moveTo(0, finishScreenY);
+        ctx.lineTo(CANVAS_WIDTH, finishScreenY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.font = FONTS.pressStart16;
+        ctx.fillStyle = COLORS.gold;
+        ctx.textAlign = 'center';
+        ctx.shadowColor = COLORS.gold;
+        ctx.shadowBlur = getShadowBlur(12);
+        ctx.fillText('🏁 FINISH 🏁', CANVAS_WIDTH / 2, finishScreenY - 15);
+        ctx.shadowBlur = 0;
+        ctx.restore();
+    }
+}
+
+function drawXGamesPhotoFinish() {
+    const t = gameState.xgamesTimer || 0;
+    const fadeIn = Math.min(t / 0.5, 1);
+
+    // Dark overlay
+    ctx.fillStyle = `rgba(0, 0, 0, ${0.75 * fadeIn})`;
+    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    // Title
+    ctx.save();
+    const titleScale = 1 + Math.sin(gameState.animationTime * 2) * 0.03;
+    ctx.font = FONTS.pressStart32;
+    ctx.fillStyle = COLORS.gold;
+    ctx.textAlign = 'center';
+    ctx.shadowColor = COLORS.gold;
+    ctx.shadowBlur = getShadowBlur(20);
+    ctx.fillText('📸 X GAMES 📸', CANVAS_WIDTH / 2, CANVAS_HEIGHT * 0.2);
+    ctx.shadowBlur = 0;
+
+    // Score
+    ctx.font = FONTS.pressStart16;
+    ctx.fillStyle = '#fff';
+    ctx.fillText(`FINAL SCORE: ${gameState.score}`, CANVAS_WIDTH / 2, CANVAS_HEIGHT * 0.35);
+    ctx.fillText(`DISTANCE: ${gameState.distance}m`, CANVAS_WIDTH / 2, CANVAS_HEIGHT * 0.42);
+    ctx.fillText(`TRICK SCORE: ${gameState.trickScore}`, CANVAS_WIDTH / 2, CANVAS_HEIGHT * 0.49);
+
+    // Camera flash effect
+    if (t > 0.5 && t < 3.0) {
+        const flashInterval = 0.4;
+        const flashPhase = ((t - 0.5) % flashInterval) / flashInterval;
+        if (flashPhase < 0.15) {
+            ctx.fillStyle = `rgba(255, 255, 255, ${(1 - flashPhase / 0.15) * 0.4 * fadeIn})`;
+            ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        }
+    }
+
+    // "Press SPACE to continue" prompt
+    if (t > 2.0) {
+        const blink = Math.sin(gameState.animationTime * 4) > 0;
+        if (blink) {
+            ctx.font = FONTS.pressStart12;
+            ctx.fillStyle = COLORS.cyan;
+            ctx.fillText('PRESS SPACE TO CONTINUE', CANVAS_WIDTH / 2, CANVAS_HEIGHT * 0.75);
+        }
+    }
+    ctx.restore();
+}
+
+// Ambient heavy snow particles for Blizzard / star particles for Night Run
+function spawnMapAmbientParticles() {
+    const map = gameState.currentMap;
+    if (!map) return;
+
+    const particles = gameState.particles;
+    const maxParticles = 300;
+    if (particles.length > maxParticles) return;
+
+    if (map.ambientParticles === 'heavySnow') {
+        // Blizzard — spawn 3x rate, larger, wind-affected
+        for (let i = 0; i < 3; i++) {
+            if (Math.random() > 0.5) continue;
+            const wind = map.windGusts ? Math.sin(gameState.animationTime * 0.7) * 80 : 0;
+            particles.push({
+                x: Math.random() * CANVAS_WIDTH,
+                y: gameState.camera.y - 20,
+                vx: (Math.random() - 0.5) * 40 + wind,
+                vy: 80 + Math.random() * 60,
+                size: 2 + Math.random() * 3,
+                alpha: 0.5 + Math.random() * 0.5,
+                life: 3 + Math.random() * 2,
+                maxLife: 5,
+                type: 'ambientSnow'
+            });
+        }
+    } else if (map.ambientParticles === 'stars') {
+        // Night Run — twinkling star dots (screen-space, don't scroll)
+        if (Math.random() > 0.95 && particles.length < 100) {
+            particles.push({
+                x: Math.random() * CANVAS_WIDTH,
+                y: Math.random() * CANVAS_HEIGHT * 0.3, // Top third only
+                vx: 0, vy: 0,
+                size: 1 + Math.random(),
+                alpha: 0.3 + Math.random() * 0.7,
+                life: 2 + Math.random() * 3,
+                maxLife: 5,
+                type: 'star',
+                screenSpace: true
+            });
         }
     }
 }
@@ -4042,35 +4668,49 @@ function drawObstacles() {
         }
 
         if (obs.type === 'tree') {
+            const zone = getCurrentZone();
+
+            // Subtle colored glow at base (zone-dependent)
+            ctx.fillStyle = zone.treeAccent;
+            ctx.beginPath();
+            ctx.arc(screen.x, screen.y, obs.width * 0.3, 0, Math.PI * 2);
+            ctx.fill();
+
             // Tree trunk
             ctx.fillStyle = '#4a3728';
             ctx.fillRect(screen.x - 5, screen.y - 12, 10, 22);
 
-            // Simplified 2-layer foliage for performance
-            ctx.fillStyle = '#0a2a1a';
+            // Simplified 2-layer foliage with outlines for visibility
+            const mapTree = gameState.currentMap && gameState.currentMap.treeColors;
+            ctx.fillStyle = mapTree ? mapTree.foliage1 : '#0a2a1a';
+            ctx.strokeStyle = '#0a1a0a';
+            ctx.lineWidth = 1.5;
             ctx.beginPath();
             ctx.moveTo(screen.x, screen.y - 17);
             ctx.lineTo(screen.x - obs.width * 0.85/2, screen.y - 5);
             ctx.lineTo(screen.x + obs.width * 0.85/2, screen.y - 5);
             ctx.closePath();
             ctx.fill();
+            ctx.stroke();
 
-            ctx.fillStyle = '#1a472a';
+            ctx.fillStyle = mapTree ? mapTree.foliage2 : '#1a472a';
             ctx.beginPath();
             ctx.moveTo(screen.x, screen.y - obs.height * 0.65 - 12);
             ctx.lineTo(screen.x - obs.width * 0.45/2, screen.y - obs.height * 0.65);
             ctx.lineTo(screen.x + obs.width * 0.45/2, screen.y - obs.height * 0.65);
             ctx.closePath();
             ctx.fill();
+            ctx.stroke();
 
-            // Snow accumulation
-            ctx.fillStyle = COLORS.snow;
+            // Snow accumulation — darkened to contrast against ground snow
+            ctx.fillStyle = mapTree ? mapTree.snowCap : '#d8e8f0';
             ctx.beginPath();
             ctx.moveTo(screen.x, screen.y - obs.height + 3);
             ctx.lineTo(screen.x - obs.width/4, screen.y - obs.height * 0.7);
             ctx.quadraticCurveTo(screen.x, screen.y - obs.height * 0.65, screen.x + obs.width/4, screen.y - obs.height * 0.7);
             ctx.closePath();
             ctx.fill();
+            ctx.stroke();
 
         } else if (obs.type === 'rock') {
             // Irregular curved rock shape with flat colors (no per-frame gradient)
@@ -4979,6 +5619,82 @@ function drawCollectibles() {
     }
 }
 
+function drawShopUI(offsetX, offsetY, w, h) {
+    const lodge = gameState.lodge;
+    const items = lodge.shopItems;
+
+    // Semi-transparent overlay
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+    ctx.fillRect(offsetX + 20, offsetY + 30, w - 40, h - 60);
+
+    // Title
+    ctx.fillStyle = COLORS.gold;
+    ctx.font = FONTS.pressStart12;
+    ctx.textAlign = 'center';
+    ctx.shadowColor = COLORS.gold;
+    ctx.shadowBlur = getShadowBlur(4);
+    ctx.fillText('LODGE SHOP', offsetX + w / 2, offsetY + 52);
+    ctx.shadowBlur = 0;
+
+    // Balance
+    ctx.fillStyle = COLORS.cyan;
+    ctx.font = FONTS.pressStart8;
+    ctx.fillText('❄️ ' + gameState.collectiblesCollected, offsetX + w / 2, offsetY + 68);
+
+    // Item list
+    const listX = offsetX + 40;
+    const listY = offsetY + 85;
+    const itemH = 38;
+
+    for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        const y = listY + i * itemH;
+        const isSelected = i === lodge.shopCursor;
+        const isPurchased = lodge.purchasedItems.some(p => p.id === item.id);
+        const canAfford = gameState.collectiblesCollected >= item.cost;
+
+        // Card background
+        if (isSelected) {
+            ctx.fillStyle = 'rgba(0, 255, 255, 0.15)';
+            ctx.strokeStyle = COLORS.cyan;
+            ctx.lineWidth = 2;
+            ctx.fillRect(listX, y, w - 80, itemH - 4);
+            ctx.strokeRect(listX, y, w - 80, itemH - 4);
+        } else {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+            ctx.fillRect(listX, y, w - 80, itemH - 4);
+        }
+
+        // Emoji + Name
+        ctx.textAlign = 'left';
+        ctx.font = FONTS.pressStart8;
+        ctx.fillStyle = isPurchased ? '#666' : '#fff';
+        ctx.fillText(item.emoji + ' ' + item.name, listX + 6, y + 12);
+
+        // Description
+        ctx.font = '6px "Press Start 2P", monospace';
+        ctx.fillStyle = isPurchased ? '#555' : '#aaa';
+        ctx.fillText(item.desc, listX + 6, y + 24);
+
+        // Cost (right side)
+        ctx.textAlign = 'right';
+        ctx.font = FONTS.pressStart8;
+        if (isPurchased) {
+            ctx.fillStyle = COLORS.limeGreen;
+            ctx.fillText('OWNED', listX + w - 88, y + 18);
+        } else {
+            ctx.fillStyle = canAfford ? COLORS.gold : COLORS.warning;
+            ctx.fillText('❄️' + item.cost, listX + w - 88, y + 18);
+        }
+    }
+
+    // Instructions
+    ctx.fillStyle = '#888';
+    ctx.font = '6px "Press Start 2P", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('↑↓ BROWSE  SPACE BUY  ← CLOSE', offsetX + w / 2, offsetY + h - 40);
+}
+
 function drawLodgeInterior() {
     const lodge = gameState.lodge;
     const time = gameState.animationTime;
@@ -5079,21 +5795,39 @@ function drawLodgeInterior() {
     ctx.lineTo(winX + 70, winY + 20);
     ctx.stroke();
 
-    // ===== VENDOR SPOTS (empty for now) =====
-    // Counter on right side
+    // ===== SHOP COUNTER (right side) =====
+    const counterX = offsetX + w - 90;
+    const counterY = offsetY + 80;
     ctx.fillStyle = '#5a4030';
-    ctx.fillRect(offsetX + w - 80, offsetY + 100, 60, 80);
+    ctx.fillRect(counterX, counterY + 20, 70, 90);
     ctx.fillStyle = '#6a5040';
-    ctx.fillRect(offsetX + w - 85, offsetY + 95, 70, 10);
+    ctx.fillRect(counterX - 5, counterY + 15, 80, 10);
 
-    // "Coming Soon" sign
-    ctx.fillStyle = '#3a2010';
-    ctx.fillRect(offsetX + w - 75, offsetY + 110, 50, 25);
-    ctx.fillStyle = '#d0c0a0';
-    ctx.font = '6px "Press Start 2P", monospace';
+    // Shop sign
+    ctx.fillStyle = COLORS.gold;
+    ctx.font = FONTS.pressStart8;
     ctx.textAlign = 'center';
-    ctx.fillText('SHOP', offsetX + w - 50, offsetY + 125);
-    ctx.fillText('SOON', offsetX + w - 50, offsetY + 132);
+    ctx.shadowColor = COLORS.gold;
+    ctx.shadowBlur = getShadowBlur(3);
+    ctx.fillText('SHOP', counterX + 35, counterY + 10);
+    ctx.shadowBlur = 0;
+
+    // If in shop mode, draw the shop overlay
+    if (lodge.shopMode) {
+        drawShopUI(offsetX, offsetY, w, h);
+    } else {
+        // Prompt to approach counter
+        const nearCounter = lodge.playerX > w - 130 && lodge.playerY > 70 && lodge.playerY < 200;
+        if (nearCounter) {
+            ctx.fillStyle = COLORS.cyan;
+            ctx.font = FONTS.pressStart8;
+            ctx.textAlign = 'center';
+            const pulse = 0.6 + 0.4 * Math.sin(time * 4);
+            ctx.globalAlpha = pulse;
+            ctx.fillText('PRESS SPACE TO SHOP', counterX + 35, counterY + 45);
+            ctx.globalAlpha = 1;
+        }
+    }
 
     // ===== EXIT DOOR (bottom) =====
     const exitX = offsetX + w / 2;
@@ -5186,10 +5920,20 @@ function drawLodgeInterior() {
         ctx.fillText('THE BEAST IS COMING!', CANVAS_WIDTH / 2, timerY + 50);
     }
 
+    // Active items display (purchased this run)
+    if (lodge.purchasedItems.length > 0) {
+        ctx.fillStyle = '#aaa';
+        ctx.font = '6px "Press Start 2P", monospace';
+        ctx.textAlign = 'center';
+        const itemEmojis = lodge.purchasedItems.map(p => p.emoji).join(' ');
+        ctx.fillText(itemEmojis, CANVAS_WIDTH / 2, CANVAS_HEIGHT - 35);
+    }
+
     // Instructions
     ctx.fillStyle = '#ffffff';
     ctx.font = '8px "Press Start 2P", monospace';
-    ctx.fillText('ARROWS/WASD TO MOVE - WALK TO EXIT DOOR', CANVAS_WIDTH / 2, CANVAS_HEIGHT - 20);
+    ctx.textAlign = 'center';
+    ctx.fillText('MOVE TO SHOP OR EXIT DOOR', CANVAS_WIDTH / 2, CANVAS_HEIGHT - 20);
 }
 
 function drawPlayer() {
@@ -5306,10 +6050,19 @@ function drawPlayer() {
     // Apply rotation for tricks - only rotate when actually spinning
     if (player.airborne && isSpinning) {
         ctx.rotate(player.trickRotation * Math.PI / 180);
-        // Apply flip rotation (scale Y to simulate forward/backward flip)
+        // Apply flip rotation — perspective-simulated tumble for realistic backflips/frontflips
         if (player.flipRotation !== 0) {
-            const flipScale = Math.cos(player.flipRotation * Math.PI / 180);
-            ctx.scale(1, flipScale);
+            const flipAngle = player.flipRotation * Math.PI / 180;
+            const flipCos = Math.cos(flipAngle);
+            const flipSin = Math.sin(flipAngle);
+            // Scale Y to simulate depth (squash at 90/270 degrees)
+            ctx.scale(1, Math.abs(flipCos));
+            // Shift vertically based on flip phase
+            ctx.translate(0, flipSin * -15);
+            // When upside down (cos < 0), invert drawing
+            if (flipCos < 0) {
+                ctx.scale(1, -1);
+            }
         }
     } else if (player.grinding && player.grindTrick) {
         // Apply grind trick rotation based on trick type
@@ -5493,8 +6246,31 @@ function drawPlayer() {
         ctx.fill();
 
         // Board - VERTICAL, pointing straight down the mountain
-        // When airborne, board can be brought up (for grabs)
-        const boardLift = player.airborne ? player.grabPhase * 10 : 0;
+        // When airborne, board motion differs by grab style
+        let boardLift = 0;
+        let boardTilt = 0;
+        if (player.airborne && player.autoTrick) {
+            const gs = player.autoTrick.grabStyle;
+            const intensity = player.grabPhase;
+            if (gs === 'method' || gs === 'melon') {
+                boardLift = intensity * 15;  // Higher lift for methods
+                boardTilt = intensity * 0.25; // Sideways tilt
+            } else if (gs === 'tail') {
+                boardLift = intensity * 8;
+                boardTilt = intensity * -0.15; // Nose tips down
+            } else if (gs === 'nose') {
+                boardLift = intensity * 8;
+                boardTilt = intensity * 0.15; // Tail tips down
+            } else if (gs === 'stale' || gs === 'roastbeef') {
+                boardLift = intensity * 12;
+                boardTilt = intensity * -0.2;
+            } else {
+                boardLift = intensity * 10;
+            }
+        } else if (player.airborne) {
+            boardLift = player.grabPhase * 10;
+        }
+        if (boardTilt !== 0) ctx.rotate(boardTilt);
         ctx.fillStyle = COLORS.hotPink;
         ctx.shadowColor = COLORS.hotPink;
         ctx.shadowBlur = 2;
@@ -5889,6 +6665,35 @@ function drawPlayer() {
 
     ctx.shadowBlur = 0;
     ctx.restore();
+
+    // Real-time trick name display during air
+    if (player.airborne && player.autoTrick && player.autoTrickProgress > 0.1) {
+        const trickName = player.autoTrick.name;
+        const trickY = drawY - 50;
+        const fadeIn = Math.min(1, (player.autoTrickProgress - 0.1) * 5);
+        ctx.save();
+        ctx.font = FONTS.pressStart8;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillStyle = COLORS.gold;
+        ctx.shadowColor = COLORS.gold;
+        ctx.shadowBlur = getShadowBlur(4);
+        ctx.globalAlpha = fadeIn;
+        ctx.fillText(trickName, screen.x, trickY);
+        // Show spin degree if spinning
+        if (player.spinDirection !== 0 && Math.abs(player.trickRotation) > 90) {
+            const spinDeg = Math.floor(Math.abs(player.trickRotation) / 180) * 180;
+            if (spinDeg >= 180) {
+                ctx.font = FONTS.pressStart10;
+                ctx.fillStyle = COLORS.cyan;
+                ctx.shadowColor = COLORS.cyan;
+                ctx.fillText(spinDeg + '°', screen.x, trickY - 12);
+            }
+        }
+        ctx.shadowBlur = 0;
+        ctx.globalAlpha = 1;
+        ctx.restore();
+    }
 }
 
 function drawAvalanche() {
@@ -6340,6 +7145,56 @@ function drawCelebrations() {
     ctx.globalAlpha = 1;
 }
 
+function drawAltitudeMeter() {
+    const player = gameState.player;
+    if (!player.airborne || player.altitude <= 200) return;
+
+    const meterX = 15;
+    const meterTop = 80;
+    const meterHeight = 150;
+    const maxAlt = 2000;
+    const fillPercent = Math.min(1, player.altitude / maxAlt);
+    const fillH = meterHeight * fillPercent;
+    const isHigh = fillPercent > 0.7;
+
+    // Bar background
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    ctx.fillRect(meterX, meterTop, 8, meterHeight);
+
+    // Bar fill — cyan normally, gold when really high
+    ctx.fillStyle = isHigh ? COLORS.gold : COLORS.cyan;
+    ctx.fillRect(meterX, meterTop + meterHeight - fillH, 8, fillH);
+
+    // Glow on bar
+    ctx.shadowColor = isHigh ? COLORS.gold : COLORS.cyan;
+    ctx.shadowBlur = getShadowBlur(6);
+    ctx.fillRect(meterX, meterTop + meterHeight - fillH, 8, fillH);
+    ctx.shadowBlur = 0;
+
+    // Height text
+    const heightMeters = Math.floor(player.altitude / 10);
+    ctx.font = FONTS.pressStart8;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'bottom';
+    ctx.fillStyle = isHigh ? COLORS.gold : COLORS.cyan;
+    ctx.fillText(heightMeters + 'm', meterX + 12, meterTop + meterHeight - fillH - 4);
+
+    // "BIG AIR" label for extreme height
+    if (fillPercent > 0.5) {
+        ctx.font = FONTS.pressStart10;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        ctx.fillStyle = COLORS.gold;
+        ctx.shadowColor = COLORS.gold;
+        ctx.shadowBlur = getShadowBlur(4);
+        const pulse = 0.8 + 0.2 * Math.sin(gameState.animationTime * 6);
+        ctx.globalAlpha = pulse;
+        ctx.fillText('BIG AIR', meterX, meterTop - 16);
+        ctx.shadowBlur = 0;
+        ctx.globalAlpha = 1;
+    }
+}
+
 function drawHUD() {
     ctx.textBaseline = 'top';
 
@@ -6616,7 +7471,10 @@ function drawGameOverScreen() {
     // Death message - large and prominent
     let deathText = 'WRECKED!';
     let deathColor = COLORS.danger;
-    if (gameState.deathCause === 'fog') {
+    if (gameState.deathCause === 'xgames') {
+        deathText = '🏆 X GAMES COMPLETE!';
+        deathColor = COLORS.gold;
+    } else if (gameState.deathCause === 'fog') {
         deathText = 'BURIED BY THE';
         deathColor = '#c8daf0';
     } else if (gameState.deathCause === 'beast') {
@@ -6734,7 +7592,7 @@ function drawGameOverScreen() {
     // Keyboard hint (smaller, subtle)
     ctx.font = '10px "Press Start 2P", monospace';
     ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-    ctx.fillText('SPACE to retry \u00B7 ESC for menu', cx, CANVAS_HEIGHT * 0.95);
+    ctx.fillText('SPACE/A to retry \u00B7 ESC/B for menu \u00B7 D-pad to navigate', cx, CANVAS_HEIGHT * 0.95);
 }
 
 // ===================
@@ -6768,6 +7626,23 @@ function startGame() {
     gameState.screen = 'playing';
     gameState.mode = 'og';
     gameState.animationTime = 0;
+
+    // Apply map theme
+    gameState.currentMap = MAP_THEMES[selectedMap] || MAP_THEMES.classic;
+    gameState.xgamesFinished = false;
+
+    // Apply terrain mods from map theme (save originals for reset)
+    const mapMods = gameState.currentMap.terrainMods || {};
+    gameState._baseTerrain = {};
+    for (const key of Object.keys(mapMods)) {
+        gameState._baseTerrain[key] = TERRAIN[key];
+        TERRAIN[key] = mapMods[key];
+    }
+
+    // Invalidate gradient cache if map has custom bg colors
+    if (gameState.currentMap.bgColors) {
+        gradientCache.invalidate();
+    }
 
     // Start music loop
     musicManager.play();
@@ -6803,6 +7678,7 @@ function startGame() {
         grabPhase: 0,
         grabTweak: 0,
         grabPoke: 0,
+        comboPhase: -1,     // Combo trick phase: 0=tuck, 1=rotate, 2=extend
         spinDirection: 0,
         preJumpAngle: 0,
         jumpLaunchPower: 0,
@@ -6813,7 +7689,9 @@ function startGame() {
     gameState.camera = {
         y: -CANVAS_HEIGHT * 0.35,
         targetY: 0,
-        lookAhead: 150
+        lookAhead: 150,
+        zoom: 1.0,
+        targetZoom: 1.0
     };
 
     gameState.terrain = {
@@ -6864,6 +7742,15 @@ function startGame() {
     gameState.collectibles = [];
     gameState.collectiblesCollected = 0;
 
+    // Shop effect multipliers (reset per run)
+    gameState.shopTrickMult = 1;
+    gameState.shopTrickPointsMult = 1;
+    gameState.shopScoreMult = 1;
+    gameState.shopFogSlow = 0;
+
+    // Map score multiplier (blizzard = 1.5x, night = 1.2x, etc.)
+    gameState.mapScoreMult = gameState.currentMap ? gameState.currentMap.scoreMult : 1;
+
     // Flow state
     gameState.flowMeter = 0;
     gameState.flowMultiplier = 1;
@@ -6881,7 +7768,14 @@ function startGame() {
         playerX: 0,
         playerY: 0,
         currentLodge: null,
-        warningShown: false
+        warningShown: false,
+        shopItems: [],
+        shopCursor: 0,
+        shopMode: false,
+        purchasedItems: [],
+        lastUp: false,
+        lastDown: false,
+        lastSpace: false
     };
 
     gameState.dangerLevel = 0;
@@ -6908,6 +7802,21 @@ function triggerGameOver(cause) {
 
     gameState.screen = 'gameOver';
     gameState.deathCause = cause;
+
+    // Restore terrain values from map mods
+    if (gameState._baseTerrain) {
+        for (const key of Object.keys(gameState._baseTerrain)) {
+            TERRAIN[key] = gameState._baseTerrain[key];
+        }
+        gameState._baseTerrain = null;
+    }
+
+    // Clear map reference and invalidate gradient cache
+    gameState.currentMap = null;
+    gradientCache.invalidate();
+
+    // Reset shop effects (items are current-run-only)
+    resetShopEffects();
 
     // Update high score
     if (gameState.score > gameState.highScore) {
@@ -8240,6 +9149,9 @@ function togglePause() {
         if (pauseMenu) pauseMenu.classList.add('active');
         gamepadState.menuFocusIndex = 0;
         updatePauseSettingsUI();
+        // Set initial gamepad focus so the first item is highlighted immediately
+        const items = getMenuItems();
+        if (items.length > 0) updateGamepadFocus(items, 0);
     } else {
         hidePauseMenu();
     }
@@ -8370,6 +9282,14 @@ function update(dt) {
             // Space on slalom results = race again
             document.getElementById('slalomResults').style.display = 'none';
             startSlalom();
+        } else if (gameState.mode === 'olympics' && gameState.olympics && gameState.olympics.finished) {
+            // Space on Olympics finish = back to menu
+            gameState.screen = 'title';
+            gameState.mode = 'og';
+            showStartScreen();
+            musicManager.stop();
+            selectedMode = 'olympics';
+            selectMode('olympics');
         }
     }
     input._lastSpace = input.space;
@@ -8380,6 +9300,12 @@ function update(dt) {
             updateSlalom(dt);
             if (sprites.player) sprites.player.update(dt);
         }
+        return;
+    }
+
+    // Handle Olympics mode
+    if (gameState.mode === 'olympics' && gameState.screen === 'playing') {
+        updateOlympics(dt);
         return;
     }
 
@@ -8405,10 +9331,35 @@ function update(dt) {
     checkApproachingJump(gameState.player, dt); // Check for crouch animation
     checkCollisions();
     updateChase(dt);
+    updateTimedShopEffects(dt);
     updateParticles(dt);
     updateCelebrations(dt);
     updateCombo(dt);
     updateScreenShake(dt);
+
+    // Map ambient particles (blizzard heavy snow, night stars)
+    if (gameState.currentMap) spawnMapAmbientParticles();
+
+    // X Games finish check
+    if (gameState.currentMap && gameState.currentMap.isFinite && !gameState.xgamesFinished) {
+        const finishDist = gameState.currentMap.courseLength * TERRAIN.chunkHeight / 100;
+        if (gameState.distance >= finishDist) {
+            gameState.xgamesFinished = true;
+            gameState.xgamesTimer = 0;
+            addCelebration('🏆 X GAMES COMPLETE! 🏆', COLORS.gold);
+        }
+    }
+
+    // X Games photo finish timer
+    if (gameState.xgamesFinished) {
+        gameState.xgamesTimer = (gameState.xgamesTimer || 0) + dt;
+        // Slow player to stop
+        gameState.player.speed = Math.max(0, gameState.player.speed - 200 * dt);
+        // Space to finish after 2s
+        if (gameState.xgamesTimer > 2.0 && input.space && !input._lastSpace) {
+            triggerGameOver('xgames');
+        }
+    }
 
     // Update sprite animations
     if (sprites.player) sprites.player.update(dt);
@@ -8432,6 +9383,44 @@ function updateLodge(dt) {
     if (lodge.timeInside >= LODGE.maxStayTime - LODGE.warningTime && !lodge.warningShown) {
         lodge.warningShown = true;
         addCelebration('BEAST APPROACHES!', COLORS.warning);
+    }
+
+    // Shop mode input handling
+    if (lodge.shopMode) {
+        // Rising edge for navigation
+        const upRising = input.up && !lodge.lastUp;
+        const downRising = input.down && !lodge.lastDown;
+        const spaceRising = input.space && !lodge.lastSpace;
+        lodge.lastUp = input.up;
+        lodge.lastDown = input.down;
+        lodge.lastSpace = input.space;
+
+        if (upRising) {
+            lodge.shopCursor = Math.max(0, lodge.shopCursor - 1);
+        }
+        if (downRising) {
+            lodge.shopCursor = Math.min(lodge.shopItems.length - 1, lodge.shopCursor + 1);
+        }
+        if (spaceRising) {
+            purchaseItem(lodge.shopItems[lodge.shopCursor]);
+        }
+        if (input.left) {
+            lodge.shopMode = false;
+        }
+        return; // Don't walk while shopping
+    }
+
+    // Rising edge tracking when not in shop
+    lodge.lastUp = input.up;
+    lodge.lastDown = input.down;
+    lodge.lastSpace = input.space;
+
+    // Check if player presses space near counter to open shop
+    const nearCounter = lodge.playerX > LODGE.interiorWidth - 130 && lodge.playerY > 70 && lodge.playerY < 200;
+    if (nearCounter && input.space && !lodge.lastSpace) {
+        lodge.shopMode = true;
+        lodge.shopCursor = 0;
+        return;
     }
 
     // Handle walking movement
@@ -8499,13 +9488,32 @@ function selectMode(mode) {
     selectedMode = mode;
     const ogBtn = document.getElementById('modeOG');
     const slalomBtn = document.getElementById('modeSlalom');
+    const olympicsBtn = document.getElementById('modeOlympics');
     if (ogBtn) ogBtn.classList.toggle('mode-active', mode === 'og');
     if (slalomBtn) slalomBtn.classList.toggle('mode-active', mode === 'slalom');
+    if (olympicsBtn) olympicsBtn.classList.toggle('mode-active', mode === 'olympics');
+
+    // Show/hide map selector for OG mode
+    const mapSelector = document.getElementById('mapSelector');
+    if (mapSelector) {
+        mapSelector.style.display = mode === 'og' ? 'flex' : 'none';
+    }
+}
+
+function selectMap(mapId) {
+    selectedMap = mapId;
+    // Update button states
+    const mapBtns = document.querySelectorAll('.map-btn');
+    mapBtns.forEach(btn => {
+        btn.classList.toggle('map-active', btn.dataset.map === mapId);
+    });
 }
 
 function startSelectedMode() {
     if (selectedMode === 'slalom') {
         startSlalom();
+    } else if (selectedMode === 'olympics') {
+        startOlympics();
     } else {
         startGame();
     }
@@ -8590,6 +9598,7 @@ function startSlalom() {
         grabPhase: 0,
         grabTweak: 0,
         grabPoke: 0,
+        comboPhase: -1,     // Combo trick phase: 0=tuck, 1=rotate, 2=extend
         spinDirection: 0,
         preJumpAngle: 0,
         jumpLaunchPower: 0,
@@ -8600,7 +9609,9 @@ function startSlalom() {
     gameState.camera = {
         y: -CANVAS_HEIGHT * 0.35,
         targetY: 0,
-        lookAhead: 150
+        lookAhead: 150,
+        zoom: 1.0,
+        targetZoom: 1.0
     };
 
     // Generate slalom course
@@ -9473,6 +10484,603 @@ function saveSlalomBestTime(time) {
     try {
         localStorage.setItem('shredordead_slalom_best', time.toString());
     } catch (e) {}
+}
+
+// ============================================================================
+// OLYMPICS MODE
+// ============================================================================
+
+const OLYMPICS = {
+    courses: {
+        stelvio: {
+            id: 'stelvio', name: 'Stelvio', location: 'Bormio, Italy',
+            year: 2026, emoji: '🇮🇹',
+            segments: [
+                { type: 'steep', length: 2000, treeDensity: 0.04, rockDensity: 0.03, jumpCount: 1 },
+                { type: 'glide', length: 1500, treeDensity: 0.06, rockDensity: 0.02, jumpCount: 0 },
+                { type: 'compression', length: 1200, treeDensity: 0.08, rockDensity: 0.04, jumpCount: 2 },
+                { type: 'steep', length: 1500, treeDensity: 0.05, rockDensity: 0.03, jumpCount: 1 },
+                { type: 'final', length: 1300, treeDensity: 0.03, rockDensity: 0.02, jumpCount: 0 }
+            ],
+            totalLength: 7500,
+            medals: { gold: 28.0, silver: 32.0, bronze: 36.0 },
+            checkpoints: 4,
+            signature: 'San Pietro jump'
+        }
+    },
+    segmentTypes: {
+        steep: { speedMult: 1.3, slopeAngle: 35, bgTint: 'rgba(200, 230, 255, 0.05)' },
+        glide: { speedMult: 1.0, slopeAngle: 15, bgTint: 'rgba(180, 255, 200, 0.05)' },
+        compression: { speedMult: 0.9, slopeAngle: 25, bgTint: 'rgba(255, 200, 180, 0.05)' },
+        final: { speedMult: 1.1, slopeAngle: 20, bgTint: 'rgba(255, 215, 0, 0.05)' }
+    }
+};
+
+function startOlympics() {
+    hideStartScreen();
+
+    // Hide results if showing
+    const resultsEl = document.getElementById('olympicsResults');
+    if (resultsEl) resultsEl.style.display = 'none';
+
+    if (canvas) {
+        canvas.style.display = 'block';
+        canvas.style.opacity = '1';
+    }
+
+    fitCanvasToViewport();
+
+    TERRAIN.slopeWidth = getTerrainSlopeWidth();
+    TERRAIN.laneWidth = getTerrainLaneWidth();
+
+    gradientCache.invalidate();
+
+    gameState.screen = 'playing';
+    gameState.mode = 'olympics';
+    gameState.animationTime = 0;
+    gameState.currentMap = null;
+
+    musicManager.play();
+
+    gameState.player = {
+        x: 0, y: 0, visualX: 0, visualY: 0,
+        speed: 100, lateralSpeed: 0, angle: 0,
+        airborne: false, altitude: 0, verticalVelocity: 0, airTime: 0,
+        grinding: false, grindProgress: 0, grindStartTime: 0,
+        grindFrames: 0, grindImmunity: 0, grindTrick: null, grindTrickDisplayTimer: 0,
+        lastRail: null, currentRail: null, currentGrindable: null,
+        crashed: false, crashTimer: 0, stunned: 0, invincible: 0,
+        trickRotation: 0, autoTrick: null, autoTrickProgress: 0,
+        flipRotation: 0, grabPhase: 0, grabTweak: 0, grabPoke: 0,
+        comboPhase: -1, spinDirection: 0,
+        preJumpAngle: 0, jumpLaunchPower: 0, preloadCrouch: 0, approachingJump: null
+    };
+
+    gameState.camera = {
+        y: -CANVAS_HEIGHT * 0.35, targetY: 0, lookAhead: 150,
+        zoom: 1.0, targetZoom: 1.0
+    };
+
+    // Generate Olympics course
+    const course = generateOlympicsCourse('stelvio');
+
+    gameState.terrain = {
+        chunks: [], nextChunkY: 0,
+        seed: Math.floor(Math.random() * 100000),
+        lastLodgeY: -9999, pendingExclusions: {}
+    };
+
+    gameState.obstacles = course.obstacles;
+    gameState.jumps = course.jumps;
+    gameState.rails = [];
+    gameState.lodges = [];
+    gameState.collectibles = [];
+    gameState.collectiblesCollected = 0;
+
+    // No chase in Olympics
+    gameState.chase = {
+        fogY: -99999, fogSpeed: 0, beastActive: false,
+        beastY: 0, beastX: 0, beastState: 'chasing',
+        beastLungeTimer: 0, lungeTargetX: 0, lungeTargetY: 0,
+        lungeProgress: 0, retreatTimer: 0, distanceTraveled: 0,
+        recentCrashes: [], totalCrashes: 0, missCount: 0,
+        slowSpeedTimer: 0, beastRage: 0, gameElapsed: 0,
+        lodgeVisits: 0, maxTime: 9999
+    };
+
+    gameState.score = 0;
+    gameState.distance = 0;
+    gameState.trickScore = 0;
+    gameState.trickMultiplier = 1;
+    gameState.trickComboTimer = 0;
+    gameState.maxCombo = 1;
+    gameState.comboChainLength = 0;
+    gameState.flowMeter = 0;
+    gameState.flowMultiplier = 1;
+    gameState.nearMissStreak = 0;
+    gameState.speedStreak = 0;
+    gameState.speedBonus = 0;
+    gameState.particles = [];
+    gameState.celebrations = [];
+    gameState.screenShake = { x: 0, y: 0, intensity: 0, decay: 0.9 };
+    gameState.dangerLevel = 0;
+    gameState.deathCause = null;
+    gameState.deathAnimation = {
+        active: false, type: null, timer: 0, phase: 0,
+        playerX: 0, playerY: 0, beastX: 0, beastY: 0, chompCount: 0
+    };
+
+    // Lodge state reset
+    gameState.lodge = {
+        active: false, timeInside: 0, playerX: 0, playerY: 0,
+        currentLodge: null, warningShown: false,
+        shopItems: [], shopCursor: 0, shopMode: false, purchasedItems: [],
+        lastUp: false, lastDown: false, lastSpace: false
+    };
+
+    // Olympics-specific state
+    gameState.olympics = {
+        courseId: 'stelvio',
+        elapsed: 0,
+        splits: [],
+        currentCheckpoint: 0,
+        checkpoints: course.checkpoints,
+        segments: course.segments,
+        totalLength: course.totalLength,
+        finished: false,
+        medal: null,
+        finishTime: 0,
+        countdownTimer: 3.5 // 3 second countdown
+    };
+
+    // Pre-load terrain chunks for the course
+    for (let i = 0; i < 15; i++) {
+        const chunk = generateTerrainChunk(i);
+        gameState.terrain.chunks.push(chunk);
+        gameState.terrain.nextChunkY = (i + 1) * TERRAIN.chunkHeight;
+    }
+}
+
+function generateOlympicsCourse(courseId) {
+    const courseDef = OLYMPICS.courses[courseId];
+    const slopeWidth = getTerrainSlopeWidth();
+    const halfWidth = slopeWidth / 2;
+    const obstacles = [];
+    const jumps = [];
+    const checkpoints = [];
+    const segments = [];
+
+    let currentY = 600; // Start after warm-up zone
+
+    for (let si = 0; si < courseDef.segments.length; si++) {
+        const seg = courseDef.segments[si];
+        const segType = OLYMPICS.segmentTypes[seg.type];
+        const segStartY = currentY;
+
+        segments.push({
+            type: seg.type,
+            startY: segStartY,
+            endY: segStartY + seg.length,
+            speedMult: segType.speedMult,
+            bgTint: segType.bgTint
+        });
+
+        // Place checkpoint at segment boundary (except first)
+        if (si > 0) {
+            checkpoints.push({
+                y: segStartY,
+                passed: false,
+                segmentName: seg.type.charAt(0).toUpperCase() + seg.type.slice(1),
+                splitTime: 0
+            });
+        }
+
+        // Place obstacles in this segment
+        const numRows = Math.floor(seg.length / 100);
+        for (let row = 0; row < numRows; row++) {
+            const rowY = segStartY + row * 100;
+
+            // Trees
+            if (Math.random() < seg.treeDensity) {
+                const tx = (Math.random() - 0.5) * slopeWidth * 0.85;
+                obstacles.push({
+                    x: tx, y: rowY,
+                    width: 22 + Math.random() * 12,
+                    height: 36 + Math.random() * 18,
+                    type: 'tree'
+                });
+            }
+
+            // Rocks
+            if (Math.random() < seg.rockDensity) {
+                const rx = (Math.random() - 0.5) * slopeWidth * 0.8;
+                obstacles.push({
+                    x: rx, y: rowY + 50,
+                    width: 18 + Math.random() * 10,
+                    height: 14 + Math.random() * 10,
+                    type: 'rock'
+                });
+            }
+        }
+
+        // Place jumps in this segment
+        for (let j = 0; j < seg.jumpCount; j++) {
+            const jumpY = segStartY + (j + 1) * seg.length / (seg.jumpCount + 1);
+            const jumpX = (Math.random() - 0.5) * slopeWidth * 0.3;
+            const jumpType = seg.type === 'compression' ? JUMP_TYPES.large : JUMP_TYPES.medium;
+            jumps.push({
+                x: jumpX, y: jumpY,
+                width: jumpType.width, height: jumpType.height,
+                power: jumpType.power,
+                type: seg.type === 'compression' ? 'large' : 'medium',
+                glow: jumpType.glow
+            });
+        }
+
+        currentY += seg.length;
+    }
+
+    // Add final checkpoint at finish
+    checkpoints.push({
+        y: currentY,
+        passed: false,
+        segmentName: 'Finish',
+        splitTime: 0
+    });
+
+    return {
+        obstacles,
+        jumps,
+        checkpoints,
+        segments,
+        totalLength: currentY
+    };
+}
+
+function updateOlympics(dt) {
+    const oly = gameState.olympics;
+
+    // Countdown phase
+    if (oly.countdownTimer > 0) {
+        oly.countdownTimer -= dt;
+        if (oly.countdownTimer <= 0) {
+            oly.countdownTimer = 0;
+            addCelebration('GO!', COLORS.limeGreen);
+        }
+        return;
+    }
+
+    if (oly.finished) {
+        // Slow player to stop
+        gameState.player.speed = Math.max(0, gameState.player.speed - 300 * dt);
+        return;
+    }
+
+    // Update elapsed time
+    oly.elapsed += dt;
+
+    // Update player physics (reuse OG physics)
+    updatePlayer(dt);
+    updateCamera(dt);
+    updateTerrain();
+    checkCollisions();
+    updateParticles(dt);
+    updateCelebrations(dt);
+    updateCombo(dt);
+    updateScreenShake(dt);
+
+    // Apply segment speed multiplier
+    const currentSeg = oly.segments.find(s =>
+        gameState.player.y >= s.startY && gameState.player.y < s.endY
+    );
+    if (currentSeg) {
+        // Gentle speed adjustment based on segment type
+        const targetSpeed = PHYSICS.maxSpeed * currentSeg.speedMult;
+        if (gameState.player.speed > targetSpeed * 1.1) {
+            gameState.player.speed *= 0.998; // Slight decel on compression
+        }
+    }
+
+    // Check checkpoints
+    for (let i = 0; i < oly.checkpoints.length; i++) {
+        const cp = oly.checkpoints[i];
+        if (!cp.passed && gameState.player.y >= cp.y) {
+            cp.passed = true;
+            cp.splitTime = oly.elapsed;
+            oly.currentCheckpoint = i + 1;
+
+            if (cp.segmentName === 'Finish') {
+                // Course complete!
+                oly.finished = true;
+                oly.finishTime = oly.elapsed;
+
+                // Determine medal
+                const course = OLYMPICS.courses[oly.courseId];
+                if (oly.finishTime <= course.medals.gold) {
+                    oly.medal = 'gold';
+                    addCelebration('🥇 GOLD MEDAL!', COLORS.gold);
+                } else if (oly.finishTime <= course.medals.silver) {
+                    oly.medal = 'silver';
+                    addCelebration('🥈 SILVER MEDAL!', '#c0c0c0');
+                } else if (oly.finishTime <= course.medals.bronze) {
+                    oly.medal = 'bronze';
+                    addCelebration('🥉 BRONZE MEDAL!', '#cd7f32');
+                } else {
+                    oly.medal = null;
+                    addCelebration('FINISHED!', COLORS.cyan);
+                }
+
+                // Save best time
+                saveOlympicsBestTime(oly.courseId, oly.finishTime);
+            } else {
+                addCelebration(`CP ${i + 1}: ${oly.elapsed.toFixed(1)}s`, COLORS.cyan);
+            }
+        }
+    }
+
+    // Update sprite animations
+    if (sprites.player) sprites.player.update(dt);
+}
+
+function drawOlympics() {
+    const oly = gameState.olympics;
+
+    // Apply zoom for big jumps
+    const isZoomed = gameState.camera.zoom < 0.999;
+    if (isZoomed) {
+        ctx.save();
+        const z = gameState.camera.zoom;
+        ctx.translate(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+        ctx.scale(z, z);
+        ctx.translate(-CANVAS_WIDTH / 2, -CANVAS_HEIGHT / 2);
+    }
+
+    // Background
+    drawBackground();
+
+    // Segment tint overlay
+    const currentSeg = oly.segments.find(s =>
+        gameState.player.y >= s.startY && gameState.player.y < s.endY
+    );
+    if (currentSeg && currentSeg.bgTint) {
+        ctx.fillStyle = currentSeg.bgTint;
+        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    }
+
+    // Draw terrain edges
+    drawTerrain();
+
+    // Draw Olympics course obstacles
+    drawJumps();
+    drawObstacles();
+
+    // Draw checkpoints
+    for (const cp of oly.checkpoints) {
+        if (cp.passed) continue;
+        const screenY = cp.y - gameState.camera.y;
+        if (screenY < -50 || screenY > CANVAS_HEIGHT + 50) continue;
+
+        // Checkpoint banner
+        ctx.save();
+        ctx.strokeStyle = cp.segmentName === 'Finish' ? COLORS.gold : '#00aa44';
+        ctx.lineWidth = 3;
+        ctx.setLineDash([8, 4]);
+        ctx.beginPath();
+        ctx.moveTo(0, screenY);
+        ctx.lineTo(CANVAS_WIDTH, screenY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Checkpoint label
+        ctx.font = FONTS.pressStart12;
+        ctx.fillStyle = cp.segmentName === 'Finish' ? COLORS.gold : '#00cc55';
+        ctx.textAlign = 'center';
+        ctx.shadowColor = cp.segmentName === 'Finish' ? COLORS.gold : '#00cc55';
+        ctx.shadowBlur = getShadowBlur(8);
+        const label = cp.segmentName === 'Finish' ? '🏁 FINISH LINE 🏁' : `CP ${oly.checkpoints.indexOf(cp) + 1}`;
+        ctx.fillText(label, CANVAS_WIDTH / 2, screenY - 12);
+        ctx.shadowBlur = 0;
+        ctx.restore();
+    }
+
+    // Draw player
+    drawPlayer();
+
+    // Draw particles and celebrations
+    drawParticles();
+    drawCelebrations();
+
+    // End zoom
+    if (isZoomed) {
+        ctx.restore();
+    }
+
+    // Draw altitude meter
+    drawAltitudeMeter();
+
+    // === Olympics HUD ===
+    // Timer
+    ctx.save();
+    ctx.font = FONTS.pressStart16;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fff';
+    ctx.shadowColor = COLORS.cyan;
+    ctx.shadowBlur = getShadowBlur(6);
+
+    if (oly.countdownTimer > 0) {
+        // Countdown display
+        const count = Math.ceil(oly.countdownTimer);
+        ctx.font = FONTS.pressStart32;
+        ctx.fillStyle = count <= 1 ? COLORS.limeGreen : COLORS.gold;
+        ctx.shadowColor = ctx.fillStyle;
+        ctx.shadowBlur = getShadowBlur(20);
+        ctx.fillText(count <= 0 ? 'GO!' : count.toString(), CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+    } else {
+        // Elapsed time
+        const timeStr = oly.elapsed.toFixed(1) + 's';
+        ctx.fillText(timeStr, CANVAS_WIDTH / 2, 28);
+
+        // Course name
+        ctx.font = FONTS.pressStart8;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.fillText('STELVIO — BORMIO 🇮🇹', CANVAS_WIDTH / 2, 12);
+
+        // Speed display
+        ctx.font = FONTS.pressStart8;
+        ctx.fillStyle = COLORS.cyan;
+        ctx.textAlign = 'left';
+        const speedKmh = Math.floor(gameState.player.speed * 0.3);
+        ctx.fillText(`${speedKmh} km/h`, 10, 28);
+
+        // Checkpoint progress
+        ctx.textAlign = 'right';
+        ctx.fillStyle = COLORS.limeGreen;
+        ctx.fillText(`CP ${oly.currentCheckpoint}/${oly.checkpoints.length}`, CANVAS_WIDTH - 10, 28);
+
+        // Progress bar
+        const totalDist = oly.totalLength;
+        const progress = Math.min(gameState.player.y / totalDist, 1);
+        const barW = CANVAS_WIDTH * 0.4;
+        const barX = (CANVAS_WIDTH - barW) / 2;
+        const barY = 38;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+        ctx.fillRect(barX, barY, barW, 4);
+        ctx.fillStyle = progress > 0.9 ? COLORS.gold : COLORS.cyan;
+        ctx.fillRect(barX, barY, barW * progress, 4);
+
+        // Split times (show recent)
+        const recentSplits = oly.checkpoints.filter(cp => cp.passed && cp.segmentName !== 'Finish');
+        const showSplits = recentSplits.slice(-2);
+        ctx.font = FONTS.pressStart8;
+        ctx.textAlign = 'left';
+        for (let i = 0; i < showSplits.length; i++) {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.fillText(`CP${recentSplits.indexOf(showSplits[i]) + 1}: ${showSplits[i].splitTime.toFixed(1)}s`, 10, 50 + i * 14);
+        }
+    }
+
+    ctx.shadowBlur = 0;
+    ctx.restore();
+
+    // Medal thresholds display (bottom)
+    if (!oly.countdownTimer && !oly.finished) {
+        ctx.save();
+        ctx.font = FONTS.pressStart8;
+        ctx.textAlign = 'center';
+        const course = OLYMPICS.courses[oly.courseId];
+        const medalY = CANVAS_HEIGHT - 15;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.fillText(`🥇 ${course.medals.gold}s  🥈 ${course.medals.silver}s  🥉 ${course.medals.bronze}s`, CANVAS_WIDTH / 2, medalY);
+        ctx.restore();
+    }
+
+    // Finish overlay
+    if (oly.finished) {
+        drawOlympicsFinish();
+    }
+}
+
+function drawOlympicsFinish() {
+    const oly = gameState.olympics;
+    const course = OLYMPICS.courses[oly.courseId];
+    const t = gameState.animationTime;
+
+    // Dark overlay
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    ctx.save();
+    ctx.textAlign = 'center';
+
+    // Medal display
+    const medalEmoji = oly.medal === 'gold' ? '🥇' : oly.medal === 'silver' ? '🥈' : oly.medal === 'bronze' ? '🥉' : '⏱️';
+    const medalColor = oly.medal === 'gold' ? COLORS.gold : oly.medal === 'silver' ? '#c0c0c0' : oly.medal === 'bronze' ? '#cd7f32' : COLORS.cyan;
+
+    ctx.font = FONTS.pressStart32;
+    ctx.fillStyle = medalColor;
+    ctx.shadowColor = medalColor;
+    ctx.shadowBlur = getShadowBlur(20);
+    ctx.fillText(medalEmoji, CANVAS_WIDTH / 2, CANVAS_HEIGHT * 0.18);
+
+    // Title
+    ctx.font = FONTS.pressStart16;
+    ctx.fillText(oly.medal ? (oly.medal.toUpperCase() + ' MEDAL!') : 'FINISHED', CANVAS_WIDTH / 2, CANVAS_HEIGHT * 0.28);
+    ctx.shadowBlur = 0;
+
+    // Course info
+    ctx.font = FONTS.pressStart8;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+    ctx.fillText(`${course.name} — ${course.location} ${course.year}`, CANVAS_WIDTH / 2, CANVAS_HEIGHT * 0.35);
+
+    // Final time
+    ctx.font = FONTS.pressStart16;
+    ctx.fillStyle = '#fff';
+    ctx.fillText(`TIME: ${oly.finishTime.toFixed(2)}s`, CANVAS_WIDTH / 2, CANVAS_HEIGHT * 0.45);
+
+    // Medal thresholds
+    ctx.font = FONTS.pressStart8;
+    const threshY = CANVAS_HEIGHT * 0.53;
+    ctx.fillStyle = oly.medal === 'gold' ? COLORS.gold : 'rgba(255, 215, 0, 0.5)';
+    ctx.fillText(`GOLD: ${course.medals.gold}s`, CANVAS_WIDTH / 2, threshY);
+    ctx.fillStyle = oly.medal === 'silver' ? '#c0c0c0' : 'rgba(192, 192, 192, 0.5)';
+    ctx.fillText(`SILVER: ${course.medals.silver}s`, CANVAS_WIDTH / 2, threshY + 16);
+    ctx.fillStyle = oly.medal === 'bronze' ? '#cd7f32' : 'rgba(205, 127, 50, 0.5)';
+    ctx.fillText(`BRONZE: ${course.medals.bronze}s`, CANVAS_WIDTH / 2, threshY + 32);
+
+    // Best time
+    const best = loadOlympicsBestTime(oly.courseId);
+    if (best !== null) {
+        ctx.fillStyle = COLORS.cyan;
+        ctx.fillText(`BEST: ${best.toFixed(2)}s`, CANVAS_WIDTH / 2, threshY + 56);
+    }
+
+    // Split times
+    ctx.font = FONTS.pressStart8;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    const splitsY = CANVAS_HEIGHT * 0.72;
+    const validSplits = oly.checkpoints.filter(cp => cp.passed);
+    for (let i = 0; i < Math.min(validSplits.length, 5); i++) {
+        ctx.fillText(`${validSplits[i].segmentName}: ${validSplits[i].splitTime.toFixed(1)}s`, CANVAS_WIDTH / 2, splitsY + i * 14);
+    }
+
+    // Prompt
+    const blink = Math.sin(t * 4) > 0;
+    if (blink) {
+        ctx.font = FONTS.pressStart12;
+        ctx.fillStyle = COLORS.cyan;
+        ctx.fillText('PRESS SPACE', CANVAS_WIDTH / 2, CANVAS_HEIGHT * 0.92);
+    }
+
+    ctx.restore();
+}
+
+function loadOlympicsBestTime(courseId) {
+    try {
+        const val = localStorage.getItem(`shredordead_olympics_${courseId}_best`);
+        return val !== null ? parseFloat(val) : null;
+    } catch (e) {
+        return null;
+    }
+}
+
+function saveOlympicsBestTime(courseId, time) {
+    try {
+        const existing = loadOlympicsBestTime(courseId);
+        if (existing === null || time < existing) {
+            localStorage.setItem(`shredordead_olympics_${courseId}_best`, time.toString());
+        }
+    } catch (e) {}
+}
+
+function olympicsBackToMenu() {
+    const resultsEl = document.getElementById('olympicsResults');
+    if (resultsEl) resultsEl.style.display = 'none';
+    gameState.screen = 'title';
+    gameState.mode = 'og';
+    showStartScreen();
+    musicManager.stop();
+    selectedMode = 'olympics';
+    selectMode('olympics');
 }
 
 function init() {
