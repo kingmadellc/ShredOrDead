@@ -630,6 +630,44 @@
             color: rgba(255, 255, 255, 0.55);
         }
 
+        /* Map Selector (OG mode) */
+        .map-selector {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            width: 100%;
+            justify-content: center;
+            animation: menu-fade-up 0.4s ease-out 0.3s both;
+        }
+
+        .map-btn {
+            padding: 6px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: var(--font-pixel);
+            font-size: 8px;
+            letter-spacing: 1px;
+            color: rgba(255, 255, 255, 0.5);
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            transition: all 0.2s ease;
+            outline: none;
+        }
+
+        .map-btn:hover {
+            border-color: rgba(0, 255, 255, 0.4);
+            color: rgba(255, 255, 255, 0.8);
+            transform: translateY(-1px);
+        }
+
+        .map-btn.map-active {
+            background: rgba(0, 255, 255, 0.1);
+            border-color: rgba(0, 255, 255, 0.6);
+            color: var(--cyan);
+            text-shadow: 0 0 6px rgba(0, 255, 255, 0.4);
+            box-shadow: 0 0 10px rgba(0, 255, 255, 0.2);
+        }
+
         /* Slalom Results Screen */
         #slalomResults {
             position: fixed;
@@ -1712,6 +1750,20 @@
                             <span class="mode-name">SLALOM</span>
                             <span class="mode-desc">Race the gates. Beat the clock.</span>
                         </button>
+                        <button class="mode-btn" id="modeOlympics" onclick="selectMode('olympics')">
+                            <span class="mode-icon">🏅</span>
+                            <span class="mode-name">OLYMPICS</span>
+                            <span class="mode-desc">Legendary downhill. Win medals.</span>
+                        </button>
+                    </div>
+
+                    <!-- Map Selector (OG mode only) -->
+                    <div class="map-selector" id="mapSelector" style="display: flex;">
+                        <button class="map-btn map-active" data-map="classic" onclick="selectMap('classic')">🏔️ Classic</button>
+                        <button class="map-btn" data-map="nightRun" onclick="selectMap('nightRun')">🌙 Night</button>
+                        <button class="map-btn" data-map="backcountry" onclick="selectMap('backcountry')">🌲 Backcountry</button>
+                        <button class="map-btn" data-map="blizzard" onclick="selectMap('blizzard')">🌨️ Blizzard</button>
+                        <button class="map-btn" data-map="xgames" onclick="selectMap('xgames')">🏆 X Games</button>
                     </div>
 
                     <!-- Primary CTA — largest, most prominent element -->
