@@ -191,27 +191,27 @@ const displaySettings = {
 // ============================================
 const SPEED_PRESETS = {
     chill: {
-        downhillAccel: 220,
-        maxSpeed: 500,
-        minSpeed: 120,
-        tuckMultiplier: 1.8,
-        turnSpeed: 450,
+        downhillAccel: 280,
+        maxSpeed: 600,
+        minSpeed: 150,
+        tuckMultiplier: 2.0,
+        turnSpeed: 600,
         label: 'Chill'
     },
     normal: {
-        downhillAccel: 280,
-        maxSpeed: 650,
-        minSpeed: 100,
-        tuckMultiplier: 2.2,
-        turnSpeed: 520,
+        downhillAccel: 350,
+        maxSpeed: 780,
+        minSpeed: 140,
+        tuckMultiplier: 2.5,
+        turnSpeed: 700,
         label: 'Normal'
     },
     insane: {
-        downhillAccel: 360,
-        maxSpeed: 800,
-        minSpeed: 100,
-        tuckMultiplier: 3.0,
-        turnSpeed: 600,
+        downhillAccel: 440,
+        maxSpeed: 950,
+        minSpeed: 130,
+        tuckMultiplier: 3.2,
+        turnSpeed: 800,
         label: 'Insane'
     }
 };
@@ -509,13 +509,13 @@ const PHYSICS = {
     gravity: 1200,
     groundFriction: 0.992,      // Less drag
     airFriction: 0.995,
-    turnSpeed: 520,             // Fast turning for responsive carving
+    turnSpeed: 700,             // Fast turning for responsive carving
     maxTurnAngle: 65,
     carveSpeedBoost: 1.10,
-    downhillAccel: 280,         // Faster acceleration
-    maxSpeed: 650,              // Higher top speed
-    minSpeed: 100,
-    tuckMultiplier: 2.2,        // Tuck speed boost (adjustable via speed presets)
+    downhillAccel: 350,         // Faster acceleration
+    maxSpeed: 780,              // Higher top speed
+    minSpeed: 140,
+    tuckMultiplier: 2.5,        // Tuck speed boost (adjustable via speed presets)
     crashSpeedPenalty: 0.5,
     crashDuration: 0.8,
     stunDuration: 0.25,
@@ -646,6 +646,12 @@ const AUTO_TRICKS = [
     { name: 'Double Cork', type: 'combo', rotSpeed: 720, flipSpeed: 400, points: 750 }
 ];
 
+// Pre-computed trick filters (avoids per-jump .filter() allocations)
+const AUTO_TRICKS_SPINS_COMBOS_GRABS = AUTO_TRICKS.filter(t => t.type === 'spin' || t.type === 'combo' || t.type === 'grab');
+const AUTO_TRICKS_GRABS_FLIPS = AUTO_TRICKS.filter(t => t.type === 'grab' || t.type === 'flip');
+const AUTO_TRICKS_GRABS_FLIPS_COMBOS = AUTO_TRICKS.filter(t => t.type === 'grab' || t.type === 'flip' || t.type === 'combo');
+const AUTO_TRICKS_GRABS = AUTO_TRICKS.filter(t => t.type === 'grab');
+
 const CHASE = {
     fogStartOffset: -300,       // Starts closer
     fogBaseSpeed: 150,          // Faster
@@ -664,9 +670,9 @@ const CHASE = {
     baseCatchRadius: 35,        // Normal catch radius
     enhancedCatchRadius: 70,    // Catch radius after too many crashes/misses
     // Avalanche visual config
-    avalancheCloudCount: 10,    // Number of billowing snow clouds
-    avalancheDebrisCount: 18,   // Snow chunks ahead of wall
-    avalancheSprayCount: 25,    // Fine powder particles
+    avalancheCloudCount: 6,     // Reduced from 10 for performance
+    avalancheDebrisCount: 10,   // Reduced from 18 for performance
+    avalancheSprayCount: 12,    // Reduced from 25 for performance
     // Game duration / fog pressure
     maxGameTime: 90,            // Base max game time in seconds before fog guarantees death
     lodgeTimeBonus: 30,         // Extra seconds added per lodge visit
@@ -1932,6 +1938,18 @@ function cullArrayInPlace(arr, shouldRemove) {
     }
 }
 
+// Stable in-place culling that preserves order for Y-sorted gameplay arrays.
+function cullArrayInPlaceStable(arr, shouldRemove) {
+    let write = 0;
+    for (let read = 0; read < arr.length; read++) {
+        const item = arr[read];
+        if (!shouldRemove(item)) {
+            arr[write++] = item;
+        }
+    }
+    arr.length = write;
+}
+
 function seededRandom(seed) {
     const x = Math.sin(seed) * 10000;
     return x - Math.floor(x);
@@ -2669,12 +2687,12 @@ function updateTerrain() {
 
     const cullY = camera.y - CANVAS_HEIGHT;
     // PERFORMANCE: Use in-place culling instead of .filter() to avoid allocations
-    cullArrayInPlace(terrain.chunks, c => c.y + TERRAIN.chunkHeight <= cullY);
-    cullArrayInPlace(gameState.obstacles, o => o.y <= cullY);
-    cullArrayInPlace(gameState.jumps, j => j.y <= cullY);
-    cullArrayInPlace(gameState.rails, r => r.endY <= cullY);
-    cullArrayInPlace(gameState.lodges, l => l.y + l.height <= cullY);
-    cullArrayInPlace(gameState.collectibles, c => c.y <= cullY || c.collected);
+    cullArrayInPlaceStable(terrain.chunks, c => c.y + TERRAIN.chunkHeight <= cullY);
+    cullArrayInPlaceStable(gameState.obstacles, o => o.y <= cullY);
+    cullArrayInPlaceStable(gameState.jumps, j => j.y <= cullY);
+    cullArrayInPlaceStable(gameState.rails, r => r.endY <= cullY);
+    cullArrayInPlaceStable(gameState.lodges, l => l.y + l.height <= cullY);
+    cullArrayInPlaceStable(gameState.collectibles, c => c.y <= cullY || c.collected);
 }
 
 // ===================
@@ -2742,10 +2760,13 @@ function updatePlayer(dt) {
 function updateGroundPhysics(player, dt) {
     const inputDir = getInputDirection();
 
-    // Turn input affects board angle
+    // Turn input affects board angle — blend exponential snap with linear cap for responsiveness
     const targetAngle = inputDir * PHYSICS.maxTurnAngle;
     const angleDiff = targetAngle - player.angle;
-    player.angle += Math.sign(angleDiff) * Math.min(Math.abs(angleDiff), PHYSICS.turnSpeed * dt);
+    const expStep = angleDiff * Math.min(1, 12 * dt);  // Exponential approach (snappy small corrections)
+    const linStep = Math.sign(angleDiff) * Math.min(Math.abs(angleDiff), PHYSICS.turnSpeed * dt); // Linear cap
+    // Use whichever moves further toward the target
+    player.angle += Math.abs(expStep) > Math.abs(linStep) ? expStep : linStep;
 
     // Speed based on carving vs straight
     const carving = Math.abs(player.angle) > 20;
@@ -2974,26 +2995,16 @@ function triggerJump(player, jump) {
         });
     }
 
-    // Select trick based on jump power and input direction
+    // Select trick based on jump power and input direction (uses pre-computed filter arrays)
     if (jump.launchPower >= 1.0) {
-        // Filter tricks by type based on input
         let availableTricks;
         if (inputDir !== 0) {
             // Player is pressing direction - allow spin tricks
-            availableTricks = AUTO_TRICKS.filter(t =>
-                t.type === 'spin' || t.type === 'combo' || t.type === 'grab'
-            );
+            availableTricks = jump.launchPower < 1.2 ? AUTO_TRICKS_GRABS_FLIPS : AUTO_TRICKS_SPINS_COMBOS_GRABS;
         } else {
-            // No direction input - only grabs and flips (no spins)
-            availableTricks = AUTO_TRICKS.filter(t =>
-                t.type === 'grab' || t.type === 'flip' ||
-                (t.type === 'combo' && jump.launchPower >= 1.4) // Combos only on big jumps
-            );
-        }
-
-        // Weight selection toward grabs for smaller jumps
-        if (jump.launchPower < 1.2) {
-            availableTricks = availableTricks.filter(t => t.type === 'grab' || t.type === 'flip');
+            // No direction input - only grabs and flips (combos on big jumps)
+            availableTricks = jump.launchPower < 1.2 ? AUTO_TRICKS_GRABS_FLIPS :
+                              jump.launchPower >= 1.4 ? AUTO_TRICKS_GRABS_FLIPS_COMBOS : AUTO_TRICKS_GRABS_FLIPS;
         }
 
         const trickIndex = Math.floor(Math.random() * availableTricks.length);
@@ -3004,8 +3015,7 @@ function triggerJump(player, jump) {
     } else {
         // Small jumps - just a simple grab or nothing
         if (Math.random() < 0.6) {
-            const grabs = AUTO_TRICKS.filter(t => t.type === 'grab');
-            player.autoTrick = grabs[Math.floor(Math.random() * grabs.length)];
+            player.autoTrick = AUTO_TRICKS_GRABS[Math.floor(Math.random() * AUTO_TRICKS_GRABS.length)];
             player.autoTrickProgress = 0;
             player.grabPhase = 0;
         } else {
@@ -3337,7 +3347,8 @@ function checkApproachingJump(player, dt) {
     for (const jump of gameState.jumps) {
         // Only consider jumps ahead of us and within lane
         const distY = jump.y - player.y;
-        if (distY < 0 || distY > lookAheadDist) continue;
+        if (distY < 0) continue;
+        if (distY > lookAheadDist) break;
         if (Math.abs(jump.x - player.x) > jump.width * 0.8) continue;
 
         if (distY < nearestDist) {
@@ -3365,8 +3376,11 @@ function checkCollisions() {
     if (player.crashed || player.stunned > 0 || player.airborne || player.invincible > 0) return;
 
     // Check obstacles
+    const obsMinY = player.y - 60;
+    const obsMaxY = player.y + 60;
     for (const obs of gameState.obstacles) {
-        if (Math.abs(obs.y - player.y) > 60) continue;
+        if (obs.y < obsMinY) continue;
+        if (obs.y > obsMaxY) break;
         if (Math.abs(obs.x - player.x) > 40) continue;
 
         // Simple AABB collision
@@ -3384,8 +3398,11 @@ function checkCollisions() {
 
     // Check jumps
     if (!player.grinding) {
+        const jumpMinY = player.y - 30;
+        const jumpMaxY = player.y + 30;
         for (const jump of gameState.jumps) {
-            if (Math.abs(jump.y - player.y) > 30) continue;
+            if (jump.y < jumpMinY) continue;
+            if (jump.y > jumpMaxY) break;
             if (Math.abs(jump.x - player.x) > 35) continue;
 
             if (player.y > jump.y - 10 && player.y < jump.y + 20) {
@@ -3403,7 +3420,8 @@ function checkCollisions() {
             if (rail === player.lastRail) continue;
 
             // Check if player is within the rail's Y span (top to bottom)
-            if (player.y < rail.y - 20 || player.y > rail.endY + 20) continue;
+            if (rail.endY < player.y - 20) continue;
+            if (rail.y > player.y + 20) break;
 
             // Calculate rail's X position at player's Y using linear interpolation
             const t = (player.y - rail.y) / (rail.endY - rail.y);
@@ -3420,7 +3438,9 @@ function checkCollisions() {
     }
 
     // Check lodges
+    const lodgeMaxY = player.y + LODGE.height + LODGE.rampLength;
     for (const lodge of gameState.lodges) {
+        if (lodge.y > lodgeMaxY) break;
         // Quick distance check - include ramp area above lodge
         if (Math.abs(lodge.y + lodge.height / 2 - player.y) > lodge.height + lodge.rampLength) continue;
         if (Math.abs(lodge.x - player.x) > lodge.width) continue;
@@ -3475,16 +3495,22 @@ function checkCollisions() {
     }
 
     // Check collectibles
+    const colMinY = player.y - 30;
+    const colMaxY = player.y + 30;
     for (const col of gameState.collectibles) {
+        if (col.y < colMinY) continue;
+        if (col.y > colMaxY) break;
         if (col.collected) continue;
-        if (Math.abs(col.y - player.y) > 30) continue;
         if (Math.abs(col.x - player.x) > 25) continue;
 
         collectItem(col);
     }
 
-    // Check near-misses with obstacles
-    checkNearMisses(player);
+    // Near-miss scan is cosmetic scoring; running every other frame cuts heavy scans in dense runs.
+    gameState._nearMissFlip = !gameState._nearMissFlip;
+    if (gameState._nearMissFlip) {
+        checkNearMisses(player);
+    }
 }
 
 function collectItem(collectible) {
@@ -3532,7 +3558,11 @@ function checkNearMisses(player) {
     const nearMissThresholdSq = 1225;
     const minDistSq = 400;
 
+    const nearMinY = player.y - 55;
+    const nearMaxY = player.y + 55;
     for (const obs of gameState.obstacles) {
+        if (obs.y < nearMinY) continue;
+        if (obs.y > nearMaxY) break;
         const dx = obs.x - player.x;
         const dy = obs.y - player.y;
         const distSq = dx * dx + dy * dy;
@@ -4340,20 +4370,10 @@ function drawBackground() {
             // Right mountain margin
             ctx.fillRect(CANVAS_WIDTH - marginWidth + 5, 0, marginWidth - 5, CANVAS_HEIGHT);
 
-            // Mountain silhouette effect on sides - cooler, snowy tones
-            const mountainGrad = ctx.createLinearGradient(0, 0, marginWidth, 0);
-            mountainGrad.addColorStop(0, 'rgba(160, 190, 210, 0.8)');
-            mountainGrad.addColorStop(0.5, 'rgba(180, 210, 230, 0.5)');
-            mountainGrad.addColorStop(1, 'transparent');
-            ctx.fillStyle = mountainGrad;
-            ctx.fillRect(0, 0, marginWidth, CANVAS_HEIGHT);
-
-            const mountainGradR = ctx.createLinearGradient(CANVAS_WIDTH, 0, CANVAS_WIDTH - marginWidth, 0);
-            mountainGradR.addColorStop(0, 'rgba(160, 190, 210, 0.8)');
-            mountainGradR.addColorStop(0.5, 'rgba(180, 210, 230, 0.5)');
-            mountainGradR.addColorStop(1, 'transparent');
-            ctx.fillStyle = mountainGradR;
-            ctx.fillRect(CANVAS_WIDTH - marginWidth, 0, marginWidth, CANVAS_HEIGHT);
+            // Mountain silhouette effect on sides (flat fills instead of per-frame gradients)
+            ctx.fillStyle = 'rgba(170, 200, 220, 0.5)';
+            ctx.fillRect(0, 0, marginWidth * 0.6, CANVAS_HEIGHT);
+            ctx.fillRect(CANVAS_WIDTH - marginWidth * 0.6, 0, marginWidth * 0.6, CANVAS_HEIGHT);
         }
     }
 }
@@ -4370,33 +4390,39 @@ function drawVisibilitySpotlight() {
     const screenPos = worldToScreen(player.visualX, player.visualY);
     const playerScreenY = screenPos.y - (player.airborne ? player.altitude * 0.5 : 0);
     const radius = map.visibilityRadius;
+    const cx = screenPos.x;
+    const cy = playerScreenY;
 
-    // Create radial gradient: transparent at center, dark at edges
-    const gradient = ctx.createRadialGradient(
-        screenPos.x, playerScreenY, radius * 0.15,
-        screenPos.x, playerScreenY, radius
-    );
-    gradient.addColorStop(0, 'transparent');
-    gradient.addColorStop(0.6, 'transparent');
-    gradient.addColorStop(0.85, 'rgba(0, 0, 0, 0.6)');
-    gradient.addColorStop(1, 'rgba(0, 0, 0, 0.92)');
-
-    // Draw full-screen darkness with spotlight hole
+    // Darkness rings around player (no gradient creation - uses concentric donut fills)
     ctx.save();
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    // For Night Run: add a warm headlamp glow at the center
+    // Outer darkness (beyond radius)
+    ctx.beginPath();
+    ctx.rect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2, true);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.92)';
+    ctx.fill();
+
+    // Mid ring (85-100% radius)
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.arc(cx, cy, radius * 0.85, 0, Math.PI * 2, true);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.fill();
+
+    // Inner fade ring (60-85% radius)
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius * 0.85, 0, Math.PI * 2);
+    ctx.arc(cx, cy, radius * 0.6, 0, Math.PI * 2, true);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+    ctx.fill();
+
+    // For Night Run: warm headlamp glow at center
     if (map.neonGlow) {
-        const glowGrad = ctx.createRadialGradient(
-            screenPos.x, playerScreenY, 0,
-            screenPos.x, playerScreenY, radius * 0.4
-        );
-        glowGrad.addColorStop(0, 'rgba(255, 220, 140, 0.12)');
-        glowGrad.addColorStop(0.5, 'rgba(255, 200, 100, 0.05)');
-        glowGrad.addColorStop(1, 'transparent');
-        ctx.fillStyle = glowGrad;
-        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        ctx.fillStyle = 'rgba(255, 220, 140, 0.08)';
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius * 0.4, 0, Math.PI * 2);
+        ctx.fill();
     }
     ctx.restore();
 }
@@ -4644,10 +4670,14 @@ function drawTerrain() {
 
 function drawObstacles() {
     const camera = gameState.camera;
-    const time = gameState.animationTime;
+    const minY = camera.y - 50;
+    const maxY = camera.y + CANVAS_HEIGHT + 50;
+    const zone = getCurrentZone();
+    const mapTree = gameState.currentMap && gameState.currentMap.treeColors;
 
     for (const obs of gameState.obstacles) {
-        if (obs.y < camera.y - 50 || obs.y > camera.y + CANVAS_HEIGHT + 50) continue;
+        if (obs.y < minY) continue;
+        if (obs.y > maxY) break;
 
         const screen = worldToScreen(obs.x, obs.y);
 
@@ -4668,8 +4698,6 @@ function drawObstacles() {
         }
 
         if (obs.type === 'tree') {
-            const zone = getCurrentZone();
-
             // Subtle colored glow at base (zone-dependent)
             ctx.fillStyle = zone.treeAccent;
             ctx.beginPath();
@@ -4681,7 +4709,6 @@ function drawObstacles() {
             ctx.fillRect(screen.x - 5, screen.y - 12, 10, 22);
 
             // Simplified 2-layer foliage with outlines for visibility
-            const mapTree = gameState.currentMap && gameState.currentMap.treeColors;
             ctx.fillStyle = mapTree ? mapTree.foliage1 : '#0a2a1a';
             ctx.strokeStyle = '#0a1a0a';
             ctx.lineWidth = 1.5;
@@ -4775,9 +4802,12 @@ function drawObstacles() {
 function drawJumps() {
     const camera = gameState.camera;
     const time = gameState.animationTime;
+    const minY = camera.y - 50;
+    const maxY = camera.y + CANVAS_HEIGHT + 50;
 
     for (const jump of gameState.jumps) {
-        if (jump.y < camera.y - 50 || jump.y > camera.y + CANVAS_HEIGHT + 50) continue;
+        if (jump.y < minY) continue;
+        if (jump.y > maxY) break;
 
         const screen = worldToScreen(jump.x, jump.y);
         const w = jump.width;
@@ -4922,9 +4952,12 @@ function drawJumps() {
 
 function drawRails() {
     const camera = gameState.camera;
+    const minY = camera.y - 50;
+    const maxY = camera.y + CANVAS_HEIGHT + 50;
 
     for (const rail of gameState.rails) {
-        if (rail.endY < camera.y - 50 || rail.y > camera.y + CANVAS_HEIGHT + 50) continue;
+        if (rail.endY < minY) continue;
+        if (rail.y > maxY) break;
 
         const startScreen = worldToScreen(rail.x, rail.y);
         const endScreen = worldToScreen2(rail.endX, rail.endY);
@@ -5028,7 +5061,7 @@ function drawMetalRail(startScreen, endScreen, rail) {
 
     // Subtle metallic reflection (reduced from heavy neon glow)
     ctx.shadowColor = 'rgba(200, 220, 240, 0.4)';
-    ctx.shadowBlur = 4;
+    ctx.shadowBlur = getShadowBlur(4);
     ctx.strokeStyle = 'rgba(180, 210, 230, 0.2)';
     ctx.lineWidth = 10;
     ctx.beginPath();
@@ -5041,7 +5074,7 @@ function drawMetalRail(startScreen, endScreen, rail) {
     // End caps (rounded metal)
     ctx.fillStyle = '#bbb';
     ctx.shadowColor = 'rgba(200, 220, 240, 0.3)';
-    ctx.shadowBlur = 3;
+    ctx.shadowBlur = getShadowBlur(3);
     ctx.beginPath();
     ctx.arc(startScreen.x, startScreen.y, 5, 0, Math.PI * 2);
     ctx.fill();
@@ -5112,7 +5145,7 @@ function drawFunbox(startScreen, endScreen, rail) {
 
     // Neon accent
     ctx.shadowColor = COLORS.magenta;
-    ctx.shadowBlur = 1;
+    ctx.shadowBlur = getShadowBlur(1);
     ctx.strokeStyle = COLORS.magenta;
     ctx.lineWidth = 1;
     ctx.strokeRect(-length / 2, -5, length, 4);
@@ -5243,7 +5276,7 @@ function drawBench(startScreen, endScreen, rail) {
 
     // Neon highlight
     ctx.shadowColor = COLORS.limeGreen;
-    ctx.shadowBlur = 5;
+    ctx.shadowBlur = getShadowBlur(5);
     ctx.strokeStyle = COLORS.limeGreen;
     ctx.lineWidth = 1;
     ctx.strokeRect(-length / 2 + 8, -6, length - 16, 2);
@@ -5307,7 +5340,7 @@ function drawKinkedRail(startScreen, endScreen, rail) {
 
     // Neon glow
     ctx.shadowColor = COLORS.gold;
-    ctx.shadowBlur = 2;
+    ctx.shadowBlur = getShadowBlur(2);
     ctx.strokeStyle = 'rgba(255, 255, 0, 0.3)';
     ctx.lineWidth = 8;
     ctx.beginPath();
@@ -5332,12 +5365,9 @@ function drawLodges() {
         const w = lodge.width;
         const h = lodge.height;
 
-        // ===== SHADOW (gradient trapezoid projecting downslope) =====
+        // ===== SHADOW (flat fill instead of per-frame gradient) =====
         const shadowLength = h * 0.7;
-        const shadowGrad = ctx.createLinearGradient(screen.x, screen.y + h, screen.x, screen.y + h + shadowLength);
-        shadowGrad.addColorStop(0, 'rgba(40, 60, 80, 0.35)');
-        shadowGrad.addColorStop(1, 'rgba(40, 60, 80, 0)');
-        ctx.fillStyle = shadowGrad;
+        ctx.fillStyle = 'rgba(40, 60, 80, 0.2)';
         ctx.beginPath();
         ctx.moveTo(screen.x - w / 2 + 5, screen.y + h);
         ctx.lineTo(screen.x + w / 2 - 5, screen.y + h);
@@ -5411,12 +5441,8 @@ function drawLodges() {
         ctx.fillStyle = '#5a4a3a';
         ctx.fillRect(screen.x - w / 2, screen.y + h * 0.7, w, h * 0.3);
 
-        // Main wall
-        const wallGrad = ctx.createLinearGradient(screen.x - w / 2, screen.y, screen.x + w / 2, screen.y);
-        wallGrad.addColorStop(0, '#6b5a4a');
-        wallGrad.addColorStop(0.5, '#7a6a5a');
-        wallGrad.addColorStop(1, '#5a4a3a');
-        ctx.fillStyle = wallGrad;
+        // Main wall (flat fill instead of per-frame gradient)
+        ctx.fillStyle = '#6a5a4a';
         ctx.fillRect(screen.x - w / 2, screen.y + h * 0.3, w, h * 0.4);
 
         // ===== A-FRAME ROOF =====
@@ -5565,57 +5591,32 @@ function drawCollectibles() {
         const isBig = col.type === 'big';
         const size = isBig ? 16 : 10;
 
-        // Floating animation (use cached sin4 with offset)
-        const float = animCache.sin4 * 5 + Math.sin(col.x * 0.1) * 3;
-        const rotation = time * 2;
+        // Floating animation
+        const float = animCache.sin4 * 5;
+        const cx = screen.x;
+        const cy = screen.y + float;
 
-        ctx.save();
-        ctx.translate(screen.x, screen.y + float);
-        ctx.rotate(rotation);
-
-        // Glow
-        ctx.shadowColor = isBig ? COLORS.gold : COLORS.cyan;
-        ctx.shadowBlur = isBig ? 15 : 8;
-
-        // Draw snowflake
+        // Simplified snowflake: 3 crossed lines + center dot (no save/restore/rotate)
         ctx.strokeStyle = isBig ? COLORS.gold : '#fff';
         ctx.lineWidth = isBig ? 3 : 2;
         ctx.lineCap = 'round';
 
-        // Six-pointed snowflake
-        for (let i = 0; i < 6; i++) {
-            const angle = (i / 6) * Math.PI * 2;
-            ctx.beginPath();
-            ctx.moveTo(0, 0);
-            ctx.lineTo(Math.cos(angle) * size, Math.sin(angle) * size);
-            ctx.stroke();
-
-            // Small branches on each arm
-            const branchLen = size * 0.4;
-            const branchX = Math.cos(angle) * size * 0.6;
-            const branchY = Math.sin(angle) * size * 0.6;
-            ctx.beginPath();
-            ctx.moveTo(branchX, branchY);
-            ctx.lineTo(
-                branchX + Math.cos(angle + 0.5) * branchLen,
-                branchY + Math.sin(angle + 0.5) * branchLen
-            );
-            ctx.moveTo(branchX, branchY);
-            ctx.lineTo(
-                branchX + Math.cos(angle - 0.5) * branchLen,
-                branchY + Math.sin(angle - 0.5) * branchLen
-            );
-            ctx.stroke();
-        }
+        ctx.beginPath();
+        // Vertical line
+        ctx.moveTo(cx, cy - size);
+        ctx.lineTo(cx, cy + size);
+        // Diagonal lines
+        ctx.moveTo(cx - size * 0.87, cy - size * 0.5);
+        ctx.lineTo(cx + size * 0.87, cy + size * 0.5);
+        ctx.moveTo(cx - size * 0.87, cy + size * 0.5);
+        ctx.lineTo(cx + size * 0.87, cy - size * 0.5);
+        ctx.stroke();
 
         // Center dot
         ctx.fillStyle = isBig ? COLORS.gold : '#fff';
         ctx.beginPath();
-        ctx.arc(0, 0, isBig ? 3 : 2, 0, Math.PI * 2);
+        ctx.arc(cx, cy, isBig ? 3 : 2, 0, Math.PI * 2);
         ctx.fill();
-
-        ctx.restore();
-        ctx.shadowBlur = 0;
     }
 }
 
@@ -6116,7 +6117,7 @@ function drawPlayer() {
         // Board - HORIZONTAL, perpendicular to slope (facing up mountain)
         ctx.fillStyle = COLORS.hotPink;
         ctx.shadowColor = COLORS.hotPink;
-        ctx.shadowBlur = 2;
+        ctx.shadowBlur = getShadowBlur(2);
         ctx.beginPath();
         ctx.roundRect(-22, 6, 44, 8, 4);
         ctx.fill();
@@ -6155,7 +6156,7 @@ function drawPlayer() {
         // Body/torso - front view, slightly leaned back for braking
         ctx.fillStyle = COLORS.electricBlue;
         ctx.shadowColor = COLORS.cyan;
-        ctx.shadowBlur = 1;
+        ctx.shadowBlur = getShadowBlur(1);
         ctx.beginPath();
         ctx.ellipse(0, -18, 10, 14, 0, 0, Math.PI * 2);
         ctx.fill();
@@ -6208,7 +6209,7 @@ function drawPlayer() {
         // Goggles
         ctx.fillStyle = COLORS.cyan;
         ctx.shadowColor = COLORS.cyan;
-        ctx.shadowBlur = 4;
+        ctx.shadowBlur = getShadowBlur(4);
         ctx.beginPath();
         ctx.ellipse(0, -35, 7, 3, 0, 0, Math.PI * 2);
         ctx.fill();
@@ -6273,7 +6274,7 @@ function drawPlayer() {
         if (boardTilt !== 0) ctx.rotate(boardTilt);
         ctx.fillStyle = COLORS.hotPink;
         ctx.shadowColor = COLORS.hotPink;
-        ctx.shadowBlur = 2;
+        ctx.shadowBlur = getShadowBlur(2);
         ctx.beginPath();
         ctx.roundRect(-4, -4 + boardLift, 8, 36, 4);
         ctx.fill();
@@ -6316,7 +6317,7 @@ function drawPlayer() {
         // Body/torso - SIDE VIEW (thin profile) - lowers with crouch
         ctx.fillStyle = COLORS.electricBlue;
         ctx.shadowColor = COLORS.cyan;
-        ctx.shadowBlur = 1;
+        ctx.shadowBlur = getShadowBlur(1);
         ctx.beginPath();
         // Side profile of torso - thin ellipse, compressed when crouching
         const torsoY = -18 + crouchY;
@@ -6481,7 +6482,7 @@ function drawPlayer() {
         // Goggle lens
         ctx.fillStyle = COLORS.magenta;
         ctx.shadowColor = COLORS.magenta;
-        ctx.shadowBlur = 3;
+        ctx.shadowBlur = getShadowBlur(3);
         ctx.beginPath();
         ctx.ellipse(faceDir * 7, goggleY, 5, 3, faceDir * 0.2, 0, Math.PI * 2);
         ctx.fill();
@@ -6496,7 +6497,7 @@ function drawPlayer() {
         // CARVING - board is HORIZONTAL (original drawing)
         ctx.fillStyle = COLORS.hotPink;
         ctx.shadowColor = COLORS.hotPink;
-        ctx.shadowBlur = 2;
+        ctx.shadowBlur = getShadowBlur(2);
         ctx.beginPath();
         ctx.roundRect(-22, boardY, 44, 6, 3);
         ctx.fill();
@@ -6518,7 +6519,7 @@ function drawPlayer() {
         // Body/jacket
         ctx.fillStyle = COLORS.electricBlue;
         ctx.shadowColor = COLORS.cyan;
-        ctx.shadowBlur = 2;
+        ctx.shadowBlur = getShadowBlur(2);
         ctx.beginPath();
         ctx.ellipse(0, -5, 12, 16, 0, 0, Math.PI * 2);
         ctx.fill();
@@ -6644,7 +6645,7 @@ function drawPlayer() {
         // Goggles lens
         ctx.fillStyle = COLORS.magenta;
         ctx.shadowColor = COLORS.magenta;
-        ctx.shadowBlur = 4;
+        ctx.shadowBlur = getShadowBlur(4);
         ctx.beginPath();
         ctx.roundRect(-9, -27, 18, 7, 2);
         ctx.fill();
@@ -6701,17 +6702,14 @@ function drawAvalanche() {
     const screen = worldToScreen(0, chase.fogY);
     const time = gameState.animationTime;
 
-    // === Snow wall base gradient (white/icy) ===
-    const gradient = ctx.createLinearGradient(0, screen.y - 220, 0, screen.y + 80);
-    gradient.addColorStop(0, 'rgba(240, 245, 255, 0)');
-    gradient.addColorStop(0.15, 'rgba(230, 238, 248, 0.2)');
-    gradient.addColorStop(0.3, 'rgba(220, 230, 245, 0.5)');
-    gradient.addColorStop(0.5, 'rgba(210, 222, 240, 0.75)');
-    gradient.addColorStop(0.7, 'rgba(200, 215, 235, 0.9)');
-    gradient.addColorStop(0.85, 'rgba(190, 205, 225, 0.97)');
-    gradient.addColorStop(1, 'rgba(180, 195, 215, 1)');
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, screen.y - 220, CANVAS_WIDTH, 320);
+    // Skip if avalanche is far above the screen
+    if (screen.y < -300) return;
+
+    // === Snow wall base (flat fills instead of per-frame gradient) ===
+    ctx.fillStyle = 'rgba(220, 230, 245, 0.4)';
+    ctx.fillRect(0, screen.y - 220, CANVAS_WIDTH, 160);
+    ctx.fillStyle = 'rgba(200, 215, 235, 0.85)';
+    ctx.fillRect(0, screen.y - 60, CANVAS_WIDTH, 160);
 
     // === Billowing snow clouds (rolling tumble edge) ===
     const cloudCount = CHASE.avalancheCloudCount;
@@ -6806,19 +6804,12 @@ function drawAvalanche() {
         }
     }
 
-    // === Dense snow mass behind the leading edge ===
-    const innerGrad = ctx.createLinearGradient(0, screen.y - 40, 0, screen.y + 120);
-    innerGrad.addColorStop(0, 'rgba(200, 210, 225, 0.8)');
-    innerGrad.addColorStop(0.3, 'rgba(185, 195, 210, 0.95)');
-    innerGrad.addColorStop(1, 'rgba(160, 175, 195, 1)');
-    ctx.fillStyle = innerGrad;
+    // === Dense snow mass behind the leading edge (flat fill) ===
+    ctx.fillStyle = 'rgba(185, 195, 210, 0.95)';
     ctx.fillRect(0, screen.y - 40, CANVAS_WIDTH, 180);
 
-    // === Shadow at base for depth ===
-    const shadowGrad = ctx.createLinearGradient(0, screen.y + 60, 0, screen.y + 120);
-    shadowGrad.addColorStop(0, 'rgba(120, 135, 160, 0.3)');
-    shadowGrad.addColorStop(1, 'rgba(100, 115, 140, 0.6)');
-    ctx.fillStyle = shadowGrad;
+    // === Shadow at base for depth (flat fill) ===
+    ctx.fillStyle = 'rgba(110, 125, 150, 0.45)';
     ctx.fillRect(0, screen.y + 60, CANVAS_WIDTH, 60);
 }
 
@@ -6857,15 +6848,16 @@ function drawBeast() {
         const breathe = Math.sin(time * 3) * 0.03 + 1;
         scale *= breathe;
 
-        // Draw dark energy aura behind sprite - purple/magenta for shadowy beast
+        // Draw dark energy aura behind sprite (concentric circles, no gradient)
         const pulseIntensity = 0.4 + Math.sin(time * 3) * 0.2;
-        const auraGrad = ctx.createRadialGradient(screen.x, screen.y, 20, screen.x, screen.y, 85 * scale);
-        auraGrad.addColorStop(0, `rgba(120, 0, 180, ${pulseIntensity * 0.4})`);
-        auraGrad.addColorStop(0.5, `rgba(60, 0, 100, ${pulseIntensity * 0.25})`);
-        auraGrad.addColorStop(1, 'rgba(20, 0, 40, 0)');
-        ctx.fillStyle = auraGrad;
+        const auraRadius = 80 * scale;
+        ctx.fillStyle = `rgba(60, 0, 100, ${(pulseIntensity * 0.15).toFixed(3)})`;
         ctx.beginPath();
-        ctx.arc(screen.x, screen.y, 80 * scale, 0, Math.PI * 2);
+        ctx.arc(screen.x, screen.y, auraRadius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = `rgba(120, 0, 180, ${(pulseIntensity * 0.25).toFixed(3)})`;
+        ctx.beginPath();
+        ctx.arc(screen.x, screen.y, auraRadius * 0.5, 0, Math.PI * 2);
         ctx.fill();
 
         // Draw sprite
@@ -7021,7 +7013,7 @@ function drawBeast() {
     const eyeTrack = Math.sin(time) * 1.5;
     ctx.fillStyle = COLORS.cyan;
     ctx.shadowColor = COLORS.cyan;
-    ctx.shadowBlur = 6;
+    ctx.shadowBlur = getShadowBlur(6);
     ctx.beginPath();
     ctx.ellipse(-7 + eyeTrack, -34, 4, 5, 0, 0, Math.PI * 2);
     ctx.fill();
@@ -7031,7 +7023,7 @@ function drawBeast() {
 
     // Eye cores
     ctx.fillStyle = '#ffffff';
-    ctx.shadowBlur = 2;
+    ctx.shadowBlur = getShadowBlur(2);
     ctx.beginPath();
     ctx.ellipse(-7 + eyeTrack, -34, 1.5, 2, 0, 0, Math.PI * 2);
     ctx.fill();
@@ -7058,7 +7050,7 @@ function drawBeast() {
         ctx.strokeStyle = '#3a3030';
         ctx.lineWidth = 3;
         ctx.shadowColor = COLORS.cyan;
-        ctx.shadowBlur = 3;
+        ctx.shadowBlur = getShadowBlur(3);
         for (let side = -1; side <= 1; side += 2) {
             const hx = side * 36;
             for (let c = 0; c < 4; c++) {
@@ -7129,7 +7121,7 @@ function drawCelebrations() {
         const fontSize = Math.min(12, Math.floor(10 * Math.min(c.scale, 1.1)));
         ctx.font = `bold ${fontSize}px "Press Start 2P", monospace`;
         ctx.shadowColor = c.color;
-        ctx.shadowBlur = 1;
+        ctx.shadowBlur = getShadowBlur(1);
         ctx.fillStyle = c.color;
         ctx.fillText(c.text, baseX, baseY + verticalOffset);
 
@@ -7422,7 +7414,7 @@ function drawTitleScreen() {
 
     ctx.font = 'bold 36px "Press Start 2P", monospace';
     ctx.shadowColor = COLORS.cyan;
-    ctx.shadowBlur = 4;
+    ctx.shadowBlur = getShadowBlur(4);
     ctx.fillStyle = COLORS.cyan;
     ctx.fillText('SNOW', CANVAS_WIDTH/2, titleY - 25 + pulse);
 
@@ -7485,7 +7477,7 @@ function drawGameOverScreen() {
     // Main death text
     ctx.font = 'bold 28px "Press Start 2P", monospace';
     ctx.shadowColor = deathColor;
-    ctx.shadowBlur = 12;
+    ctx.shadowBlur = getShadowBlur(12);
     ctx.fillStyle = deathColor;
     if (gameState.deathCause === 'fog' || gameState.deathCause === 'beast') {
         ctx.fillText(deathText, cx, CANVAS_HEIGHT * 0.2);
@@ -7517,21 +7509,21 @@ function drawGameOverScreen() {
     // Distance
     ctx.fillStyle = COLORS.cyan;
     ctx.shadowColor = COLORS.cyan;
-    ctx.shadowBlur = 4;
+    ctx.shadowBlur = getShadowBlur(4);
     ctx.fillText(`DISTANCE  ${gameState.distance}m`, cx, statsY);
     ctx.shadowBlur = 0;
 
     // Score
     ctx.fillStyle = COLORS.magenta;
     ctx.shadowColor = COLORS.magenta;
-    ctx.shadowBlur = 4;
+    ctx.shadowBlur = getShadowBlur(4);
     ctx.fillText(`SCORE  ${gameState.score}`, cx, statsY + statsSpacing);
     ctx.shadowBlur = 0;
 
     // Max combo
     ctx.fillStyle = COLORS.gold;
     ctx.shadowColor = COLORS.gold;
-    ctx.shadowBlur = 4;
+    ctx.shadowBlur = getShadowBlur(4);
     ctx.fillText(`MAX COMBO  x${gameState.maxCombo.toFixed(1)}`, cx, statsY + statsSpacing * 2);
     ctx.shadowBlur = 0;
 
@@ -7542,7 +7534,7 @@ function drawGameOverScreen() {
         ctx.font = 'bold 20px "Press Start 2P", monospace';
         ctx.fillStyle = COLORS.gold;
         ctx.shadowColor = COLORS.gold;
-        ctx.shadowBlur = 10;
+        ctx.shadowBlur = getShadowBlur(10);
         ctx.fillText('NEW HIGH SCORE!', cx, statsY + statsSpacing * 3);
         ctx.shadowBlur = 0;
         ctx.globalAlpha = 1;
@@ -7572,7 +7564,7 @@ function drawGameOverScreen() {
     ctx.font = 'bold 18px "Press Start 2P", monospace';
     ctx.fillStyle = COLORS.cyan;
     ctx.shadowColor = COLORS.cyan;
-    ctx.shadowBlur = retryHover ? 8 : 3;
+    ctx.shadowBlur = getShadowBlur(retryHover ? 8 : 3);
     ctx.fillText('RETRY', cx, btnY);
     ctx.shadowBlur = 0;
 
@@ -8834,7 +8826,7 @@ function drawBeastHead(ctx, mouthOpen, satisfied, time) {
         // Deep-set glowing cyan eyes under brow
         ctx.fillStyle = COLORS.cyan;
         ctx.shadowColor = COLORS.cyan;
-        ctx.shadowBlur = 8;
+        ctx.shadowBlur = getShadowBlur(8);
         ctx.beginPath();
         ctx.ellipse(-12, -38, 5, 4, 0, 0, Math.PI * 2);
         ctx.fill();
@@ -8866,7 +8858,7 @@ function drawBeastHead(ctx, mouthOpen, satisfied, time) {
         ctx.strokeStyle = COLORS.cyan;
         ctx.lineWidth = 2.5;
         ctx.shadowColor = COLORS.cyan;
-        ctx.shadowBlur = 4;
+        ctx.shadowBlur = getShadowBlur(4);
         ctx.beginPath();
         ctx.arc(-12, -38, 5, Math.PI * 0.15, Math.PI * 0.85);
         ctx.stroke();
@@ -9050,12 +9042,12 @@ function drawBeastFullBody(ctx, x, y, runPhase, scale, facing, armPose, time) {
         const eyeTrack = Math.sin(time) * 1.5;
         ctx.fillStyle = COLORS.cyan;
         ctx.shadowColor = COLORS.cyan;
-        ctx.shadowBlur = 6;
+        ctx.shadowBlur = getShadowBlur(6);
         ctx.beginPath(); ctx.ellipse(-7 + eyeTrack, -34, 4, 5, 0, 0, Math.PI * 2); ctx.fill();
         ctx.beginPath(); ctx.ellipse(7 + eyeTrack, -34, 4, 5, 0, 0, Math.PI * 2); ctx.fill();
         // Eye cores
         ctx.fillStyle = '#ffffff';
-        ctx.shadowBlur = 2;
+        ctx.shadowBlur = getShadowBlur(2);
         ctx.beginPath(); ctx.ellipse(-7 + eyeTrack, -34, 1.5, 2, 0, 0, Math.PI * 2); ctx.fill();
         ctx.beginPath(); ctx.ellipse(7 + eyeTrack, -34, 1.5, 2, 0, 0, Math.PI * 2); ctx.fill();
         ctx.shadowBlur = 0;
@@ -9251,7 +9243,7 @@ function drawPauseOverlay() {
     ctx.font = FONTS.pressStart24 || 'bold 24px "Press Start 2P", monospace';
     ctx.fillStyle = COLORS.cyan;
     ctx.shadowColor = COLORS.cyan;
-    ctx.shadowBlur = 15;
+    ctx.shadowBlur = getShadowBlur(15);
     ctx.fillText('PAUSED', centerX, centerY - 60 * scale);
     ctx.shadowBlur = 0;
 
@@ -9463,21 +9455,22 @@ function gameLoop(timestamp) {
     }
     lastTime = timestamp;
 
-    // Poll gamepad every frame
-    pollGamepad(dt);
+    stepGameFrame(dt, true);
 
-    // Skip update if paused (but still draw current frame)
+    requestAnimationFrame(gameLoop);
+}
+
+function stepGameFrame(dt, pollInputs) {
+    if (pollInputs) {
+        pollGamepad(dt);
+    }
     if (!gameState.paused) {
         update(dt);
     }
     draw();
-
-    // Draw pause overlay on top if paused
     if (gameState.paused && gameState.screen === 'playing') {
         drawPauseOverlay();
     }
-
-    requestAnimationFrame(gameLoop);
 }
 
 // ============================================================================
@@ -11129,6 +11122,64 @@ function init() {
 
     requestAnimationFrame(gameLoop);
 }
+
+// Deterministic stepping hook for automation/perf tooling.
+window.advanceTime = (ms) => {
+    const totalSeconds = Math.max(0, ms) / 1000;
+    const steps = Math.max(1, Math.round(ms / (1000 / 60)));
+    const dt = Math.min(0.033, totalSeconds / steps || 1 / 60);
+    for (let i = 0; i < steps; i++) {
+        stepGameFrame(dt, true);
+    }
+};
+
+// Text snapshot for automation and fast sanity checks.
+window.render_game_to_text = () => {
+    const player = gameState.player || {};
+    const camera = gameState.camera || {};
+    const origin = 'origin: world (0,0) centered horizontally on canvas; +x right, +y downhill';
+    const nearestObstacle = gameState.obstacles.find(o => Math.abs(o.y - player.y) < 220) || null;
+    const nearestJump = gameState.jumps.find(j => Math.abs(j.y - player.y) < 220) || null;
+    return JSON.stringify({
+        origin,
+        mode: gameState.mode,
+        screen: gameState.screen,
+        paused: !!gameState.paused,
+        player: {
+            x: Math.round(player.x || 0),
+            y: Math.round(player.y || 0),
+            speed: Math.round(player.speed || 0),
+            airborne: !!player.airborne,
+            grinding: !!player.grinding,
+            crashed: !!player.crashed
+        },
+        camera: {
+            x: Math.round(camera.x || 0),
+            y: Math.round(camera.y || 0),
+            zoom: Number((camera.zoom || 1).toFixed(3))
+        },
+        score: gameState.score || 0,
+        distance: Math.round(gameState.distance || 0),
+        entities: {
+            obstacles: gameState.obstacles.length,
+            jumps: gameState.jumps.length,
+            rails: gameState.rails.length,
+            lodges: gameState.lodges.length,
+            collectibles: gameState.collectibles.length
+        },
+        nearest: {
+            obstacle: nearestObstacle ? {
+                type: nearestObstacle.type,
+                dx: Math.round(nearestObstacle.x - (player.x || 0)),
+                dy: Math.round(nearestObstacle.y - (player.y || 0))
+            } : null,
+            jump: nearestJump ? {
+                dx: Math.round(nearestJump.x - (player.x || 0)),
+                dy: Math.round(nearestJump.y - (player.y || 0))
+            } : null
+        }
+    });
+};
 
 // ============================================
 // SETTINGS MENU FUNCTIONS
