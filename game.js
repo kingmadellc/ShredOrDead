@@ -367,6 +367,606 @@ const musicManager = {
     }
 };
 
+// ============================================
+// PROCEDURAL SFX SYSTEM (Web Audio API)
+// ============================================
+const sfxManager = {
+    ctx: null,
+    enabled: true,
+    volume: 0.4,
+    _initialized: false,
+
+    init() {
+        if (this._initialized) return;
+        try {
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            this._initialized = true;
+        } catch (e) {
+            this.enabled = false;
+        }
+    },
+
+    resume() {
+        if (this.ctx && this.ctx.state === 'suspended') {
+            this.ctx.resume().catch(() => {});
+        }
+    },
+
+    _gain(vol) {
+        const g = this.ctx.createGain();
+        g.gain.value = vol * this.volume;
+        g.connect(this.ctx.destination);
+        return g;
+    },
+
+    // Carve swoosh — filtered noise burst
+    carve(intensity) {
+        if (!this.enabled || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        const dur = 0.08;
+        const buf = this.ctx.createBuffer(1, this.ctx.sampleRate * dur, this.ctx.sampleRate);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * 0.3;
+        const src = this.ctx.createBufferSource();
+        src.buffer = buf;
+        const filt = this.ctx.createBiquadFilter();
+        filt.type = 'bandpass';
+        filt.frequency.value = 800 + intensity * 2000;
+        filt.Q.value = 1.5;
+        const g = this._gain(0.12 * intensity);
+        g.gain.setValueAtTime(0.12 * intensity * this.volume, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + dur);
+        src.connect(filt).connect(g);
+        src.start(now);
+        src.stop(now + dur);
+    },
+
+    // Crash impact — low freq thump + noise
+    crash() {
+        if (!this.enabled || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        // Thump
+        const osc = this.ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(150, now);
+        osc.frequency.exponentialRampToValueAtTime(40, now + 0.15);
+        const g1 = this._gain(0.5);
+        g1.gain.setValueAtTime(0.5 * this.volume, now);
+        g1.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+        osc.connect(g1);
+        osc.start(now);
+        osc.stop(now + 0.2);
+        // Noise crunch
+        const dur = 0.15;
+        const buf = this.ctx.createBuffer(1, this.ctx.sampleRate * dur, this.ctx.sampleRate);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1);
+        const src = this.ctx.createBufferSource();
+        src.buffer = buf;
+        const g2 = this._gain(0.25);
+        g2.gain.setValueAtTime(0.25 * this.volume, now);
+        g2.gain.exponentialRampToValueAtTime(0.001, now + dur);
+        src.connect(g2);
+        src.start(now);
+        src.stop(now + dur);
+    },
+
+    // Trick complete chime — ascending tones
+    trickComplete(multiplier) {
+        if (!this.enabled || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        const baseFreq = 523; // C5
+        const notes = multiplier > 2 ? [1, 1.25, 1.5, 2] : [1, 1.25, 1.5];
+        notes.forEach((ratio, i) => {
+            const osc = this.ctx.createOscillator();
+            osc.type = 'square';
+            osc.frequency.value = baseFreq * ratio;
+            const g = this._gain(0.15);
+            const t = now + i * 0.06;
+            g.gain.setValueAtTime(0, t);
+            g.gain.linearRampToValueAtTime(0.15 * this.volume, t + 0.01);
+            g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+            osc.connect(g);
+            osc.start(t);
+            osc.stop(t + 0.12);
+        });
+    },
+
+    // Rail grind screech — modulated sawtooth
+    grindStart() {
+        if (!this.enabled || !this.ctx) return;
+        if (this._grindOsc) return;
+        const now = this.ctx.currentTime;
+        this._grindOsc = this.ctx.createOscillator();
+        this._grindOsc.type = 'sawtooth';
+        this._grindOsc.frequency.value = 220;
+        this._grindGain = this._gain(0.08);
+        const filt = this.ctx.createBiquadFilter();
+        filt.type = 'bandpass';
+        filt.frequency.value = 1200;
+        filt.Q.value = 3;
+        this._grindFilt = filt;
+        this._grindOsc.connect(filt).connect(this._grindGain);
+        this._grindOsc.start(now);
+    },
+
+    grindStop() {
+        if (!this._grindOsc) return;
+        try {
+            const now = this.ctx.currentTime;
+            this._grindGain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+            this._grindOsc.stop(now + 0.06);
+        } catch (e) {}
+        this._grindOsc = null;
+        this._grindGain = null;
+        this._grindFilt = null;
+    },
+
+    // Jump launch — rising sweep
+    jump() {
+        if (!this.enabled || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(200, now);
+        osc.frequency.exponentialRampToValueAtTime(800, now + 0.15);
+        const g = this._gain(0.2);
+        g.gain.setValueAtTime(0.2 * this.volume, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+        osc.connect(g);
+        osc.start(now);
+        osc.stop(now + 0.2);
+    },
+
+    // Landing thud
+    land(bigAir) {
+        if (!this.enabled || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(bigAir ? 100 : 60, now);
+        osc.frequency.exponentialRampToValueAtTime(30, now + 0.1);
+        const g = this._gain(bigAir ? 0.35 : 0.2);
+        g.gain.setValueAtTime((bigAir ? 0.35 : 0.2) * this.volume, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+        osc.connect(g);
+        osc.start(now);
+        osc.stop(now + 0.15);
+    },
+
+    // Coin collect — bright ding
+    coin() {
+        if (!this.enabled || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(1047, now); // C6
+        osc.frequency.setValueAtTime(1319, now + 0.05); // E6
+        const g = this._gain(0.2);
+        g.gain.setValueAtTime(0.2 * this.volume, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+        osc.connect(g);
+        osc.start(now);
+        osc.stop(now + 0.15);
+    },
+
+    // Beast growl — low noise + detuned oscillators
+    beastGrowl() {
+        if (!this.enabled || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        [55, 58, 62].forEach(freq => {
+            const osc = this.ctx.createOscillator();
+            osc.type = 'sawtooth';
+            osc.frequency.value = freq;
+            const g = this._gain(0.15);
+            g.gain.setValueAtTime(0, now);
+            g.gain.linearRampToValueAtTime(0.15 * this.volume, now + 0.1);
+            g.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+            osc.connect(g);
+            osc.start(now);
+            osc.stop(now + 0.6);
+        });
+    },
+
+    // Achievement unlock — triumphant arpeggio
+    achievement() {
+        if (!this.enabled || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        [523, 659, 784, 1047].forEach((freq, i) => {
+            const osc = this.ctx.createOscillator();
+            osc.type = 'square';
+            osc.frequency.value = freq;
+            const g = this._gain(0.12);
+            const t = now + i * 0.08;
+            g.gain.setValueAtTime(0, t);
+            g.gain.linearRampToValueAtTime(0.12 * this.volume, t + 0.02);
+            g.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+            osc.connect(g);
+            osc.start(t);
+            osc.stop(t + 0.2);
+        });
+    },
+
+    // Menu select blip
+    menuSelect() {
+        if (!this.enabled || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        osc.type = 'square';
+        osc.frequency.value = 880;
+        const g = this._gain(0.1);
+        g.gain.setValueAtTime(0.1 * this.volume, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+        osc.connect(g);
+        osc.start(now);
+        osc.stop(now + 0.05);
+    }
+};
+
+// ============================================
+// ACHIEVEMENT SYSTEM
+// ============================================
+const ACHIEVEMENTS = [
+    // Distance milestones
+    { id: 'first500', name: 'Baby Steps', desc: 'Travel 500m', icon: '🏔️', check: (gs) => gs.distance >= 500 },
+    { id: 'dist1000', name: 'Getting Warmed Up', desc: 'Travel 1,000m', icon: '⛷️', check: (gs) => gs.distance >= 1000 },
+    { id: 'dist2500', name: 'Trail Blazer', desc: 'Travel 2,500m', icon: '🔥', check: (gs) => gs.distance >= 2500 },
+    { id: 'dist5000', name: 'Mountain Goat', desc: 'Travel 5,000m', icon: '🐐', check: (gs) => gs.distance >= 5000 },
+    { id: 'dist10000', name: 'Summit Legend', desc: 'Travel 10,000m', icon: '🏆', check: (gs) => gs.distance >= 10000 },
+    // Score milestones
+    { id: 'score5k', name: 'Point Collector', desc: 'Score 5,000 points', icon: '💎', check: (gs) => gs.score >= 5000 },
+    { id: 'score25k', name: 'High Roller', desc: 'Score 25,000 points', icon: '💰', check: (gs) => gs.score >= 25000 },
+    { id: 'score100k', name: 'Score Machine', desc: 'Score 100,000 points', icon: '🤑', check: (gs) => gs.score >= 100000 },
+    // Trick mastery
+    { id: 'combo2x', name: 'Combo Starter', desc: 'Hit 2x combo', icon: '✨', check: (gs) => gs.maxCombo >= 2 },
+    { id: 'combo3x', name: 'Combo Killer', desc: 'Hit 3x combo', icon: '💥', check: (gs) => gs.maxCombo >= 3 },
+    { id: 'combo5x', name: 'Combo God', desc: 'Hit 5x combo', icon: '👑', check: (gs) => gs.maxCombo >= 5 },
+    { id: 'chain5', name: 'Chain Gang', desc: '5 tricks in one chain', icon: '🔗', check: (gs) => gs.comboChainLength >= 5 },
+    { id: 'chain10', name: 'Infinite Chain', desc: '10 tricks in one chain', icon: '♾️', check: (gs) => gs.comboChainLength >= 10 },
+    // Speed
+    { id: 'maxSpeed', name: 'Speed Demon', desc: 'Hit max speed', icon: '⚡', check: (gs) => gs.player && gs.player.speed >= PHYSICS.maxSpeed * 0.98 },
+    { id: 'speedStreak10', name: 'Velocity Sustained', desc: '10s speed streak', icon: '🚀', check: (gs) => gs.speedStreak >= 10 },
+    // Survival
+    { id: 'beastSurvive', name: 'Beast Dodger', desc: 'Dodge a beast lunge', icon: '🐻', check: (gs) => gs.chase && gs.chase.missCount >= 1 },
+    { id: 'lodge3', name: 'Lodge Hopper', desc: 'Visit 3 lodges in one run', icon: '🏠', check: (gs) => gs.chase && gs.chase.lodgeVisits >= 3 },
+    { id: 'noCrash1000', name: 'Clean Run', desc: '1,000m without crashing', icon: '🧊', check: (gs) => gs._noCrashDistance >= 1000 },
+    // Map specific
+    { id: 'blizzardSurvive', name: 'Storm Rider', desc: 'Survive 60s in Blizzard', icon: '🌨️', check: (gs) => gs.currentMap && gs.currentMap.name === 'Blizzard' && gs.chase && gs.chase.gameElapsed >= 60 },
+    { id: 'xgamesComplete', name: 'X Games Champion', desc: 'Complete the X Games course', icon: '🏆', check: (gs) => gs.xgamesFinished },
+    // Fun
+    { id: 'shopSpree', name: 'Shopping Spree', desc: 'Buy 3 items in one lodge visit', icon: '🛒', check: (gs) => gs.lodge && gs.lodge.purchasedItems && gs.lodge.purchasedItems.length >= 3 },
+    { id: 'grind50', name: 'Rail Rat', desc: 'Grind 50 rails total', icon: '🛹', check: null }, // Checked via counter
+    { id: 'play10', name: 'Dedicated Shredder', desc: 'Play 10 games', icon: '🎮', check: null }, // Checked via counter
+    { id: 'daily3', name: 'Daily Devotee', desc: 'Complete 3 daily challenges', icon: '📅', check: null } // Checked via counter
+];
+
+const achievementState = {
+    unlocked: {},   // { achievementId: timestamp }
+    counters: {},   // { grind50: 0, play10: 0, daily3: 0 }
+    _pending: [],   // Queue of achievements to display
+    _displayTimer: 0,
+    _current: null,
+
+    load() {
+        try {
+            const saved = localStorage.getItem('shredordead_achievements');
+            if (saved) {
+                const data = JSON.parse(saved);
+                this.unlocked = data.unlocked || {};
+                this.counters = data.counters || {};
+            }
+        } catch (e) {}
+    },
+
+    save() {
+        try {
+            localStorage.setItem('shredordead_achievements', JSON.stringify({
+                unlocked: this.unlocked,
+                counters: this.counters
+            }));
+        } catch (e) {}
+    },
+
+    unlock(id) {
+        if (this.unlocked[id]) return;
+        this.unlocked[id] = Date.now();
+        const achievement = ACHIEVEMENTS.find(a => a.id === id);
+        if (achievement) {
+            this._pending.push(achievement);
+            sfxManager.achievement();
+        }
+        this.save();
+    },
+
+    increment(counterId) {
+        this.counters[counterId] = (this.counters[counterId] || 0) + 1;
+        // Check counter-based achievements
+        const thresholds = { grind50: 50, play10: 10, daily3: 3 };
+        if (thresholds[counterId] && this.counters[counterId] >= thresholds[counterId]) {
+            this.unlock(counterId);
+        }
+        this.save();
+    },
+
+    checkAll(gs) {
+        for (const a of ACHIEVEMENTS) {
+            if (a.check && !this.unlocked[a.id]) {
+                try {
+                    if (a.check(gs)) this.unlock(a.id);
+                } catch (e) {}
+            }
+        }
+    },
+
+    getCount() {
+        return Object.keys(this.unlocked).length;
+    },
+
+    getTotal() {
+        return ACHIEVEMENTS.length;
+    },
+
+    update(dt) {
+        if (this._current) {
+            this._displayTimer -= dt;
+            if (this._displayTimer <= 0) {
+                this._current = null;
+            }
+        }
+        if (!this._current && this._pending.length > 0) {
+            this._current = this._pending.shift();
+            this._displayTimer = 3.0;
+        }
+    },
+
+    draw(ctx, canvasW, canvasH) {
+        if (!this._current) return;
+        const a = this._current;
+        const t = this._displayTimer;
+        // Slide in from top
+        const slideProgress = t > 2.5 ? (3.0 - t) / 0.5 : (t < 0.5 ? t / 0.5 : 1);
+        const y = -60 + slideProgress * 80;
+        const w = 280;
+        const h = 50;
+        const x = canvasW / 2 - w / 2;
+
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, slideProgress);
+        // Background
+        ctx.fillStyle = 'rgba(26, 10, 46, 0.9)';
+        ctx.strokeStyle = COLORS.gold;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(x, y, w, h, 8);
+        ctx.fill();
+        ctx.stroke();
+        // Icon + text
+        ctx.font = '20px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#fff';
+        ctx.fillText(a.icon, x + 10, y + h / 2);
+        ctx.font = FONTS.pressStart10;
+        ctx.fillStyle = COLORS.gold;
+        ctx.shadowColor = COLORS.gold;
+        ctx.shadowBlur = getShadowBlur(4);
+        ctx.fillText('ACHIEVEMENT', x + 42, y + 16);
+        ctx.shadowBlur = 0;
+        ctx.font = FONTS.pressStart8;
+        ctx.fillStyle = '#fff';
+        ctx.fillText(a.name, x + 42, y + 35);
+        ctx.restore();
+    }
+};
+
+// ============================================
+// MAP UNLOCK SYSTEM
+// ============================================
+const MAP_UNLOCKS = {
+    classic: { distance: 0, name: 'Classic' },
+    nightRun: { distance: 2000, name: 'Night Run' },
+    backcountry: { distance: 5000, name: 'Backcountry' },
+    blizzard: { distance: 10000, name: 'Blizzard' },
+    xgames: { distance: 0, name: 'X Games' } // Free — event mode
+};
+
+function isMapUnlocked(mapId) {
+    const req = MAP_UNLOCKS[mapId];
+    if (!req || req.distance === 0) return true;
+    try {
+        const best = parseInt(localStorage.getItem('shredordead_bestdistance') || '0', 10);
+        return best >= req.distance;
+    } catch (e) { return false; }
+}
+
+function getMapUnlockProgress(mapId) {
+    const req = MAP_UNLOCKS[mapId];
+    if (!req || req.distance === 0) return 1;
+    try {
+        const best = parseInt(localStorage.getItem('shredordead_bestdistance') || '0', 10);
+        return Math.min(1, best / req.distance);
+    } catch (e) { return 0; }
+}
+
+// ============================================
+// PERMANENT COSMETICS / SHRED COINS
+// ============================================
+const shredCoinState = {
+    total: 0,
+    earned: 0,  // Per-run tracking
+    ownedCosmetics: [],
+
+    load() {
+        try {
+            const saved = localStorage.getItem('shredordead_shredcoins');
+            if (saved) {
+                const data = JSON.parse(saved);
+                this.total = data.total || 0;
+                this.ownedCosmetics = data.owned || [];
+            }
+        } catch (e) {}
+    },
+
+    save() {
+        try {
+            localStorage.setItem('shredordead_shredcoins', JSON.stringify({
+                total: this.total,
+                owned: this.ownedCosmetics
+            }));
+        } catch (e) {}
+    },
+
+    addFromRun(score, distance) {
+        // Earn 1 shred coin per 500 score + 1 per 200m
+        const earned = Math.floor(score / 500) + Math.floor(distance / 200);
+        this.earned = earned;
+        this.total += earned;
+        this.save();
+        return earned;
+    },
+
+    spend(amount) {
+        if (this.total < amount) return false;
+        this.total -= amount;
+        this.save();
+        return true;
+    },
+
+    own(cosmeticId) {
+        if (this.ownedCosmetics.includes(cosmeticId)) return;
+        this.ownedCosmetics.push(cosmeticId);
+        this.save();
+    },
+
+    has(cosmeticId) {
+        return this.ownedCosmetics.includes(cosmeticId);
+    }
+};
+
+// Permanent cosmetics (persist across runs)
+const PERMANENT_COSMETICS = [
+    { id: 'trail_cyan', name: 'Cyan Trail', desc: 'Electric blue carve trail', cost: 50, type: 'trail', color: '#00ffff' },
+    { id: 'trail_fire', name: 'Fire Trail', desc: 'Flame carve trail', cost: 80, type: 'trail', color: '#ff4500' },
+    { id: 'trail_gold', name: 'Gold Trail', desc: 'Golden carve trail', cost: 120, type: 'trail', color: '#ffd700' },
+    { id: 'trail_rainbow', name: 'Rainbow Trail', desc: 'Prismatic carve trail', cost: 200, type: 'trail', color: 'rainbow' },
+    { id: 'board_neon', name: 'Neon Board', desc: 'Glowing neon board', cost: 60, type: 'board', color: '#ff00ff' },
+    { id: 'board_stealth', name: 'Stealth Board', desc: 'Matte black board', cost: 75, type: 'board', color: '#222' },
+    { id: 'board_gold', name: 'Gold Board', desc: 'Solid gold board', cost: 150, type: 'board', color: '#ffd700' },
+    { id: 'board_hologram', name: 'Hologram Board', desc: 'Shifting holographic', cost: 250, type: 'board', color: 'hologram' },
+    { id: 'rider_ghost', name: 'Ghost Rider', desc: 'Translucent rider', cost: 100, type: 'rider', effect: 'ghost' },
+    { id: 'rider_disco', name: 'Disco Rider', desc: 'Color-shifting rider', cost: 80, type: 'rider', effect: 'disco' },
+    { id: 'landing_thunder', name: 'Thunder Landing', desc: 'Lightning on landing', cost: 90, type: 'landing', effect: 'thunder' },
+    { id: 'landing_shockwave', name: 'Shockwave', desc: 'Impact ring on landing', cost: 70, type: 'landing', effect: 'shockwave' },
+    { id: 'death_confetti', name: 'Confetti Death', desc: 'Party on death', cost: 40, type: 'death', effect: 'confetti' },
+    { id: 'trick_sparkle', name: 'Sparkle Tricks', desc: 'Sparkle on trick complete', cost: 55, type: 'trick', effect: 'sparkle' },
+    { id: 'trick_fire', name: 'Fire Tricks', desc: 'Flames on trick complete', cost: 85, type: 'trick', effect: 'fire' }
+];
+
+// ============================================
+// DAILY CHALLENGE SYSTEM
+// ============================================
+const dailyChallenge = {
+    seed: 0,
+    modifier: '',
+    modifierLabel: '',
+    active: false,
+    completed: false,
+    score: 0,
+    bestScore: 0,
+
+    generateForToday() {
+        // Deterministic seed from date
+        const now = new Date();
+        const dateStr = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
+        let hash = 0;
+        for (let i = 0; i < dateStr.length; i++) {
+            hash = ((hash << 5) - hash) + dateStr.charCodeAt(i);
+            hash |= 0;
+        }
+        this.seed = Math.abs(hash);
+
+        // Deterministic modifier from seed
+        const modifiers = [
+            { id: 'noRails', label: 'NO RAILS', desc: 'Rails disabled' },
+            { id: 'doubleSpeed', label: 'DOUBLE SPEED', desc: '2x max speed' },
+            { id: 'beastAlways', label: 'BEAST MODE', desc: 'Beast spawns immediately' },
+            { id: 'tinyLanes', label: 'NARROW PATH', desc: 'Reduced lane width' },
+            { id: 'megaJumps', label: 'MEGA JUMPS', desc: 'All jumps are massive' },
+            { id: 'noTuck', label: 'NO TUCK', desc: 'Tuck disabled' },
+            { id: 'doublePoints', label: '2X POINTS', desc: 'Double trick points' }
+        ];
+        const mod = modifiers[this.seed % modifiers.length];
+        this.modifier = mod.id;
+        this.modifierLabel = mod.label;
+
+        // Load today's best
+        this.loadBest();
+    },
+
+    loadBest() {
+        try {
+            const saved = localStorage.getItem('shredordead_daily');
+            if (saved) {
+                const data = JSON.parse(saved);
+                const today = new Date().toDateString();
+                if (data.date === today) {
+                    this.bestScore = data.bestScore || 0;
+                    this.completed = data.completed || false;
+                }
+            }
+        } catch (e) {}
+    },
+
+    saveBest(score) {
+        this.bestScore = Math.max(this.bestScore, score);
+        this.completed = true;
+        try {
+            localStorage.setItem('shredordead_daily', JSON.stringify({
+                date: new Date().toDateString(),
+                bestScore: this.bestScore,
+                completed: this.completed
+            }));
+        } catch (e) {}
+        achievementState.increment('daily3');
+    },
+
+    applyModifier() {
+        switch (this.modifier) {
+            case 'doubleSpeed':
+                PHYSICS.maxSpeed *= 2;
+                break;
+            case 'beastAlways':
+                // Beast spawns immediately — handled in chase logic
+                break;
+            case 'tinyLanes':
+                TERRAIN.clearPathWidth = 1;
+                break;
+            case 'megaJumps':
+                TERRAIN.jumpChance = 0.02;
+                TERRAIN.massiveJumpChance = 0.008;
+                break;
+            case 'noTuck':
+                PHYSICS.tuckMultiplier = 1.0;
+                break;
+            case 'doublePoints':
+                // Handled in scoring
+                break;
+        }
+    },
+
+    getPointsMultiplier() {
+        return this.active && this.modifier === 'doublePoints' ? 2 : 1;
+    },
+
+    isNoRails() {
+        return this.active && this.modifier === 'noRails';
+    },
+
+    isBeastAlways() {
+        return this.active && this.modifier === 'beastAlways';
+    }
+};
+
 // Available resolutions with aspect ratio info
 // Portrait resolutions for standard play, landscape for handheld gaming devices
 const RESOLUTIONS = {
@@ -1193,6 +1793,7 @@ const touchInput = {
 function setupInput() {
     document.addEventListener('keydown', (e) => {
         tryAutoFullscreen();
+        sfxManager.resume();
         switch (e.code) {
             case 'ArrowLeft':
             case 'KeyA':
@@ -1415,6 +2016,8 @@ function handleTouchEnd(e) {
                 gameState.screen = 'title';
                 showStartScreen();
                 musicManager.stop();
+            } else if (action === 'share') {
+                shareRun();
             }
             // Don't fire space - buttons handle it
         } else {
@@ -1470,6 +2073,8 @@ function setupCanvasInteraction() {
             gameState.screen = 'title';
             showStartScreen();
             musicManager.stop();
+        } else if (action === 'share') {
+            shareRun();
         }
     });
 
@@ -2977,6 +3582,7 @@ function triggerJump(player, jump) {
     player.airborne = true;
     player.altitude = 1;
     player.verticalVelocity = PHYSICS.jumpLaunchPower * jump.launchPower * (player.speed / 400);
+    sfxManager.jump();
     player.trickRotation = 0;
     player.airTime = 0;
     player.spinDirection = inputDir; // Store spin direction at launch (0 = no spin)
@@ -3065,7 +3671,8 @@ function landFromJump(player) {
     if (trickLanded) {
         const basePoints = Math.floor(trickPoints * bigAirBonus);
         const mapMult = gameState.mapScoreMult || 1;
-        const points = Math.floor(basePoints * gameState.trickMultiplier * mapMult);
+        const dailyMult = dailyChallenge.getPointsMultiplier();
+        const points = Math.floor(basePoints * gameState.trickMultiplier * mapMult * dailyMult);
         gameState.score += points;
 
         // Enhanced celebration for combos
@@ -3121,11 +3728,22 @@ function landFromJump(player) {
     }
 
     player.trickRotation = 0;
+    const landAirTime = player.airTime;
     player.airTime = 0;
     player.autoTrick = null;
     player.autoTrickProgress = 0;
     player.flipRotation = 0;
     player.grabPhase = 0;
+
+    // Landing SFX + juice
+    sfxManager.land(landAirTime > 1.0);
+    if (trickLanded) {
+        sfxManager.trickComplete(gameState.trickMultiplier);
+        // Trick landing juice — screen flash + enhanced shake + brief time-slow
+        triggerScreenShake(6 + gameState.trickMultiplier * 2, 0.88);
+        gameState._trickFlash = 0.12; // White flash duration
+        gameState._timeSlow = trickPoints >= 500 ? 0.15 : 0; // Brief slow-mo for big tricks
+    }
 
     spawnLandingParticles(player.x, player.y);
 }
@@ -3187,6 +3805,7 @@ function startGrindingAtProgress(player, rail, entryProgress) {
 
     // Select random grind trick
     player.grindTrick = selectGrindTrick();
+    sfxManager.grindStart();
 
     // Show grind trick celebration
     gameState.celebrations.push({
@@ -3201,6 +3820,8 @@ function startGrindingAtProgress(player, rail, entryProgress) {
 function endGrind(player) {
     // Guard: only end if actually grinding (prevent double calls)
     if (!player.grinding) return;
+    sfxManager.grindStop();
+    achievementState.increment('grind50');
 
     const rail = player.currentRail;
 
@@ -3294,6 +3915,7 @@ function triggerCrash(player) {
     player.crashTimer = PHYSICS.crashDuration;
     player.speed *= PHYSICS.crashSpeedPenalty;
 
+    sfxManager.crash();
     spawnCrashParticles(player.x, player.y);
     triggerScreenShake(12, 0.85);
 
@@ -3516,6 +4138,7 @@ function checkCollisions() {
 function collectItem(collectible) {
     if (collectible.collected) return;
     collectible.collected = true;
+    sfxManager.coin();
 
     const isBig = collectible.type === 'big';
     const basePoints = isBig ? 100 : 25;
@@ -3707,6 +4330,12 @@ function purchaseItem(item) {
         addCelebration('ALREADY OWNED', COLORS.warning);
         return;
     }
+    // Cap: max 2 items per category to prevent stacking exploits
+    const categoryCount = lodge.purchasedItems.filter(p => p.category === item.category).length;
+    if (categoryCount >= 2) {
+        addCelebration('MAX ' + item.category.toUpperCase() + ' ITEMS', COLORS.warning);
+        return;
+    }
     // Can afford?
     if (gameState.collectiblesCollected < item.cost) {
         addCelebration('NEED ' + item.cost + ' ❄️', COLORS.warning);
@@ -3817,6 +4446,11 @@ function updateChase(dt) {
     // Track elapsed game time
     chase.gameElapsed += dt;
 
+    // Daily challenge: beast always mode — spawn beast immediately at 5s
+    if (dailyChallenge.isBeastAlways() && !chase.beastActive && chase.gameElapsed > 5) {
+        spawnBeast('DAILY BEAST MODE!');
+    }
+
     // Calculate time pressure: how close to max time
     const timeRatio = chase.gameElapsed / chase.maxTime; // 0 to 1+
 
@@ -3875,6 +4509,7 @@ function spawnBeast(customMessage = null) {
     chase.beastLungeTimer = 2;
     chase.beastRage = 0;
 
+    sfxManager.beastGrowl();
     const message = customMessage || 'THE BEAST AWAKENS';
     gameState.celebrations.push({
         text: message,
@@ -4058,8 +4693,9 @@ function updateCombo(dt) {
     if (gameState.trickComboTimer > 0) {
         gameState.trickComboTimer -= dt;
         if (gameState.trickComboTimer <= 0) {
-            // Combo expired - celebrate if it was a good chain
-            if (gameState.comboChainLength >= 3 && gameState.trickMultiplier > 1) {
+            // Combo timer expired - start GRADUAL decay instead of instant reset
+            // Celebrate the chain if it was good
+            if (gameState.comboChainLength >= 3 && gameState.trickMultiplier > 1 && !gameState._comboChainCelebrated) {
                 const chainBonus = Math.floor(gameState.comboChainLength * gameState.trickMultiplier * 50);
                 gameState.score += chainBonus;
                 gameState.celebrations.push({
@@ -4069,9 +4705,19 @@ function updateCombo(dt) {
                     timer: 1.5,
                     scale: 1.2
                 });
+                gameState._comboChainCelebrated = true;
             }
-            gameState.trickMultiplier = 1;
             gameState.comboChainLength = 0;
+            // Gradual decay: lose 0.15x per second instead of instant drop to 1x
+            if (gameState.trickMultiplier > 1) {
+                gameState.trickMultiplier = Math.max(1, gameState.trickMultiplier - dt * 0.15);
+            }
+        }
+    } else if (gameState.trickMultiplier > 1) {
+        // Continue decaying even after timer is fully gone
+        gameState.trickMultiplier = Math.max(1, gameState.trickMultiplier - dt * 0.15);
+        if (gameState.trickMultiplier <= 1) {
+            gameState._comboChainCelebrated = false;
         }
     }
 
@@ -4322,6 +4968,31 @@ function draw() {
     // X Games photo finish overlay
     if (gameState.xgamesFinished) {
         drawXGamesPhotoFinish();
+    }
+
+    // Trick landing flash overlay
+    if (gameState._trickFlash && gameState._trickFlash > 0) {
+        ctx.save();
+        ctx.globalAlpha = gameState._trickFlash * 3; // Quick bright flash
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        ctx.restore();
+    }
+
+    // Achievement notification overlay
+    achievementState.draw(ctx, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    // Daily challenge modifier HUD
+    if (dailyChallenge.active) {
+        ctx.save();
+        ctx.font = FONTS.pressStart8;
+        ctx.textAlign = 'right';
+        ctx.fillStyle = COLORS.gold;
+        ctx.shadowColor = COLORS.gold;
+        ctx.shadowBlur = getShadowBlur(4);
+        ctx.fillText('DAILY: ' + dailyChallenge.modifierLabel, CANVAS_WIDTH - 10, CANVAS_HEIGHT - 10);
+        ctx.shadowBlur = 0;
+        ctx.restore();
     }
 }
 
@@ -7540,16 +8211,35 @@ function drawGameOverScreen() {
         ctx.globalAlpha = 1;
     }
 
+    // Shred coins earned this run
+    const coinsEarned = shredCoinState.earned || 0;
+    if (coinsEarned > 0) {
+        ctx.font = '12px "Press Start 2P", monospace';
+        ctx.fillStyle = COLORS.limeGreen;
+        ctx.shadowColor = COLORS.limeGreen;
+        ctx.shadowBlur = getShadowBlur(4);
+        ctx.fillText(`+${coinsEarned} SHRED COINS`, cx, statsY + statsSpacing * 3);
+        ctx.shadowBlur = 0;
+    }
+
+    // Achievements unlocked count
+    const achCount = achievementState.getCount();
+    const achTotal = achievementState.getTotal();
+    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.fillStyle = 'rgba(255, 215, 0, 0.6)';
+    ctx.fillText(`${achCount}/${achTotal} ACHIEVEMENTS`, cx, statsY + statsSpacing * 3.6);
+
     // Buttons - drawn on canvas for both desktop and mobile
     const btnW = 280;
-    const btnH = 52;
-    const btnY = CANVAS_HEIGHT * 0.75;
-    const btnSpacing = 64;
+    const btnH = 44;
+    const btnY = CANVAS_HEIGHT * 0.70;
+    const btnSpacing = 52;
 
     // Store button rects for click/tap detection
     gameState._gameOverButtons = [
         { x: cx - btnW/2, y: btnY - btnH/2, w: btnW, h: btnH, action: 'restart' },
-        { x: cx - btnW/2, y: btnY + btnSpacing - btnH/2, w: btnW, h: btnH, action: 'menu' }
+        { x: cx - btnW/2, y: btnY + btnSpacing - btnH/2, w: btnW, h: btnH, action: 'menu' },
+        { x: cx - btnW/2, y: btnY + btnSpacing * 2 - btnH/2, w: btnW, h: btnH, action: 'share' }
     ];
 
     // Retry button
@@ -7561,7 +8251,7 @@ function drawGameOverScreen() {
     ctx.roundRect(cx - btnW/2, btnY - btnH/2, btnW, btnH, 6);
     ctx.fill();
     ctx.stroke();
-    ctx.font = 'bold 18px "Press Start 2P", monospace';
+    ctx.font = 'bold 16px "Press Start 2P", monospace';
     ctx.fillStyle = COLORS.cyan;
     ctx.shadowColor = COLORS.cyan;
     ctx.shadowBlur = getShadowBlur(retryHover ? 8 : 3);
@@ -7577,14 +8267,30 @@ function drawGameOverScreen() {
     ctx.roundRect(cx - btnW/2, btnY + btnSpacing - btnH/2, btnW, btnH, 6);
     ctx.fill();
     ctx.stroke();
-    ctx.font = '16px "Press Start 2P", monospace';
+    ctx.font = '14px "Press Start 2P", monospace';
     ctx.fillStyle = '#ccc';
     ctx.fillText('MAIN MENU', cx, btnY + btnSpacing);
+
+    // Share button
+    const shareHover = gameState._gameOverHover === 'share';
+    ctx.fillStyle = shareHover ? 'rgba(255, 0, 255, 0.25)' : 'rgba(255, 0, 255, 0.10)';
+    ctx.strokeStyle = COLORS.magenta;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(cx - btnW/2, btnY + btnSpacing * 2 - btnH/2, btnW, btnH, 6);
+    ctx.fill();
+    ctx.stroke();
+    ctx.font = '14px "Press Start 2P", monospace';
+    ctx.fillStyle = shareHover ? COLORS.magenta : '#cc88cc';
+    ctx.shadowColor = COLORS.magenta;
+    ctx.shadowBlur = getShadowBlur(shareHover ? 6 : 2);
+    ctx.fillText(gameState._shareConfirm ? 'COPIED!' : 'SHARE YOUR RUN', cx, btnY + btnSpacing * 2);
+    ctx.shadowBlur = 0;
 
     // Keyboard hint (smaller, subtle)
     ctx.font = '10px "Press Start 2P", monospace';
     ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-    ctx.fillText('SPACE/A to retry \u00B7 ESC/B for menu \u00B7 D-pad to navigate', cx, CANVAS_HEIGHT * 0.95);
+    ctx.fillText('SPACE/A to retry \u00B7 ESC/B for menu', cx, CANVAS_HEIGHT * 0.95);
 }
 
 // ===================
@@ -7821,6 +8527,24 @@ function triggerGameOver(cause) {
 
     // Save max combo
     saveBestCombo(gameState.maxCombo);
+
+    // Award shred coins for this run
+    shredCoinState.addFromRun(gameState.score, gameState.distance);
+
+    // Track play count for achievements
+    achievementState.increment('play10');
+
+    // Final achievement check
+    achievementState.checkAll(gameState);
+
+    // Update map lock UI (player may have unlocked new maps)
+    updateMapLockUI();
+
+    // Save daily challenge if active
+    if (dailyChallenge.active) {
+        dailyChallenge.saveBest(gameState.score);
+        dailyChallenge.active = false;
+    }
 
     // Continue music for 30s after death, then fade out
     musicManager.startPostDeathTimer();
@@ -9328,6 +10052,15 @@ function update(dt) {
     updateCelebrations(dt);
     updateCombo(dt);
     updateScreenShake(dt);
+    updateNoCrashDistance(dt);
+
+    // Terrain chunk garbage collection — remove chunks >2 screens behind camera
+    if (gameState.terrain.chunks.length > 15) {
+        const cameraBottom = gameState.camera.y + CANVAS_HEIGHT * 2;
+        while (gameState.terrain.chunks.length > 10 && gameState.terrain.chunks[0].y + TERRAIN.chunkHeight < gameState.camera.y - CANVAS_HEIGHT) {
+            gameState.terrain.chunks.shift();
+        }
+    }
 
     // Map ambient particles (blizzard heavy snow, night stars)
     if (gameState.currentMap) spawnMapAmbientParticles();
@@ -9464,8 +10197,25 @@ function stepGameFrame(dt, pollInputs) {
     if (pollInputs) {
         pollGamepad(dt);
     }
+    // Trick flash timer
+    if (gameState._trickFlash && gameState._trickFlash > 0) {
+        gameState._trickFlash -= dt;
+    }
+    // Time-slow effect (brief slow-mo on big trick landings)
+    let effectiveDt = dt;
+    if (gameState._timeSlow && gameState._timeSlow > 0) {
+        effectiveDt = dt * 0.3; // 30% speed during slow-mo
+        gameState._timeSlow -= dt; // Decrement with real dt
+    }
     if (!gameState.paused) {
-        update(dt);
+        update(effectiveDt);
+        // Achievement check every ~0.5s (not every frame)
+        gameState._achieveTimer = (gameState._achieveTimer || 0) + effectiveDt;
+        if (gameState._achieveTimer > 0.5) {
+            gameState._achieveTimer = 0;
+            achievementState.checkAll(gameState);
+        }
+        achievementState.update(effectiveDt);
     }
     draw();
     if (gameState.paused && gameState.screen === 'playing') {
@@ -9494,7 +10244,15 @@ function selectMode(mode) {
 }
 
 function selectMap(mapId) {
+    // Check if map is unlocked
+    if (!isMapUnlocked(mapId)) {
+        const req = MAP_UNLOCKS[mapId];
+        sfxManager.menuSelect();
+        // Could show a toast or just ignore
+        return;
+    }
     selectedMap = mapId;
+    sfxManager.menuSelect();
     // Update button states
     const mapBtns = document.querySelectorAll('.map-btn');
     mapBtns.forEach(btn => {
@@ -9502,7 +10260,37 @@ function selectMap(mapId) {
     });
 }
 
+function updateMapLockUI() {
+    const mapBtns = document.querySelectorAll('.map-btn');
+    mapBtns.forEach(btn => {
+        const mapId = btn.dataset.map;
+        if (!mapId) return;
+        const unlocked = isMapUnlocked(mapId);
+        if (!unlocked) {
+            const req = MAP_UNLOCKS[mapId];
+            const progress = getMapUnlockProgress(mapId);
+            btn.style.opacity = '0.4';
+            btn.style.position = 'relative';
+            const pct = Math.floor(progress * 100);
+            btn.title = `Reach ${req.distance}m to unlock (${pct}%)`;
+            // Add lock icon if not already present
+            if (!btn.querySelector('.lock-icon')) {
+                const lock = document.createElement('span');
+                lock.className = 'lock-icon';
+                lock.textContent = ' 🔒';
+                lock.style.fontSize = '10px';
+                btn.appendChild(lock);
+            }
+        } else {
+            btn.style.opacity = '1';
+            const lock = btn.querySelector('.lock-icon');
+            if (lock) lock.remove();
+        }
+    });
+}
+
 function startSelectedMode() {
+    sfxManager.resume();
     if (selectedMode === 'slalom') {
         startSlalom();
     } else if (selectedMode === 'olympics') {
@@ -9510,6 +10298,35 @@ function startSelectedMode() {
     } else {
         startGame();
     }
+}
+
+function startDailyChallenge() {
+    sfxManager.resume();
+    dailyChallenge.active = true;
+    selectedMap = 'classic'; // Daily always uses classic
+    startGame();
+    // Apply daily seed for deterministic terrain
+    gameState.terrain.seed = dailyChallenge.seed;
+    // Apply daily modifier
+    dailyChallenge.applyModifier();
+    // Show modifier announcement
+    gameState.celebrations.push({
+        text: 'DAILY: ' + dailyChallenge.modifierLabel,
+        subtext: dailyChallenge.modifier === 'doublePoints' ? '2X TRICK POINTS' : '',
+        color: COLORS.gold,
+        timer: 3.0,
+        scale: 1.3
+    });
+}
+
+// Update meta stats display on start screen
+function updateMetaStatsUI() {
+    const el = document.getElementById('metaStats');
+    if (!el) return;
+    const coins = shredCoinState.total;
+    const achCount = achievementState.getCount();
+    const achTotal = achievementState.getTotal();
+    el.textContent = coins + ' SHRED COINS | ' + achCount + '/' + achTotal + ' ACHIEVEMENTS';
 }
 
 // ============================================================================
@@ -11076,6 +11893,37 @@ function olympicsBackToMenu() {
     selectMode('olympics');
 }
 
+// ============================================
+// SHARE YOUR RUN
+// ============================================
+function shareRun() {
+    const deathMsg = gameState.deathCause === 'beast' ? 'the yeti got me' :
+                     gameState.deathCause === 'fog' ? 'the avalanche buried me' : 'I wiped out';
+    const text = `I survived ${gameState.distance}m and scored ${gameState.score} in Shred or Dead before ${deathMsg}. Can you beat it?\n\nhttps://kingmadellc.github.io/ShredOrDead/`;
+
+    if (navigator.share) {
+        navigator.share({ title: 'Shred or Dead', text: text }).catch(() => {});
+    } else if (navigator.clipboard) {
+        navigator.clipboard.writeText(text).then(() => {
+            gameState._shareConfirm = true;
+            setTimeout(() => { gameState._shareConfirm = false; }, 2000);
+        }).catch(() => {});
+    }
+    sfxManager.menuSelect();
+}
+
+// ============================================
+// NO-CRASH DISTANCE TRACKING (for achievement)
+// ============================================
+function updateNoCrashDistance(dt) {
+    if (!gameState.player) return;
+    if (gameState.player.crashed) {
+        gameState._noCrashDistance = 0;
+    } else {
+        gameState._noCrashDistance = (gameState._noCrashDistance || 0) + gameState.player.speed * dt / 60;
+    }
+}
+
 function init() {
     canvas = document.getElementById('gameCanvas');
     // PERFORMANCE: Canvas optimization hints
@@ -11108,6 +11956,11 @@ function init() {
     loadHighScore();
     loadStance();
     musicManager.init();
+    sfxManager.init();
+    achievementState.load();
+    shredCoinState.load();
+    dailyChallenge.generateForToday();
+    updateMapLockUI();
     updateSettingsUI();
 
     // Load sprites asynchronously (game works without them)

@@ -1771,10 +1771,18 @@
                         PLAY
                     </button>
 
+                    <!-- Daily Challenge button -->
+                    <button class="menu-btn btn-daily" id="dailyBtn" onclick="startDailyChallenge()" style="font-size: 11px; padding: 8px 16px; background: rgba(255, 215, 0, 0.12); border: 2px solid #ffd700; color: #ffd700; text-shadow: 0 0 8px rgba(255, 215, 0, 0.5); margin-top: 6px; cursor: pointer; font-family: var(--font-pixel); letter-spacing: 1px;">
+                        DAILY CHALLENGE
+                    </button>
+
                     <!-- High score directly under CTA for motivation -->
                     <div class="high-score-display" id="menuHighScore" style="display: none;">
                         YOUR BEST: <span id="menuHighScoreValue">0</span>
                     </div>
+
+                    <!-- Shred coins + achievements display -->
+                    <div id="metaStats" style="font-size: 9px; color: rgba(255,255,255,0.5); margin-top: 4px; font-family: var(--font-pixel); letter-spacing: 1px;"></div>
 
                     <!-- Secondary actions — smaller, less prominent -->
                     <div class="button-row">
@@ -2544,6 +2552,8 @@
             document.getElementById('startScreen').style.display = 'block';
             document.body.classList.add('menu-active');
             updateMenuHighScore();
+            if (typeof updateMetaStatsUI === 'function') updateMetaStatsUI();
+            if (typeof updateMapLockUI === 'function') updateMapLockUI();
         }
 
         function hideStartScreen() {
