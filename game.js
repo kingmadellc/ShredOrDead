@@ -967,6 +967,408 @@ const dailyChallenge = {
     }
 };
 
+// ============================================
+// GLOBAL LEADERBOARD (Firebase Firestore)
+// ============================================
+const leaderboard = {
+    db: null,
+    initialized: false,
+    allTime: [],
+    daily: [],
+    playerName: '',
+    _fetching: false,
+
+    init() {
+        try {
+            if (typeof firebase === 'undefined') return;
+            const app = firebase.initializeApp({
+                apiKey: "AIzaSyDshredordead-placeholder",
+                authDomain: "shredordead.firebaseapp.com",
+                projectId: "shredordead",
+                storageBucket: "shredordead.appspot.com",
+                messagingSenderId: "000000000000",
+                appId: "1:000000000000:web:placeholder"
+            });
+            this.db = firebase.firestore();
+            this.initialized = true;
+            // Load player name
+            try {
+                this.playerName = localStorage.getItem('shredordead_playername') || '';
+            } catch (e) {}
+        } catch (e) {
+            console.warn('Leaderboard init failed:', e);
+            // Game works fine without leaderboard
+        }
+    },
+
+    setName(name) {
+        this.playerName = name.substring(0, 12).toUpperCase().replace(/[^A-Z0-9 ]/g, '');
+        try { localStorage.setItem('shredordead_playername', this.playerName); } catch (e) {}
+    },
+
+    async submitScore(score, distance, maxCombo, mapName, isDaily) {
+        if (!this.initialized || !this.db || !this.playerName) return;
+        try {
+            const collection = isDaily ? 'daily_' + new Date().toISOString().split('T')[0] : 'alltime';
+            await this.db.collection(collection).add({
+                name: this.playerName,
+                score: score,
+                distance: distance,
+                combo: maxCombo,
+                map: mapName || 'Classic',
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        } catch (e) {
+            console.warn('Score submit failed:', e);
+        }
+    },
+
+    async fetchTopScores(isDaily, limit = 10) {
+        if (!this.initialized || !this.db || this._fetching) return [];
+        this._fetching = true;
+        try {
+            const collection = isDaily ? 'daily_' + new Date().toISOString().split('T')[0] : 'alltime';
+            const snapshot = await this.db.collection(collection)
+                .orderBy('score', 'desc')
+                .limit(limit)
+                .get();
+            const scores = [];
+            snapshot.forEach(doc => {
+                const d = doc.data();
+                scores.push({ name: d.name, score: d.score, distance: d.distance, combo: d.combo });
+            });
+            if (isDaily) this.daily = scores;
+            else this.allTime = scores;
+            this._fetching = false;
+            return scores;
+        } catch (e) {
+            this._fetching = false;
+            return [];
+        }
+    },
+
+    hasName() {
+        return this.playerName.length > 0;
+    },
+
+    // Draw leaderboard on canvas (used in high scores submenu or game over)
+    drawScoreboard(ctx, x, y, width, scores, title, highlight) {
+        const rowH = 22;
+        ctx.save();
+        // Title
+        ctx.font = 'bold 10px "Press Start 2P", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = COLORS.gold;
+        ctx.shadowColor = COLORS.gold;
+        ctx.shadowBlur = getShadowBlur(4);
+        ctx.fillText(title, x + width / 2, y);
+        ctx.shadowBlur = 0;
+
+        if (!scores || scores.length === 0) {
+            ctx.font = '8px "Press Start 2P", monospace';
+            ctx.fillStyle = '#888';
+            ctx.fillText('NO SCORES YET', x + width / 2, y + 30);
+            ctx.restore();
+            return;
+        }
+
+        for (let i = 0; i < scores.length && i < 10; i++) {
+            const s = scores[i];
+            const ry = y + 18 + i * rowH;
+            const isMe = highlight && s.name === this.playerName;
+            ctx.font = '8px "Press Start 2P", monospace';
+            // Rank
+            ctx.textAlign = 'left';
+            ctx.fillStyle = isMe ? COLORS.cyan : (i < 3 ? COLORS.gold : '#aaa');
+            ctx.fillText(`${i + 1}.`, x + 4, ry);
+            // Name
+            ctx.fillText(s.name || '???', x + 30, ry);
+            // Score
+            ctx.textAlign = 'right';
+            ctx.fillStyle = isMe ? COLORS.cyan : '#fff';
+            ctx.fillText(s.score.toLocaleString(), x + width - 4, ry);
+        }
+        ctx.restore();
+    }
+};
+
+// ============================================
+// INTERACTIVE TUTORIAL SYSTEM
+// ============================================
+const tutorial = {
+    active: false,
+    step: 0,
+    timer: 0,
+    completed: false,
+    stepSuccess: false,
+    _inputTimer: 0,
+
+    steps: [
+        { prompt: 'PRESS LEFT / RIGHT TO CARVE', check: () => input.left || input.right, successText: 'NICE CARVING!', duration: 3 },
+        { prompt: 'HOLD UP TO TUCK FOR SPEED', check: () => input.up, successText: 'FEEL THE SPEED!', duration: 2.5 },
+        { prompt: 'HOLD DOWN TO BRAKE', check: () => input.down, successText: 'GOOD CONTROL!', duration: 2 },
+        { prompt: 'PRESS SPACE TO JUMP ON RAMPS', check: () => input.space, successText: 'SICK AIR!', duration: 2 },
+        { prompt: 'CHAIN TRICKS FOR COMBO MULTIPLIERS', check: null, successText: null, duration: 3 },
+        { prompt: 'DODGE TREES AND ROCKS!', check: null, successText: null, duration: 2.5 },
+        { prompt: 'VISIT LODGES FOR POWER-UPS', check: null, successText: null, duration: 2.5 },
+        { prompt: 'OUTRUN THE AVALANCHE — GO!', check: null, successText: null, duration: 3 }
+    ],
+
+    start() {
+        this.active = true;
+        this.step = 0;
+        this.timer = 0;
+        this.completed = false;
+        this.stepSuccess = false;
+        this._inputTimer = 0;
+    },
+
+    update(dt) {
+        if (!this.active) return;
+        this.timer += dt;
+        const currentStep = this.steps[this.step];
+
+        // Check for input success
+        if (currentStep.check && !this.stepSuccess) {
+            if (currentStep.check()) {
+                this.stepSuccess = true;
+                this._inputTimer = 0;
+                sfxManager.menuSelect();
+            }
+        }
+
+        // Auto-advance after duration (or after success + brief pause)
+        const advanceTime = this.stepSuccess ? 1.2 : currentStep.duration;
+        if (this.timer >= advanceTime) {
+            this.step++;
+            this.timer = 0;
+            this.stepSuccess = false;
+            if (this.step >= this.steps.length) {
+                this.completed = true;
+                this.active = false;
+                sfxManager.achievement();
+            }
+        }
+    },
+
+    draw(ctx, w, h) {
+        if (!this.active) return;
+        const currentStep = this.steps[this.step];
+
+        // Darken background
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+        ctx.fillRect(0, 0, w, h);
+
+        // Step counter
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        // Tutorial badge
+        ctx.font = '10px "Press Start 2P", monospace';
+        ctx.fillStyle = COLORS.cyan;
+        ctx.shadowColor = COLORS.cyan;
+        ctx.shadowBlur = getShadowBlur(6);
+        ctx.fillText('TUTORIAL ' + (this.step + 1) + '/' + this.steps.length, w / 2, h * 0.25);
+        ctx.shadowBlur = 0;
+
+        // Main prompt
+        ctx.font = 'bold 14px "Press Start 2P", monospace';
+        const promptPulse = 0.7 + 0.3 * Math.sin(this.timer * 4);
+        ctx.fillStyle = this.stepSuccess ? COLORS.limeGreen : `rgba(255, 255, 255, ${promptPulse})`;
+        const text = this.stepSuccess ? currentStep.successText : currentStep.prompt;
+        ctx.fillText(text, w / 2, h * 0.45);
+
+        // Visual hint — draw a simple icon/animation based on step
+        this._drawStepVisual(ctx, w, h);
+
+        // Progress bar
+        const barW = w * 0.6;
+        const barH = 6;
+        const barX = (w - barW) / 2;
+        const barY = h * 0.75;
+        ctx.fillStyle = 'rgba(255,255,255,0.1)';
+        ctx.fillRect(barX, barY, barW, barH);
+        const progress = (this.step + this.timer / (this.steps[this.step].duration)) / this.steps.length;
+        ctx.fillStyle = COLORS.cyan;
+        ctx.fillRect(barX, barY, barW * progress, barH);
+
+        // Skip hint
+        ctx.font = '8px "Press Start 2P", monospace';
+        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.fillText('ESC TO SKIP', w / 2, h * 0.9);
+
+        ctx.restore();
+    },
+
+    _drawStepVisual(ctx, w, h) {
+        const cx = w / 2;
+        const cy = h * 0.6;
+        const t = this.timer;
+
+        ctx.save();
+        ctx.globalAlpha = 0.6;
+
+        if (this.step === 0) {
+            // Carving arrows
+            const sway = Math.sin(t * 3) * 40;
+            ctx.fillStyle = COLORS.cyan;
+            ctx.beginPath();
+            ctx.moveTo(cx + sway, cy);
+            ctx.lineTo(cx + sway - 10, cy + 15);
+            ctx.lineTo(cx + sway + 10, cy + 15);
+            ctx.fill();
+        } else if (this.step === 1) {
+            // Speed lines
+            for (let i = 0; i < 5; i++) {
+                const ly = cy - 20 + i * 10;
+                const lx = cx - 30 + ((t * 200 + i * 40) % 60);
+                ctx.strokeStyle = COLORS.cyan;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(lx, ly);
+                ctx.lineTo(lx + 20, ly);
+                ctx.stroke();
+            }
+        } else if (this.step === 3) {
+            // Jump arc
+            const jumpY = cy - Math.abs(Math.sin(t * 2)) * 30;
+            ctx.fillStyle = COLORS.magenta;
+            ctx.beginPath();
+            ctx.arc(cx, jumpY, 8, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.restore();
+    }
+};
+
+// Global function to start tutorial from HTML button
+function startInteractiveTutorial() {
+    // Hide the HTML menus
+    document.getElementById('howToPlayMenu').classList.remove('active');
+    hideStartScreen();
+
+    // Show canvas
+    if (canvas) {
+        canvas.style.display = 'block';
+        canvas.style.opacity = '1';
+    }
+    fitCanvasToViewport();
+
+    gameState.screen = 'tutorial';
+    tutorial.start();
+}
+
+// ============================================
+// GHOST REPLAY SYSTEM
+// ============================================
+const ghostSystem = {
+    recording: false,
+    playing: false,
+    frames: [],         // Current run recording: [{x, y, angle, speed, airborne, frame}]
+    bestGhost: null,    // Best run ghost data
+    recordInterval: 3,  // Record every 3 frames (saves memory)
+    _frameCount: 0,
+    _playbackIndex: 0,
+    maxFrames: 5400,    // 90 seconds at 60fps / 3 = ~1800 frames
+
+    startRecording() {
+        this.recording = true;
+        this.frames = [];
+        this._frameCount = 0;
+    },
+
+    recordFrame(player) {
+        if (!this.recording) return;
+        this._frameCount++;
+        if (this._frameCount % this.recordInterval !== 0) return;
+        if (this.frames.length >= this.maxFrames) return;
+        this.frames.push({
+            x: Math.round(player.x),
+            y: Math.round(player.y),
+            a: Math.round(player.angle * 10) / 10,
+            s: Math.round(player.speed),
+            air: player.airborne ? 1 : 0
+        });
+    },
+
+    stopRecording(score) {
+        this.recording = false;
+        // Save as best ghost if it's a new high score
+        if (!this.bestGhost || score > (this.bestGhost.score || 0)) {
+            this.bestGhost = {
+                score: score,
+                frames: this.frames.slice() // Copy
+            };
+            this._saveGhost();
+        }
+    },
+
+    startPlayback() {
+        if (!this.bestGhost || !this.bestGhost.frames.length) return;
+        this.playing = true;
+        this._playbackIndex = 0;
+    },
+
+    getGhostPosition() {
+        if (!this.playing || !this.bestGhost) return null;
+        const idx = Math.floor(this._playbackIndex / this.recordInterval);
+        if (idx >= this.bestGhost.frames.length) {
+            this.playing = false;
+            return null;
+        }
+        this._playbackIndex++;
+        return this.bestGhost.frames[idx];
+    },
+
+    _saveGhost() {
+        try {
+            // Compress: delta-encode positions
+            const compressed = JSON.stringify(this.bestGhost);
+            if (compressed.length < 500000) { // 500KB limit
+                localStorage.setItem('shredordead_ghost', compressed);
+            }
+        } catch (e) {}
+    },
+
+    loadGhost() {
+        try {
+            const saved = localStorage.getItem('shredordead_ghost');
+            if (saved) {
+                this.bestGhost = JSON.parse(saved);
+            }
+        } catch (e) {}
+    },
+
+    drawGhost(ctx, cameraY) {
+        if (!this.playing) return;
+        const ghost = this.getGhostPosition();
+        if (!ghost) return;
+
+        // World to screen
+        const screenX = CANVAS_WIDTH / 2 + ghost.x;
+        const screenY = ghost.y - cameraY;
+
+        // Only draw if on screen
+        if (screenY < -50 || screenY > CANVAS_HEIGHT + 50) return;
+
+        ctx.save();
+        ctx.globalAlpha = 0.3;
+        ctx.translate(screenX, screenY);
+        ctx.rotate(ghost.a * Math.PI / 180);
+
+        // Ghost rider — translucent cyan silhouette
+        ctx.fillStyle = COLORS.cyan;
+        ctx.fillRect(-12, -5, 24, 10);  // Board
+        ctx.fillRect(-6, -18, 12, 15);  // Body
+        ctx.beginPath();
+        ctx.arc(0, -24, 6, 0, Math.PI * 2);
+        ctx.fill(); // Head
+
+        ctx.restore();
+    }
+};
+
 // Available resolutions with aspect ratio info
 // Portrait resolutions for standard play, landscape for handheld gaming devices
 const RESOLUTIONS = {
@@ -1674,6 +2076,8 @@ let gameState = {
         shopCursor: 0,          // Currently highlighted item
         shopMode: false,        // Whether player is browsing shop
         purchasedItems: [],     // Items bought this run (active effects)
+        cosmeticShopMode: false, // Whether browsing permanent cosmetic shop
+        cosmeticShopCursor: 0,   // Highlighted cosmetic item
         lastUp: false,          // Rising edge tracking for shop navigation
         lastDown: false,
         lastSpace: false
@@ -1815,7 +2219,10 @@ function setupInput() {
                 input.space = true;
                 break;
             case 'Escape':
-                if (gameState.screen === 'playing' || gameState.screen === 'lodge') {
+                if (gameState.screen === 'tutorial') {
+                    tutorial.active = false;
+                    tutorial.completed = true;
+                } else if (gameState.screen === 'playing' || gameState.screen === 'lodge') {
                     togglePause();
                 } else if (gameState.screen === 'gameOver') {
                     gameState.screen = 'title';
@@ -2018,6 +2425,8 @@ function handleTouchEnd(e) {
                 musicManager.stop();
             } else if (action === 'share') {
                 shareRun();
+            } else if (action === 'setname') {
+                promptNameEntry();
             }
             // Don't fire space - buttons handle it
         } else {
@@ -2075,6 +2484,8 @@ function setupCanvasInteraction() {
             musicManager.stop();
         } else if (action === 'share') {
             shareRun();
+        } else if (action === 'setname') {
+            promptNameEntry();
         }
     });
 
@@ -4280,6 +4691,8 @@ function exitLodge() {
     // Reset lodge state
     gameState.lodge.active = false;
     gameState.lodge.currentLodge = null;
+    gameState.lodge.shopMode = false;
+    gameState.lodge.cosmeticShopMode = false;
 
     // Return to playing state
     gameState.screen = 'playing';
@@ -4840,6 +5253,12 @@ function draw() {
         return;
     }
 
+    // Interactive tutorial screen
+    if (gameState.screen === 'tutorial') {
+        tutorial.draw(ctx, CANVAS_WIDTH, CANVAS_HEIGHT);
+        return;
+    }
+
     // Slalom mode rendering
     if (gameState.mode === 'slalom' && (gameState.screen === 'playing' || gameState.screen === 'slalomResults')) {
         drawSlalom();
@@ -4918,6 +5337,11 @@ function draw() {
     // Draw beast
     if (gameState.chase.beastActive) {
         drawBeast();
+    }
+
+    // Draw ghost replay (behind player, in front of obstacles)
+    if (ghostSystem.bestGhost && ghostSystem.bestGhost.length > 0) {
+        ghostSystem.drawGhost(ctx, gameState.camera.y);
     }
 
     // Draw player
@@ -6367,6 +6791,108 @@ function drawShopUI(offsetX, offsetY, w, h) {
     ctx.fillText('↑↓ BROWSE  SPACE BUY  ← CLOSE', offsetX + w / 2, offsetY + h - 40);
 }
 
+function drawCosmeticShopUI(offsetX, offsetY, w, h) {
+    const lodge = gameState.lodge;
+    const items = PERMANENT_COSMETICS;
+
+    // Semi-transparent overlay
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.80)';
+    ctx.fillRect(offsetX + 20, offsetY + 30, w - 40, h - 60);
+
+    // Title
+    ctx.fillStyle = COLORS.magenta;
+    ctx.font = FONTS.pressStart12;
+    ctx.textAlign = 'center';
+    ctx.shadowColor = COLORS.magenta;
+    ctx.shadowBlur = getShadowBlur(4);
+    ctx.fillText('COSMETIC SHOP', offsetX + w / 2, offsetY + 52);
+    ctx.shadowBlur = 0;
+
+    // Shred coin balance
+    ctx.fillStyle = COLORS.limeGreen;
+    ctx.font = FONTS.pressStart8;
+    ctx.fillText('COINS: ' + shredCoinState.total, offsetX + w / 2, offsetY + 68);
+
+    // Scrollable item list
+    const listX = offsetX + 40;
+    const listY = offsetY + 85;
+    const itemH = 34;
+    const maxVisible = Math.floor((h - 145) / itemH);
+    const scrollOffset = Math.max(0, lodge.cosmeticShopCursor - maxVisible + 1);
+
+    for (let i = scrollOffset; i < items.length && (i - scrollOffset) < maxVisible; i++) {
+        const item = items[i];
+        const y = listY + (i - scrollOffset) * itemH;
+        const isSelected = i === lodge.cosmeticShopCursor;
+        const isOwned = shredCoinState.ownedCosmetics.includes(item.id);
+        const canAfford = shredCoinState.total >= item.cost;
+
+        // Card background
+        if (isSelected) {
+            ctx.fillStyle = 'rgba(255, 0, 255, 0.15)';
+            ctx.strokeStyle = COLORS.magenta;
+            ctx.lineWidth = 2;
+            ctx.fillRect(listX, y, w - 80, itemH - 4);
+            ctx.strokeRect(listX, y, w - 80, itemH - 4);
+        } else {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
+            ctx.fillRect(listX, y, w - 80, itemH - 4);
+        }
+
+        // Color preview swatch
+        if (item.color && item.color !== 'rainbow' && item.color !== 'hologram') {
+            ctx.fillStyle = item.color;
+            ctx.fillRect(listX + 4, y + 4, 12, 12);
+        }
+
+        // Name
+        ctx.textAlign = 'left';
+        ctx.font = FONTS.pressStart8;
+        ctx.fillStyle = isOwned ? '#666' : '#fff';
+        ctx.fillText(item.name, listX + 22, y + 12);
+
+        // Description
+        ctx.font = '6px "Press Start 2P", monospace';
+        ctx.fillStyle = isOwned ? '#555' : '#aaa';
+        ctx.fillText(item.desc, listX + 22, y + 22);
+
+        // Cost (right side)
+        ctx.textAlign = 'right';
+        ctx.font = FONTS.pressStart8;
+        if (isOwned) {
+            ctx.fillStyle = COLORS.limeGreen;
+            ctx.fillText('EQUIPPED', listX + w - 88, y + 16);
+        } else {
+            ctx.fillStyle = canAfford ? COLORS.gold : COLORS.warning;
+            ctx.fillText(item.cost + ' C', listX + w - 88, y + 16);
+        }
+    }
+
+    // Scroll indicator
+    if (items.length > maxVisible) {
+        ctx.fillStyle = '#666';
+        ctx.font = '6px "Press Start 2P", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText((lodge.cosmeticShopCursor + 1) + '/' + items.length, offsetX + w / 2, offsetY + h - 50);
+    }
+
+    // Instructions
+    ctx.fillStyle = '#888';
+    ctx.font = '6px "Press Start 2P", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('↑↓ BROWSE  SPACE BUY  ← CLOSE', offsetX + w / 2, offsetY + h - 40);
+}
+
+function purchaseCosmeticItem(item) {
+    if (!item) return;
+    if (shredCoinState.ownedCosmetics.includes(item.id)) return; // Already owned
+    if (shredCoinState.total < item.cost) return; // Can't afford
+    if (shredCoinState.spend(item.cost)) {
+        shredCoinState.own(item.id);
+        sfxManager.achievement();
+    }
+}
+
 function drawLodgeInterior() {
     const lodge = gameState.lodge;
     const time = gameState.animationTime;
@@ -6487,8 +7013,10 @@ function drawLodgeInterior() {
     // If in shop mode, draw the shop overlay
     if (lodge.shopMode) {
         drawShopUI(offsetX, offsetY, w, h);
+    } else if (lodge.cosmeticShopMode) {
+        drawCosmeticShopUI(offsetX, offsetY, w, h);
     } else {
-        // Prompt to approach counter
+        // Prompt to approach counter (right side — consumable shop)
         const nearCounter = lodge.playerX > w - 130 && lodge.playerY > 70 && lodge.playerY < 200;
         if (nearCounter) {
             ctx.fillStyle = COLORS.cyan;
@@ -6499,7 +7027,28 @@ function drawLodgeInterior() {
             ctx.fillText('PRESS SPACE TO SHOP', counterX + 35, counterY + 45);
             ctx.globalAlpha = 1;
         }
+
+        // Prompt near fireplace (left side — cosmetic shop)
+        const nearFireplace = lodge.playerX < 130 && lodge.playerY > 50 && lodge.playerY < 160;
+        if (nearFireplace) {
+            ctx.fillStyle = COLORS.magenta;
+            ctx.font = FONTS.pressStart8;
+            ctx.textAlign = 'center';
+            const pulse = 0.6 + 0.4 * Math.sin(time * 4);
+            ctx.globalAlpha = pulse;
+            ctx.fillText('SPACE: COSMETICS', fpX + 30, fpY + 85);
+            ctx.globalAlpha = 1;
+        }
     }
+
+    // Cosmetic shop sign near fireplace
+    ctx.fillStyle = COLORS.magenta;
+    ctx.font = '7px "Press Start 2P", monospace';
+    ctx.textAlign = 'center';
+    ctx.shadowColor = COLORS.magenta;
+    ctx.shadowBlur = getShadowBlur(2);
+    ctx.fillText('COSMETICS', fpX + 30, fpY + 75);
+    ctx.shadowBlur = 0;
 
     // ===== EXIT DOOR (bottom) =====
     const exitX = offsetX + w / 2;
@@ -8287,10 +8836,48 @@ function drawGameOverScreen() {
     ctx.fillText(gameState._shareConfirm ? 'COPIED!' : 'SHARE YOUR RUN', cx, btnY + btnSpacing * 2);
     ctx.shadowBlur = 0;
 
+    // Leaderboard name entry prompt (shows if no name set and good score)
+    if (!leaderboard.hasName() && !gameState._nameEntryActive && gameState.score > 0) {
+        ctx.font = '8px "Press Start 2P", monospace';
+        ctx.fillStyle = COLORS.gold;
+        const namePulse = 0.6 + 0.4 * Math.sin(gameState.animationTime * 3);
+        ctx.globalAlpha = namePulse;
+        ctx.fillText('TAP HERE TO SET YOUR NAME FOR LEADERBOARDS', cx, CANVAS_HEIGHT * 0.88);
+        ctx.globalAlpha = 1;
+        // Add a clickable region
+        if (!gameState._gameOverButtons.find(b => b.action === 'setname')) {
+            gameState._gameOverButtons.push({
+                x: cx - 200, y: CANVAS_HEIGHT * 0.88 - 12, w: 400, h: 24, action: 'setname'
+            });
+        }
+    } else if (leaderboard.hasName()) {
+        ctx.font = '8px "Press Start 2P", monospace';
+        ctx.fillStyle = 'rgba(0, 255, 255, 0.5)';
+        ctx.fillText('PLAYING AS: ' + leaderboard.playerName, cx, CANVAS_HEIGHT * 0.88);
+    }
+
     // Keyboard hint (smaller, subtle)
     ctx.font = '10px "Press Start 2P", monospace';
     ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
     ctx.fillText('SPACE/A to retry \u00B7 ESC/B for menu', cx, CANVAS_HEIGHT * 0.95);
+}
+
+// Name entry overlay for leaderboard
+function promptNameEntry() {
+    const name = prompt('ENTER YOUR NAME FOR LEADERBOARDS (max 12 chars):');
+    if (name && name.trim()) {
+        leaderboard.setName(name.trim());
+        // Retroactively submit this score
+        if (leaderboard.initialized) {
+            leaderboard.submitScore(
+                gameState.score,
+                gameState.distance,
+                gameState.maxCombo,
+                gameState.selectedMap || 'classic',
+                false
+            );
+        }
+    }
 }
 
 // ===================
@@ -8483,6 +9070,12 @@ function startGame() {
         playerX: 0, playerY: 0, beastX: 0, beastY: 0,
         chompCount: 0, completed: false
     };
+    gameState._noCrashDistance = 0;
+    gameState._comboChainCelebrated = false;
+
+    // Start ghost recording + playback
+    ghostSystem.startRecording();
+    ghostSystem.startPlayback();
 }
 
 function triggerGameOver(cause) {
@@ -8540,11 +9133,28 @@ function triggerGameOver(cause) {
     // Update map lock UI (player may have unlocked new maps)
     updateMapLockUI();
 
+    // Stop ghost recording and save if personal best
+    ghostSystem.stopRecording(gameState.score);
+
+    // Submit to global leaderboard
+    if (leaderboard.initialized && leaderboard.playerName) {
+        leaderboard.submitScore(
+            gameState.score,
+            gameState.distance,
+            gameState.maxCombo,
+            gameState.selectedMap || 'classic',
+            dailyChallenge.active
+        );
+    }
+
     // Save daily challenge if active
     if (dailyChallenge.active) {
         dailyChallenge.saveBest(gameState.score);
         dailyChallenge.active = false;
     }
+
+    // Report score to embed parent (if in iframe mode)
+    embedMode.reportScore(gameState.score, gameState.distance, gameState.maxCombo);
 
     // Continue music for 30s after death, then fade out
     musicManager.startPostDeathTimer();
@@ -10054,6 +10664,9 @@ function update(dt) {
     updateScreenShake(dt);
     updateNoCrashDistance(dt);
 
+    // Ghost replay recording
+    ghostSystem.recordFrame(gameState.player);
+
     // Terrain chunk garbage collection — remove chunks >2 screens behind camera
     if (gameState.terrain.chunks.length > 15) {
         const cameraBottom = gameState.camera.y + CANVAS_HEIGHT * 2;
@@ -10110,9 +10723,8 @@ function updateLodge(dt) {
         addCelebration('BEAST APPROACHES!', COLORS.warning);
     }
 
-    // Shop mode input handling
+    // Shop mode input handling (consumable shop)
     if (lodge.shopMode) {
-        // Rising edge for navigation
         const upRising = input.up && !lodge.lastUp;
         const downRising = input.down && !lodge.lastDown;
         const spaceRising = input.space && !lodge.lastSpace;
@@ -10120,19 +10732,27 @@ function updateLodge(dt) {
         lodge.lastDown = input.down;
         lodge.lastSpace = input.space;
 
-        if (upRising) {
-            lodge.shopCursor = Math.max(0, lodge.shopCursor - 1);
-        }
-        if (downRising) {
-            lodge.shopCursor = Math.min(lodge.shopItems.length - 1, lodge.shopCursor + 1);
-        }
-        if (spaceRising) {
-            purchaseItem(lodge.shopItems[lodge.shopCursor]);
-        }
-        if (input.left) {
-            lodge.shopMode = false;
-        }
-        return; // Don't walk while shopping
+        if (upRising) lodge.shopCursor = Math.max(0, lodge.shopCursor - 1);
+        if (downRising) lodge.shopCursor = Math.min(lodge.shopItems.length - 1, lodge.shopCursor + 1);
+        if (spaceRising) purchaseItem(lodge.shopItems[lodge.shopCursor]);
+        if (input.left) lodge.shopMode = false;
+        return;
+    }
+
+    // Cosmetic shop mode input handling (permanent shop)
+    if (lodge.cosmeticShopMode) {
+        const upRising = input.up && !lodge.lastUp;
+        const downRising = input.down && !lodge.lastDown;
+        const spaceRising = input.space && !lodge.lastSpace;
+        lodge.lastUp = input.up;
+        lodge.lastDown = input.down;
+        lodge.lastSpace = input.space;
+
+        if (upRising) lodge.cosmeticShopCursor = Math.max(0, lodge.cosmeticShopCursor - 1);
+        if (downRising) lodge.cosmeticShopCursor = Math.min(PERMANENT_COSMETICS.length - 1, lodge.cosmeticShopCursor + 1);
+        if (spaceRising) purchaseCosmeticItem(PERMANENT_COSMETICS[lodge.cosmeticShopCursor]);
+        if (input.left) lodge.cosmeticShopMode = false;
+        return;
     }
 
     // Rising edge tracking when not in shop
@@ -10140,11 +10760,19 @@ function updateLodge(dt) {
     lodge.lastDown = input.down;
     lodge.lastSpace = input.space;
 
-    // Check if player presses space near counter to open shop
+    // Check if player presses space near counter to open consumable shop
     const nearCounter = lodge.playerX > LODGE.interiorWidth - 130 && lodge.playerY > 70 && lodge.playerY < 200;
     if (nearCounter && input.space && !lodge.lastSpace) {
         lodge.shopMode = true;
         lodge.shopCursor = 0;
+        return;
+    }
+
+    // Check if player presses space near fireplace to open cosmetic shop
+    const nearFireplace = lodge.playerX < 130 && lodge.playerY > 50 && lodge.playerY < 160;
+    if (nearFireplace && input.space && !lodge.lastSpace) {
+        lodge.cosmeticShopMode = true;
+        lodge.cosmeticShopCursor = 0;
         return;
     }
 
@@ -10197,6 +10825,18 @@ function stepGameFrame(dt, pollInputs) {
     if (pollInputs) {
         pollGamepad(dt);
     }
+
+    // Tutorial mode handling
+    if (gameState.screen === 'tutorial') {
+        tutorial.update(dt);
+        if (tutorial.completed) {
+            gameState.screen = 'title';
+            showStartScreen();
+        }
+        draw();
+        return;
+    }
+
     // Trick flash timer
     if (gameState._trickFlash && gameState._trickFlash > 0) {
         gameState._trickFlash -= dt;
@@ -11960,6 +12600,9 @@ function init() {
     achievementState.load();
     shredCoinState.load();
     dailyChallenge.generateForToday();
+    ghostSystem.loadGhost();
+    leaderboard.init();
+    embedMode.init();
     updateMapLockUI();
     updateSettingsUI();
 
@@ -12644,6 +13287,65 @@ window.addEventListener('resize', () => {
     fitCanvasToViewport();
     resizeStartScreenCanvases();
 });
+
+// ============================================
+// EMBEDDABLE IFRAME MODE
+// ============================================
+// Activate with ?embed=1 in URL
+// Features: auto-hides branding, adds postMessage API, cleaner start
+const embedMode = {
+    active: false,
+
+    init() {
+        const params = new URLSearchParams(window.location.search);
+        this.active = params.get('embed') === '1' || params.get('embed') === 'true';
+        if (!this.active) return;
+
+        // Hide unnecessary UI for embed
+        document.documentElement.style.setProperty('--embed-mode', '1');
+
+        // Add embed-specific styles
+        const style = document.createElement('style');
+        style.textContent = `
+            body.embed-mode .github-link,
+            body.embed-mode .footer-credits,
+            body.embed-mode #fullscreenToggle { display: none !important; }
+            body.embed-mode { overflow: hidden; }
+        `;
+        document.head.appendChild(style);
+        document.body.classList.add('embed-mode');
+
+        // Listen for messages from parent frame
+        window.addEventListener('message', (e) => {
+            if (e.data === 'shredordead:start') {
+                startSelectedMode();
+            } else if (e.data === 'shredordead:pause') {
+                togglePause();
+            }
+        });
+    },
+
+    // Send score events to parent window
+    reportScore(score, distance, maxCombo) {
+        if (!this.active) return;
+        try {
+            window.parent.postMessage({
+                type: 'shredordead:gameover',
+                score: score,
+                distance: distance,
+                maxCombo: maxCombo
+            }, '*');
+        } catch (e) {}
+    },
+
+    // Send game start event
+    reportStart() {
+        if (!this.active) return;
+        try {
+            window.parent.postMessage({ type: 'shredordead:start' }, '*');
+        } catch (e) {}
+    }
+};
 
 // Start the game when the page loads
 window.addEventListener('load', init);

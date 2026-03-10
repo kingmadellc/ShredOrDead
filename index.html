@@ -20,6 +20,10 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+
+    <!-- Firebase SDK (modular, tree-shakeable) -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
     <style>
         /* ============================================
            CSS Custom Properties
@@ -1849,6 +1853,9 @@
                         </ul>
                     </div>
                 </div>
+                <div style="text-align: center; margin: 12px 0;">
+                    <button onclick="startInteractiveTutorial()" style="font-family: 'Press Start 2P', monospace; font-size: 10px; background: rgba(0,255,255,0.2); border: 2px solid #00ffff; color: #00ffff; padding: 10px 20px; cursor: pointer; text-shadow: 0 0 8px #00ffff;">TRY INTERACTIVE TUTORIAL</button>
+                </div>
                 <div class="btn-back">
                     <button onclick="hideHowToPlay()">BACK</button>
                 </div>
@@ -1871,6 +1878,17 @@
                             <span class="score-label">MAX COMBO</span>
                             <span class="score-value" id="hsCombo">0x</span>
                         </div>
+                    </div>
+                    <!-- Global Leaderboard Section -->
+                    <div id="globalLeaderboardSection" style="margin-top: 15px; display: none;">
+                        <h3 style="color: #ffd700; font-size: 10px; text-align: center; margin-bottom: 8px;">GLOBAL LEADERBOARD</h3>
+                        <div id="leaderboardList" style="font-family: 'Press Start 2P', monospace; font-size: 8px; text-align: left; padding: 0 10px;"></div>
+                        <div style="text-align: center; margin-top: 8px;">
+                            <button onclick="toggleLeaderboardTab()" id="lbTabBtn" style="font-family: 'Press Start 2P', monospace; font-size: 7px; background: rgba(255,215,0,0.15); border: 1px solid #ffd700; color: #ffd700; padding: 4px 12px; cursor: pointer;">ALL TIME</button>
+                        </div>
+                    </div>
+                    <div style="text-align: center; margin-top: 10px;">
+                        <button onclick="loadGlobalLeaderboard()" id="loadLbBtn" style="font-family: 'Press Start 2P', monospace; font-size: 8px; background: rgba(0,255,255,0.15); border: 1px solid #00ffff; color: #00ffff; padding: 6px 16px; cursor: pointer;">LOAD GLOBAL SCORES</button>
                     </div>
                 </div>
                 <div class="btn-back">
@@ -2605,6 +2623,50 @@
 
             document.getElementById('hsDistance').textContent = savedDistance ? savedDistance + 'm' : '0m';
             document.getElementById('hsCombo').textContent = savedCombo ? savedCombo + 'x' : '0x';
+        }
+
+        // Global leaderboard UI
+        let lbShowDaily = false;
+        function loadGlobalLeaderboard() {
+            if (typeof leaderboard === 'undefined' || !leaderboard.initialized) {
+                document.getElementById('leaderboardList').innerHTML = '<p style="color:#888;text-align:center;font-size:7px;">LEADERBOARD UNAVAILABLE<br>(Firebase not configured)</p>';
+                document.getElementById('globalLeaderboardSection').style.display = 'block';
+                document.getElementById('loadLbBtn').style.display = 'none';
+                return;
+            }
+            document.getElementById('loadLbBtn').textContent = 'LOADING...';
+            leaderboard.fetchTopScores(lbShowDaily, 10).then(scores => {
+                renderLeaderboardList(scores);
+                document.getElementById('globalLeaderboardSection').style.display = 'block';
+                document.getElementById('loadLbBtn').style.display = 'none';
+            });
+        }
+        function toggleLeaderboardTab() {
+            lbShowDaily = !lbShowDaily;
+            document.getElementById('lbTabBtn').textContent = lbShowDaily ? 'DAILY' : 'ALL TIME';
+            if (typeof leaderboard !== 'undefined' && leaderboard.initialized) {
+                leaderboard.fetchTopScores(lbShowDaily, 10).then(scores => {
+                    renderLeaderboardList(scores);
+                });
+            }
+        }
+        function renderLeaderboardList(scores) {
+            const el = document.getElementById('leaderboardList');
+            if (!scores || scores.length === 0) {
+                el.innerHTML = '<p style="color:#888;text-align:center;">NO SCORES YET</p>';
+                return;
+            }
+            let html = '<table style="width:100%;border-collapse:collapse;">';
+            scores.forEach((s, i) => {
+                const color = i < 3 ? '#ffd700' : '#aaa';
+                html += '<tr style="color:' + color + ';border-bottom:1px solid rgba(255,255,255,0.1);">';
+                html += '<td style="padding:3px 0;">' + (i + 1) + '.</td>';
+                html += '<td>' + (s.name || '???') + '</td>';
+                html += '<td style="text-align:right;">' + s.score.toLocaleString() + '</td>';
+                html += '</tr>';
+            });
+            html += '</table>';
+            el.innerHTML = html;
         }
 
         // Initialize menu high score on load
