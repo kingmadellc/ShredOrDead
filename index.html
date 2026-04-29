@@ -67,6 +67,7 @@
             display: flex;
             flex-direction: column;
             align-items: center;
+            isolation: isolate;
         }
 
         /* When menu is active, hide game container styling so start screen can fill viewport */
@@ -92,6 +93,24 @@
             -webkit-touch-callout: none;
             -webkit-user-select: none;
             user-select: none;
+        }
+
+        body:not(.menu-active):not(.fullscreen-mode) #game-container::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border: 4px solid var(--cyan);
+            box-shadow:
+                0 0 20px var(--cyan),
+                0 0 40px var(--magenta),
+                inset 0 0 20px rgba(0, 255, 255, 0.1);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        body:not(.menu-active):not(.fullscreen-mode) #gameCanvas {
+            border: none;
+            box-shadow: none;
         }
 
         /* In fullscreen mode, make the game canvas fill the screen */
@@ -161,15 +180,15 @@
             background: linear-gradient(180deg,
                 rgba(26, 10, 46, 0.6) 0%,
                 rgba(26, 10, 46, 0.15) 20%,
-                rgba(26, 10, 46, 0.1) 40%,
-                rgba(26, 10, 46, 0.4) 60%,
-                rgba(26, 10, 46, 0.92) 80%,
+                rgba(26, 10, 46, 0.22) 38%,
+                rgba(26, 10, 46, 0.58) 56%,
+                rgba(26, 10, 46, 0.86) 76%,
                 rgba(26, 10, 46, 0.98) 100%);
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: flex-end;
-            padding: 4vh 24px 5vh;
+            justify-content: space-between;
+            padding: clamp(18px, 3vh, 42px) 24px clamp(24px, 5vh, 58px);
             gap: 0;
         }
 
@@ -194,7 +213,7 @@
             justify-content: flex-start;
             position: relative;
             overflow: visible;
-            margin-top: -40px;
+            margin-top: clamp(0px, 1.5vh, 18px);
             margin-bottom: 0;
             z-index: 2;
         }
@@ -563,6 +582,10 @@
             display: flex;
             gap: 10px;
             width: 100%;
+            padding: 4px;
+            border-radius: 8px;
+            background: rgba(10, 4, 26, 0.34);
+            backdrop-filter: blur(2px);
         }
 
         .mode-btn {
@@ -641,6 +664,10 @@
             gap: 6px;
             width: 100%;
             justify-content: center;
+            padding: 4px;
+            border-radius: 8px;
+            background: rgba(10, 4, 26, 0.32);
+            backdrop-filter: blur(2px);
             animation: menu-fade-up 0.4s ease-out 0.3s both;
         }
 
@@ -1356,6 +1383,11 @@
             display: flex;
         }
 
+        body.game-over-active #pauseBtn,
+        body.game-over-active #exitFullscreenBtn {
+            display: none !important;
+        }
+
         /* Show exit fullscreen button during gameplay when in fullscreen */
         body.fullscreen-mode:not(.menu-active) #exitFullscreenBtn {
             display: flex;
@@ -1507,8 +1539,13 @@
            Responsive Adjustments
            ============================================ */
         @media (max-width: 768px) {
+            #startScreen .content-overlay {
+                padding: 20px 18px 28px;
+            }
+
             #game-logo-img {
                 max-width: 380px;
+                max-height: 32vh;
             }
 
             .tagline {
@@ -1569,6 +1606,7 @@
         @media (max-width: 520px) {
             #game-logo-img {
                 max-width: 260px;
+                max-height: 26vh;
             }
 
             .tagline {
@@ -1677,6 +1715,55 @@
             }
 
             .mode-btn .mode-name {
+                font-size: 9px;
+            }
+        }
+
+        @media (max-height: 760px) and (min-width: 769px) {
+            #startScreen .content-overlay {
+                padding: 14px 24px 22px;
+            }
+
+            #game-logo-img {
+                max-width: 460px;
+                max-height: 30vh;
+            }
+
+            .menu-section {
+                max-width: 400px;
+                gap: 8px;
+            }
+
+            .mode-btn {
+                padding: 8px 8px 7px;
+                gap: 2px;
+            }
+
+            .mode-btn .mode-icon {
+                font-size: 16px;
+            }
+
+            .mode-btn .mode-name {
+                font-size: 10px;
+            }
+
+            .mode-btn .mode-desc {
+                font-size: 5px;
+            }
+
+            .map-btn {
+                padding: 5px 8px;
+                font-size: 7px;
+            }
+
+            .btn-primary {
+                padding: 14px 34px;
+                font-size: 16px;
+                letter-spacing: 6px;
+            }
+
+            .btn-secondary {
+                padding: 10px 14px;
                 font-size: 9px;
             }
         }
@@ -2569,6 +2656,7 @@
         function showStartScreen() {
             document.getElementById('startScreen').style.display = 'block';
             document.body.classList.add('menu-active');
+            document.body.classList.remove('game-over-active');
             updateMenuHighScore();
             if (typeof updateMetaStatsUI === 'function') updateMetaStatsUI();
             if (typeof updateMapLockUI === 'function') updateMapLockUI();
@@ -2577,6 +2665,7 @@
         function hideStartScreen() {
             document.getElementById('startScreen').style.display = 'none';
             document.body.classList.remove('menu-active');
+            document.body.classList.remove('game-over-active');
         }
 
         function showHowToPlay() {

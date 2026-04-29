@@ -290,12 +290,16 @@ const musicManager = {
     volume: 0.5,
     fadeInterval: null,
     postDeathTimer: null,
+    pendingPlay: false,
+    lastError: null,
+    trackSrc: 'assets/music/shredordead.mp3',
 
     init() {
-        this.audio = new Audio('assets/music/shredordead.mp3');
+        this.audio = new Audio(this.trackSrc);
         this.audio.loop = true;
         this.audio.volume = this.volume;
         this.audio.preload = 'auto';
+        this.audio.load();
 
         try {
             const saved = localStorage.getItem('shredordead_music');
@@ -303,19 +307,46 @@ const musicManager = {
         } catch (e) {}
     },
 
-    play() {
+    play(options = {}) {
         if (!this.audio || !this.enabled) return;
         this.clearTimers();
+        this.pendingPlay = false;
+        this.lastError = null;
+        this.audio.muted = false;
         this.audio.volume = this.volume;
+        if (options.restart) {
+            try { this.audio.currentTime = 0; } catch (e) {}
+        }
         const promise = this.audio.play();
-        if (promise) promise.catch(() => {});
+        if (promise) {
+            promise.then(() => {
+                this.pendingPlay = false;
+                this.lastError = null;
+            }).catch(() => {
+                this.pendingPlay = true;
+                this.lastError = 'play-blocked';
+            });
+        }
+    },
+
+    startRunFromGesture() {
+        this.play({ restart: true });
+    },
+
+    resumeFromGesture() {
+        if (!this.audio || !this.enabled || gameState.screen !== 'playing') return;
+        if (!this.pendingPlay && !this.audio.paused && !this.audio.muted) return;
+        this.play();
     },
 
     stop() {
         if (!this.audio) return;
         this.clearTimers();
+        this.pendingPlay = false;
+        this.lastError = null;
         this.audio.pause();
         this.audio.currentTime = 0;
+        this.audio.muted = false;
         this.audio.volume = this.volume;
     },
 
@@ -1104,14 +1135,14 @@ const tutorial = {
     _inputTimer: 0,
 
     steps: [
-        { prompt: 'PRESS LEFT / RIGHT TO CARVE', check: () => input.left || input.right, successText: 'NICE CARVING!', duration: 3 },
-        { prompt: 'HOLD UP TO TUCK FOR SPEED', check: () => input.up, successText: 'FEEL THE SPEED!', duration: 2.5 },
-        { prompt: 'HOLD DOWN TO BRAKE', check: () => input.down, successText: 'GOOD CONTROL!', duration: 2 },
-        { prompt: 'PRESS SPACE TO JUMP ON RAMPS', check: () => input.space, successText: 'SICK AIR!', duration: 2 },
-        { prompt: 'CHAIN TRICKS FOR COMBO MULTIPLIERS', check: null, successText: null, duration: 3 },
-        { prompt: 'DODGE TREES AND ROCKS!', check: null, successText: null, duration: 2.5 },
-        { prompt: 'VISIT LODGES FOR POWER-UPS', check: null, successText: null, duration: 2.5 },
-        { prompt: 'OUTRUN THE AVALANCHE — GO!', check: null, successText: null, duration: 3 }
+        { prompt: 'CARVE LEFT / RIGHT', touchPrompt: 'DRAG LEFT / RIGHT TO CARVE', check: () => input.left || input.right, successText: 'NICE CARVING!', duration: 3 },
+        { prompt: 'HOLD DOWN TO TUCK', touchPrompt: 'DRAG DOWN TO TUCK', check: () => input.down, successText: 'FEEL THE SPEED!', duration: 2.5 },
+        { prompt: 'HOLD UP TO BRAKE', touchPrompt: 'DRAG UP TO BRAKE', check: () => input.up, successText: 'GOOD CONTROL!', duration: 2 },
+        { prompt: 'HOLD SPACE BEFORE RAMPS', touchPrompt: 'TAP / HOLD BEFORE RAMPS', check: () => input.space, successText: 'SICK AIR!', duration: 2 },
+        { prompt: 'HOLD DIRECTION FOR SPINS', touchPrompt: 'DRAG SIDEWAYS FOR SPINS', check: null, successText: null, duration: 3 },
+        { prompt: 'RELEASE TO STABILIZE', touchPrompt: 'LET GO TO STABILIZE', check: null, successText: null, duration: 2.5 },
+        { prompt: 'DODGE TREES AND ROCKS', touchPrompt: 'DODGE TREES AND ROCKS', check: null, successText: null, duration: 2.5 },
+        { prompt: 'OUTRUN THE BEAST TEASE', touchPrompt: 'OUTRUN THE BEAST TEASE', check: null, successText: null, duration: 3 }
     ],
 
     start() {
@@ -1155,8 +1186,8 @@ const tutorial = {
         if (!this.active) return;
         const currentStep = this.steps[this.step];
 
-        // Darken background
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+        this._drawGuidedSlope(ctx, w, h);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.38)';
         ctx.fillRect(0, 0, w, h);
 
         // Step counter
@@ -1176,7 +1207,8 @@ const tutorial = {
         ctx.font = 'bold 14px "Press Start 2P", monospace';
         const promptPulse = 0.7 + 0.3 * Math.sin(this.timer * 4);
         ctx.fillStyle = this.stepSuccess ? COLORS.limeGreen : `rgba(255, 255, 255, ${promptPulse})`;
-        const text = this.stepSuccess ? currentStep.successText : currentStep.prompt;
+        const isTouch = typeof window !== 'undefined' && ('ontouchstart' in window || window.innerWidth <= 768);
+        const text = this.stepSuccess ? currentStep.successText : (isTouch && currentStep.touchPrompt ? currentStep.touchPrompt : currentStep.prompt);
         ctx.fillText(text, w / 2, h * 0.45);
 
         // Visual hint — draw a simple icon/animation based on step
@@ -1199,6 +1231,45 @@ const tutorial = {
         ctx.fillText('ESC TO SKIP', w / 2, h * 0.9);
 
         ctx.restore();
+    },
+
+    _drawGuidedSlope(ctx, w, h) {
+        const grd = ctx.createLinearGradient(0, 0, 0, h);
+        grd.addColorStop(0, '#10133d');
+        grd.addColorStop(0.5, '#2b1858');
+        grd.addColorStop(1, '#d9f6ff');
+        ctx.fillStyle = grd;
+        ctx.fillRect(0, 0, w, h);
+
+        ctx.strokeStyle = 'rgba(0, 255, 255, 0.22)';
+        ctx.lineWidth = 1;
+        for (let y = h * 0.2 + ((this.timer * 80) % 48); y < h; y += 48) {
+            ctx.beginPath();
+            ctx.moveTo(w * 0.18, y);
+            ctx.lineTo(w * 0.82, y);
+            ctx.stroke();
+        }
+        ctx.strokeStyle = 'rgba(255, 0, 255, 0.38)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(w * 0.22, h * 0.18);
+        ctx.lineTo(w * 0.08, h);
+        ctx.moveTo(w * 0.78, h * 0.18);
+        ctx.lineTo(w * 0.92, h);
+        ctx.stroke();
+
+        const riderX = w / 2 + Math.sin(this.timer * 2.2) * Math.min(54, w * 0.12);
+        const riderY = h * 0.66;
+        ctx.fillStyle = COLORS.cyan;
+        ctx.shadowColor = COLORS.cyan;
+        ctx.shadowBlur = getShadowBlur(8);
+        ctx.beginPath();
+        ctx.moveTo(riderX, riderY - 14);
+        ctx.lineTo(riderX - 13, riderY + 16);
+        ctx.lineTo(riderX + 13, riderY + 16);
+        ctx.closePath();
+        ctx.fill();
+        ctx.shadowBlur = 0;
     },
 
     _drawStepVisual(ctx, w, h) {
@@ -1507,12 +1578,65 @@ const MAP_THEMES = {
     }
 };
 
+const ATMOSPHERE_THEMES = {
+    classic: {
+        sky: ['#f8fdff', '#d9f5ff', '#ffd6f4', '#b8d8ff'],
+        band: 'rgba(255, 0, 180, 0.08)',
+        grid: 'rgba(0, 210, 255, 0.16)',
+        edge: COLORS.cyan,
+        farMountain: 'rgba(60, 94, 145, 0.22)',
+        nearMountain: 'rgba(132, 50, 158, 0.18)',
+        horizonGlow: 'rgba(255, 72, 210, 0.18)'
+    },
+    nightRun: {
+        sky: ['#070818', '#13143c', '#2a1558', '#0c1838'],
+        band: 'rgba(0, 255, 255, 0.12)',
+        grid: 'rgba(0, 255, 255, 0.22)',
+        edge: COLORS.hotPink,
+        farMountain: 'rgba(40, 55, 110, 0.45)',
+        nearMountain: 'rgba(95, 28, 135, 0.35)',
+        horizonGlow: 'rgba(255, 0, 255, 0.22)'
+    },
+    backcountry: {
+        sky: ['#f5fff8', '#d7f0e0', '#d3f5ff', '#b8d8cd'],
+        band: 'rgba(0, 190, 130, 0.08)',
+        grid: 'rgba(0, 170, 120, 0.13)',
+        edge: '#00d68f',
+        farMountain: 'rgba(40, 96, 70, 0.2)',
+        nearMountain: 'rgba(20, 70, 48, 0.18)',
+        horizonGlow: 'rgba(0, 255, 170, 0.14)'
+    },
+    blizzard: {
+        sky: ['#f5fbff', '#d8e5ef', '#c1d0dc', '#aab8c8'],
+        band: 'rgba(255, 255, 255, 0.12)',
+        grid: 'rgba(255, 255, 255, 0.16)',
+        edge: '#dff8ff',
+        farMountain: 'rgba(110, 126, 150, 0.24)',
+        nearMountain: 'rgba(90, 106, 130, 0.18)',
+        horizonGlow: 'rgba(255, 255, 255, 0.18)'
+    },
+    xgames: {
+        sky: ['#fbfeff', '#d8f4ff', '#ffe0a8', '#b9dcff'],
+        band: 'rgba(255, 185, 0, 0.1)',
+        grid: 'rgba(255, 0, 180, 0.15)',
+        edge: COLORS.gold,
+        farMountain: 'rgba(56, 85, 150, 0.22)',
+        nearMountain: 'rgba(255, 80, 120, 0.16)',
+        horizonGlow: 'rgba(255, 180, 0, 0.18)'
+    }
+};
+
+function getAtmosphereTheme() {
+    const mapId = gameState.selectedMap || selectedMap || 'classic';
+    return ATMOSPHERE_THEMES[mapId] || ATMOSPHERE_THEMES.classic;
+}
+
 const PHYSICS = {
     gravity: 1200,
     groundFriction: 0.992,      // Less drag
     airFriction: 0.995,
-    turnSpeed: 700,             // Fast turning for responsive carving
-    maxTurnAngle: 65,
+    turnSpeed: 780,             // Fast turning for responsive carving
+    maxTurnAngle: 72,
     carveSpeedBoost: 1.10,
     downhillAccel: 350,         // Faster acceleration
     maxSpeed: 780,              // Higher top speed
@@ -1547,9 +1671,15 @@ const TERRAIN = {
 // Dynamic terrain properties that adapt to resolution
 function getTerrainSlopeWidth() {
     const res = RESOLUTIONS[displaySettings.currentResolution];
+    const compactGameViewport = typeof window !== 'undefined' &&
+        (window.innerWidth <= 768 || window.innerHeight > window.innerWidth * 1.15) &&
+        typeof document !== 'undefined' &&
+        !document.body.classList.contains('menu-active');
 
     // For dynamic fill-screen mode, use current canvas dimensions
-    if (displaySettings.fillScreen && displaySettings.fullscreen) {
+    if (displaySettings.fillScreen &&
+        (displaySettings.fullscreen || document.fullscreenElement || compactGameViewport ||
+         (typeof document !== 'undefined' && !document.body.classList.contains('menu-active')))) {
         const isLandscape = CANVAS_WIDTH > CANVAS_HEIGHT;
         if (isLandscape) {
             // For landscape/widescreen, slope fills the ENTIRE screen width
@@ -1570,19 +1700,24 @@ function getTerrainSlopeWidth() {
     return res.width;
 }
 
+function getTerrainLaneCountForWidth(slopeWidth) {
+    const portrait = CANVAS_HEIGHT > CANVAS_WIDTH;
+    if (portrait) {
+        return Math.max(7, Math.min(9, Math.round(slopeWidth / 62)));
+    }
+    return Math.max(11, Math.min(16, Math.round(slopeWidth / 112)));
+}
+
 function getTerrainLaneWidth() {
     const slopeWidth = getTerrainSlopeWidth();
-    // Keep lane width consistent (~68px), but increase lane count for wider screens
-    const baseLaneWidth = 68;
-    return baseLaneWidth;
+    const laneCount = getTerrainLaneCountForWidth(slopeWidth);
+    return slopeWidth / laneCount;
 }
 
 // Dynamically calculate lane count based on slope width
 function getTerrainLaneCount() {
     const slopeWidth = getTerrainSlopeWidth();
-    const baseLaneWidth = 68;
-    // Calculate how many lanes fit, minimum 7 for portrait, scales up for widescreen
-    return Math.max(7, Math.floor(slopeWidth / baseLaneWidth));
+    return getTerrainLaneCountForWidth(slopeWidth);
 }
 
 // Jump variety system - snow jumps like Red Bull tournament kickers
@@ -1653,6 +1788,9 @@ const AUTO_TRICKS_SPINS_COMBOS_GRABS = AUTO_TRICKS.filter(t => t.type === 'spin'
 const AUTO_TRICKS_GRABS_FLIPS = AUTO_TRICKS.filter(t => t.type === 'grab' || t.type === 'flip');
 const AUTO_TRICKS_GRABS_FLIPS_COMBOS = AUTO_TRICKS.filter(t => t.type === 'grab' || t.type === 'flip' || t.type === 'combo');
 const AUTO_TRICKS_GRABS = AUTO_TRICKS.filter(t => t.type === 'grab');
+const AUTO_TRICKS_SPINS = AUTO_TRICKS.filter(t => t.type === 'spin');
+const AUTO_TRICKS_FLIPS = AUTO_TRICKS.filter(t => t.type === 'flip');
+const AUTO_TRICKS_COMBOS = AUTO_TRICKS.filter(t => t.type === 'combo');
 
 const CHASE = {
     fogStartOffset: -300,       // Starts closer
@@ -1661,8 +1799,10 @@ const CHASE = {
     beastSpeed: 1.4,            // 40% faster than player!
     beastLungeInterval: 1.5,    // More frequent lunges
     beastLungeVariance: 0.5,    // Less random delay
+    beastTelegraphDuration: 0.45,
     beastLungeDuration: 0.35,
     beastRetreatDuration: 0.4,  // Shorter retreat
+    beastEscapeBonus: 350,
     // Crash triggers (beast only spawns from crashes)
     crashThreshold: 3,          // 3 crashes in window = beast spawns
     crashWindow: 30,            // Track crashes over 30 seconds
@@ -1704,6 +1844,19 @@ const LODGE = {
     warningTime: 3,             // Seconds of warning before forced exit
     exitInvincibility: 2.0      // Invincibility duration after exiting
 };
+
+const BASE_PHYSICS = Object.freeze({ ...PHYSICS });
+const BASE_TERRAIN = Object.freeze({ ...TERRAIN });
+const BASE_LODGE = Object.freeze({ maxStayTime: LODGE.maxStayTime });
+
+function resetRunTuning() {
+    Object.assign(PHYSICS, BASE_PHYSICS);
+    Object.assign(TERRAIN, BASE_TERRAIN);
+    LODGE.maxStayTime = BASE_LODGE.maxStayTime;
+    applySpeedPreset();
+    TERRAIN.slopeWidth = getTerrainSlopeWidth();
+    TERRAIN.laneWidth = getTerrainLaneWidth();
+}
 
 // ============================================
 // LODGE SHOP ITEMS (30 items, 5 shown per visit)
@@ -2198,6 +2351,7 @@ function setupInput() {
     document.addEventListener('keydown', (e) => {
         tryAutoFullscreen();
         sfxManager.resume();
+        musicManager.resumeFromGesture();
         switch (e.code) {
             case 'ArrowLeft':
             case 'KeyA':
@@ -2217,6 +2371,13 @@ function setupInput() {
                 break;
             case 'Space':
                 input.space = true;
+                if (!e.repeat && gameState.screen === 'title') {
+                    e.preventDefault();
+                    startSelectedMode();
+                } else if (!e.repeat && gameState.screen === 'gameOver') {
+                    e.preventDefault();
+                    startSelectedMode();
+                }
                 break;
             case 'Escape':
                 if (gameState.screen === 'tutorial') {
@@ -2263,6 +2424,11 @@ function setupInput() {
                 break;
         }
     });
+
+    document.addEventListener('pointerdown', () => {
+        sfxManager.resume();
+        musicManager.resumeFromGesture();
+    }, { passive: true });
 }
 
 // ===================
@@ -2279,6 +2445,8 @@ function setupTouchInput() {
 
 function handleTouchStart(e) {
     tryAutoFullscreen();
+    sfxManager.resume();
+    musicManager.resumeFromGesture();
     const target = e.target;
 
     // Check if touching a real interactive element (button, link, input)
@@ -3086,18 +3254,41 @@ function spawnCrashParticles(x, y) {
     }
 }
 
-function spawnLandingParticles(x, y) {
-    for (let i = 0; i < 8; i++) {
+function spawnLandingParticles(x, y, force = 1) {
+    const count = Math.min(22, Math.floor(8 + force * 6));
+    for (let i = 0; i < count; i++) {
         const angle = Math.PI + (Math.random() - 0.5) * Math.PI;
-        const speed = 50 + Math.random() * 80;
+        const speed = 50 + Math.random() * (80 + force * 60);
         gameState.particles.push(ParticlePool.spawn(
             x, y,
             Math.cos(angle) * speed,
             Math.sin(angle) * speed,
-            2 + Math.random() * 2,
+            2 + Math.random() * (2 + force),
             COLORS.powder,
             0.3 + Math.random() * 0.2
         ));
+    }
+}
+
+function spawnLandingImpact(x, y, force, color = COLORS.cyan) {
+    if (!gameState._landingImpacts) gameState._landingImpacts = [];
+    gameState._landingImpacts.push({
+        x,
+        y,
+        force,
+        color,
+        age: 0,
+        life: 0.28 + force * 0.08
+    });
+}
+
+function updateLandingImpacts(dt) {
+    const impacts = gameState._landingImpacts;
+    if (!impacts) return;
+
+    for (let i = impacts.length - 1; i >= 0; i--) {
+        impacts[i].age += dt;
+        if (impacts[i].age >= impacts[i].life) impacts.splice(i, 1);
     }
 }
 
@@ -3168,6 +3359,22 @@ function generateTerrainChunk(chunkIndex) {
 
     // Track cells used by clusters, jumps, rails, and landing zones to avoid overlaps
     const usedCells = new Set();
+    const centerLane = Math.floor(gridCols / 2);
+    const openingSafeUntil = 1800;
+    const openingSafeRows = chunk.y < openingSafeUntil
+        ? Math.min(gridRows, Math.ceil((openingSafeUntil - chunk.y) / 80))
+        : 0;
+    const openingSafeRadius = chunk.y < 900 ? 2 : 1;
+
+    function isOpeningSafeCell(row, col) {
+        return row < openingSafeRows && Math.abs(col - centerLane) <= openingSafeRadius;
+    }
+
+    for (let row = 0; row < openingSafeRows; row++) {
+        for (let col = centerLane - openingSafeRadius; col <= centerLane + openingSafeRadius; col++) {
+            if (col >= 0 && col < gridCols) usedCells.add(`${row},${col}`);
+        }
+    }
 
     // Load any pending exclusions from previous chunk's landing zones
     const pendingKey = chunkIndex;
@@ -3210,6 +3417,9 @@ function generateTerrainChunk(chunkIndex) {
     for (let row = 0; row < gridRows; row++) {
         const rowSeed = baseSeed + row * 100;
         for (let col = 0; col < gridCols; col++) {
+            const cellKey = `${row},${col}`;
+            if (usedCells.has(cellKey) || isOpeningSafeCell(row, col)) continue;
+
             const cellSeed = rowSeed + col;
             const rng = seededRandom(cellSeed);
 
@@ -3259,7 +3469,8 @@ function generateTerrainChunk(chunkIndex) {
                         row: row
                     });
                 }
-            } else if (!(gameState.currentMap && gameState.currentMap.noRails) &&
+            } else if (!dailyChallenge.isNoRails() &&
+                       !(gameState.currentMap && gameState.currentMap.noRails) &&
                        rng >= density + TERRAIN.massiveJumpChance + TERRAIN.jumpChance &&
                        rng < density + TERRAIN.massiveJumpChance + TERRAIN.jumpChance + TERRAIN.railChance) {
                 // Rails - must be mostly VERTICAL (player goes DOWN the mountain)
@@ -3316,7 +3527,7 @@ function generateTerrainChunk(chunkIndex) {
     // 2% chance per chunk to spawn a guaranteed MASSIVE jump (for 1080+ tricks)
     // Only if no massive jump already exists in this chunk
     const hasMassive = tempJumps.some(j => j.massive);
-    if (!hasMassive && seededRandom(baseSeed + 999) < 0.02) {
+    if (chunk.y >= openingSafeUntil && !hasMassive && seededRandom(baseSeed + 999) < 0.02) {
         const massiveLane = Math.floor(seededRandom(baseSeed + 998) * (gridCols - 2)) + 1;
         const massiveX = (massiveLane - gridCols / 2 + 0.5) * TERRAIN.laneWidth;
         const massiveY = chunk.y + 200 + seededRandom(baseSeed + 997) * 200;
@@ -3456,6 +3667,7 @@ function generateTerrainChunk(chunkIndex) {
 
             const cellKey = `${Math.floor(treeRow)},${Math.floor(treeCol)}`;
             if (usedCells.has(cellKey)) continue; // Skip if in landing zone
+            if (isOpeningSafeCell(Math.floor(treeRow), Math.floor(treeCol))) continue;
             usedCells.add(cellKey);
 
             // Add size variation - trees range from 0.6x to 1.65x base size (reduced 25%)
@@ -3491,6 +3703,7 @@ function generateTerrainChunk(chunkIndex) {
 
             const cellKey = `${Math.floor(treeRow)},${Math.floor(treeCol)}`;
             if (usedCells.has(cellKey)) continue; // Skip if in landing zone
+            if (isOpeningSafeCell(Math.floor(treeRow), Math.floor(treeCol))) continue;
             usedCells.add(cellKey);
 
             // Add size variation for secondary cluster (reduced 25%)
@@ -3526,6 +3739,7 @@ function generateTerrainChunk(chunkIndex) {
 
             const cellKey = `${Math.floor(treeRow)},${Math.floor(treeCol)}`;
             if (usedCells.has(cellKey)) continue;
+            if (isOpeningSafeCell(Math.floor(treeRow), Math.floor(treeCol))) continue;
             usedCells.add(cellKey);
 
             // Add size variation for tertiary cluster (reduced 25%)
@@ -3547,10 +3761,12 @@ function generateTerrainChunk(chunkIndex) {
 
     for (let row = 0; row < gridRows; row++) {
         const rowSeed = baseSeed + row * 100;
-        const clearLane = Math.floor(seededRandom(rowSeed) * gridCols);
+        const openingRow = chunk.y + row * 80 < openingSafeUntil;
+        const clearLane = openingRow ? centerLane : Math.floor(seededRandom(rowSeed) * gridCols);
+        const clearPathWidth = openingRow ? Math.max(TERRAIN.clearPathWidth, 3) : TERRAIN.clearPathWidth;
 
         for (let col = 0; col < gridCols; col++) {
-            if (Math.abs(col - clearLane) < TERRAIN.clearPathWidth) continue;
+            if (Math.abs(col - clearLane) < clearPathWidth) continue;
 
             // Skip cells used by clusters, jumps, rails, or landing zones
             const cellKey = `${row},${col}`;
@@ -3806,7 +4022,7 @@ function updateGroundPhysics(player, dt) {
 
     // Lateral movement from turning - full force for snappy carving
     const lateralForce = Math.sin(player.angle * Math.PI / 180) * player.speed;
-    player.lateralSpeed = lateralForce * 1.0;
+    player.lateralSpeed = lateralForce * 1.16;
 
     // Apply movement
     player.y += player.speed * dt;
@@ -3850,12 +4066,16 @@ function updateAirbornePhysics(player, dt) {
     // Manual trick rotation - only if player is actively spinning
     if (inputDir !== 0 && (!player.autoTrick || player.autoTrick.type === 'grab')) {
         player.trickRotation += inputDir * 400 * dt;
+    } else if (!input.space && Math.abs(player.trickRotation) > 0.01) {
+        // Releasing inputs stabilizes the rider before touchdown.
+        player.trickRotation *= Math.pow(0.88, dt * 60);
     }
 
     // Auto trick animation
     if (player.autoTrick) {
         const trick = player.autoTrick;
-        player.autoTrickProgress += dt * 1.5; // Complete trick over ~0.67 seconds
+        const stabilizeBonus = (!input.space && inputDir === 0 && player.autoTrickProgress > 0.45) ? 0.4 : 0;
+        player.autoTrickProgress += dt * (1.5 + stabilizeBonus); // Complete trick over ~0.67 seconds
 
         if (trick.type === 'spin' || trick.type === 'combo') {
             // Spin tricks - only spin if player has a spin direction
@@ -3987,6 +4207,60 @@ function updateVisualPosition(player, dt) {
     player.visualY = expLerp(player.visualY, player.y, lerpSpeed, dt);
 }
 
+function pickTrickFromPool(pool, jump, player) {
+    if (!pool || pool.length === 0) return null;
+    const seed = Math.abs(Math.floor((jump.x * 13) + (jump.y * 7) + player.speed + gameState.terrain.seed));
+    return pool[seed % pool.length];
+}
+
+function selectIntentionalAirTrick(player, jump, inputDir) {
+    const charge = clamp(player.trickCharge || 0, 0, 1);
+    const verticalIntent = input.down ? 1 : (input.up ? -1 : 0);
+    const isCharged = charge > 0.35 || input.space;
+    const bigEnoughForSpin = jump.launchPower >= 1.0;
+    const bigEnoughForCombo = jump.launchPower >= 1.35 || jump.massive;
+
+    let selected = null;
+    let inputDriven = false;
+
+    if (inputDir !== 0 && bigEnoughForSpin) {
+        const pool = bigEnoughForCombo && isCharged ? AUTO_TRICKS_COMBOS.concat(AUTO_TRICKS_SPINS) : AUTO_TRICKS_SPINS;
+        selected = pickTrickFromPool(pool, jump, player);
+        inputDriven = true;
+    } else if (verticalIntent !== 0 && isCharged && jump.launchPower >= 1.0) {
+        selected = pickTrickFromPool(bigEnoughForCombo ? AUTO_TRICKS_COMBOS.concat(AUTO_TRICKS_FLIPS) : AUTO_TRICKS_FLIPS, jump, player);
+        inputDriven = true;
+    } else if (isCharged) {
+        selected = pickTrickFromPool(AUTO_TRICKS_GRABS, jump, player);
+        inputDriven = true;
+    }
+
+    if (!selected) {
+        let availableTricks;
+        if (jump.launchPower >= 1.0) {
+            if (inputDir !== 0) {
+                availableTricks = jump.launchPower < 1.2 ? AUTO_TRICKS_GRABS_FLIPS : AUTO_TRICKS_SPINS_COMBOS_GRABS;
+            } else {
+                availableTricks = jump.launchPower < 1.2 ? AUTO_TRICKS_GRABS_FLIPS :
+                                  jump.launchPower >= 1.4 ? AUTO_TRICKS_GRABS_FLIPS_COMBOS : AUTO_TRICKS_GRABS_FLIPS;
+            }
+        } else if (Math.random() < 0.6) {
+            availableTricks = AUTO_TRICKS_GRABS;
+        }
+
+        if (availableTricks && availableTricks.length > 0) {
+            selected = availableTricks[Math.floor(Math.random() * availableTricks.length)];
+        }
+    }
+
+    if (!selected) return null;
+    return {
+        ...selected,
+        inputDriven,
+        charge
+    };
+}
+
 function triggerJump(player, jump) {
     const inputDir = getInputDirection();
 
@@ -4000,6 +4274,7 @@ function triggerJump(player, jump) {
     player.preJumpAngle = player.angle; // Remember orientation before jump
     player.jumpLaunchPower = jump.launchPower; // Store for animation reference
     player.massiveJump = jump.massive || false; // Track if this is a massive jump
+    player.jumpInputHeld = input.space;
 
     // Special celebration for MASSIVE jumps
     if (jump.massive) {
@@ -4012,34 +4287,18 @@ function triggerJump(player, jump) {
         });
     }
 
-    // Select trick based on jump power and input direction (uses pre-computed filter arrays)
-    if (jump.launchPower >= 1.0) {
-        let availableTricks;
-        if (inputDir !== 0) {
-            // Player is pressing direction - allow spin tricks
-            availableTricks = jump.launchPower < 1.2 ? AUTO_TRICKS_GRABS_FLIPS : AUTO_TRICKS_SPINS_COMBOS_GRABS;
-        } else {
-            // No direction input - only grabs and flips (combos on big jumps)
-            availableTricks = jump.launchPower < 1.2 ? AUTO_TRICKS_GRABS_FLIPS :
-                              jump.launchPower >= 1.4 ? AUTO_TRICKS_GRABS_FLIPS_COMBOS : AUTO_TRICKS_GRABS_FLIPS;
-        }
-
-        const trickIndex = Math.floor(Math.random() * availableTricks.length);
-        player.autoTrick = availableTricks[trickIndex] || AUTO_TRICKS[0];
+    player.autoTrick = selectIntentionalAirTrick(player, jump, inputDir);
+    if (player.autoTrick) {
         player.autoTrickProgress = 0;
         player.flipRotation = 0;
         player.grabPhase = 0;
-    } else {
-        // Small jumps - just a simple grab or nothing
-        if (Math.random() < 0.6) {
-            player.autoTrick = AUTO_TRICKS_GRABS[Math.floor(Math.random() * AUTO_TRICKS_GRABS.length)];
-            player.autoTrickProgress = 0;
-            player.grabPhase = 0;
-        } else {
-            player.autoTrick = null;
+        if (player.autoTrick.inputDriven && jump.launchPower >= 1.0) {
+            gameState.flowMeter = Math.min(100, gameState.flowMeter + 4 + player.autoTrick.charge * 5);
         }
+    } else {
         player.flipRotation = 0;
     }
+    player.trickCharge = 0;
 }
 
 function landFromJump(player) {
@@ -4148,15 +4407,23 @@ function landFromJump(player) {
 
     // Landing SFX + juice
     sfxManager.land(landAirTime > 1.0);
+    const landingForce = clamp(0.55 + landAirTime * 0.45 + (trickPoints / 1500) + (bigAirBonus - 1) * 0.9, 0.65, 2.4);
+    spawnLandingImpact(player.x, player.y, landingForce, trickLanded ? COLORS.gold : COLORS.cyan);
+    gameState.flowMeter = Math.min(100, gameState.flowMeter + landingForce * (trickLanded ? 7 : 3));
+
     if (trickLanded) {
         sfxManager.trickComplete(gameState.trickMultiplier);
-        // Trick landing juice — screen flash + enhanced shake + brief time-slow
-        triggerScreenShake(6 + gameState.trickMultiplier * 2, 0.88);
-        gameState._trickFlash = 0.12; // White flash duration
-        gameState._timeSlow = trickPoints >= 500 ? 0.15 : 0; // Brief slow-mo for big tricks
+        // Trick landing juice scales with trick size instead of using a single flash.
+        triggerScreenShake(4 + landingForce * 4 + gameState.trickMultiplier, 0.88);
+        gameState._trickFlash = Math.max(gameState._trickFlash || 0, 0.07 + landingForce * 0.035);
+        gameState._timeSlow = trickPoints >= 500 ? 0.08 + landingForce * 0.035 : 0;
+        if (navigator.vibrate) navigator.vibrate(trickPoints >= 500 ? [18, 20, 28] : 18);
+    } else if (landAirTime > 0.8) {
+        triggerScreenShake(2 + landingForce * 2, 0.9);
+        if (navigator.vibrate) navigator.vibrate(10);
     }
 
-    spawnLandingParticles(player.x, player.y);
+    spawnLandingParticles(player.x, player.y, landingForce);
 }
 
 // Grind trick types with display names
@@ -4369,6 +4636,7 @@ function checkApproachingJump(player, dt) {
     if (player.airborne || player.grinding || player.crashed) {
         player.approachingJump = null;
         player.preloadCrouch = 0;
+        player.trickCharge = 0;
         return;
     }
 
@@ -4396,10 +4664,13 @@ function checkApproachingJump(player, dt) {
     if (nearestJump) {
         // Crouch intensifies as we get closer
         const crouchTarget = 1 - (nearestDist / lookAheadDist);
-        player.preloadCrouch = expLerp(player.preloadCrouch, crouchTarget, 12, dt);
+        const chargedTarget = input.space ? 1 : crouchTarget * 0.45;
+        player.preloadCrouch = expLerp(player.preloadCrouch, Math.max(crouchTarget, chargedTarget), 12, dt);
+        player.trickCharge = expLerp(player.trickCharge || 0, chargedTarget, input.space ? 14 : 6, dt);
     } else {
         // Smoothly release crouch
         player.preloadCrouch = expLerp(player.preloadCrouch, 0, 8, dt);
+        player.trickCharge = Math.max(0, (player.trickCharge || 0) - dt * 2.5);
     }
 }
 
@@ -4836,13 +5107,11 @@ function updateTimedShopEffects(dt) {
 }
 
 function resetShopEffects() {
-    // Restore physics to base values (called on game over)
     gameState.lodge.purchasedItems = [];
     gameState.shopTrickMult = 1;
     gameState.shopTrickPointsMult = 1;
     gameState.shopScoreMult = 1;
     gameState.shopFogSlow = 0;
-    // Physics are re-initialized in startGame() so no manual reset needed
 }
 
 // ===================
@@ -4921,6 +5190,9 @@ function spawnBeast(customMessage = null) {
     chase.beastState = 'chasing';
     chase.beastLungeTimer = 2;
     chase.beastRage = 0;
+    chase.telegraphTimer = 0;
+    chase.lungeStartX = 0;
+    chase.lungeStartY = 0;
 
     sfxManager.beastGrowl();
     const message = customMessage || 'THE BEAST AWAKENS';
@@ -4977,7 +5249,8 @@ function updateBeast(dt) {
             const distToPlayer = player.y - chase.beastY;
 
             if (chase.beastLungeTimer <= 0 && distToPlayer < 280 && distToPlayer > 40) {
-                chase.beastState = 'lunging';
+                chase.beastState = 'telegraphing';
+                chase.telegraphTimer = CHASE.beastTelegraphDuration;
 
                 // If guaranteed catch, lunge directly at player with minimal prediction error
                 if (guaranteedCatch) {
@@ -4992,7 +5265,23 @@ function updateBeast(dt) {
                     chase.lungeTargetY = player.y + player.speed * predictTime * 0.5;
                 }
                 chase.lungeProgress = 0;
-                triggerScreenShake(guaranteedCatch ? 15 : 10, 0.8);
+                gameState.dangerLevel = Math.max(gameState.dangerLevel, 0.85);
+                triggerScreenShake(guaranteedCatch ? 10 : 6, 0.84);
+            }
+            break;
+
+        case 'telegraphing':
+            chase.telegraphTimer -= dt;
+            chase.beastX += (player.x - chase.beastX) * (1.2 + chase.beastRage) * dt;
+            chase.beastY += player.speed * 0.35 * dt;
+            gameState.dangerLevel = Math.max(gameState.dangerLevel, 0.75 + Math.sin(gameState.animationTime * 18) * 0.08);
+
+            if (chase.telegraphTimer <= 0) {
+                chase.beastState = 'lunging';
+                chase.lungeStartX = chase.beastX;
+                chase.lungeStartY = chase.beastY;
+                chase.lungeProgress = 0;
+                triggerScreenShake(guaranteedCatch ? 16 : 11, 0.8);
             }
             break;
 
@@ -5002,11 +5291,8 @@ function updateBeast(dt) {
             const t = Math.min(chase.lungeProgress, 1);
             const easeT = t * t * (3 - 2 * t);
 
-            const startX = chase.beastX;
-            const startY = chase.beastY - (chase.lungeTargetY - chase.beastY) * chase.lungeProgress;
-
-            chase.beastX = lerp(startX, chase.lungeTargetX, easeT * 0.8);
-            chase.beastY = lerp(chase.beastY, chase.lungeTargetY, easeT);
+            chase.beastX = lerp(chase.lungeStartX, chase.lungeTargetX, easeT);
+            chase.beastY = lerp(chase.lungeStartY, chase.lungeTargetY, easeT);
 
             // Determine catch radius - much larger if guaranteed catch
             const catchRadius = guaranteedCatch ? CHASE.enhancedCatchRadius :
@@ -5032,6 +5318,17 @@ function updateBeast(dt) {
                 chase.missCount++;
                 chase.beastState = 'retreating';
                 chase.retreatTimer = CHASE.beastRetreatDuration;
+                const escapePoints = Math.floor((CHASE.beastEscapeBonus + chase.missCount * 100) * (gameState.flowMultiplier || 1));
+                gameState.score += escapePoints;
+                gameState.flowMeter = Math.min(100, gameState.flowMeter + 16);
+                gameState.celebrations.push({
+                    text: 'BEAST DODGED',
+                    subtext: `+${escapePoints}`,
+                    color: COLORS.cyan,
+                    timer: 1.1,
+                    scale: 1.0
+                });
+                if (navigator.vibrate) navigator.vibrate([14, 18, 14]);
 
                 // Warn player if next lunge is guaranteed
                 if (chase.missCount >= CHASE.maxMisses - 1) {
@@ -5181,8 +5478,10 @@ function updateCamera(dt) {
     const player = gameState.player;
     const camPreset = getCameraPreset();
 
-    const lookAhead = (player.speed / PHYSICS.maxSpeed) * camera.lookAhead;
-    camera.targetY = player.y + lookAhead - CANVAS_HEIGHT * 0.35;
+    const speedRatio = clamp(player.speed / PHYSICS.maxSpeed, 0, 1);
+    const lookAhead = speedRatio * camera.lookAhead;
+    const riderAnchor = lerp(0.62, 0.48, speedRatio);
+    camera.targetY = player.y + lookAhead * 0.45 - CANVAS_HEIGHT * riderAnchor;
 
     // Altitude-based camera adjustment: shift camera up to keep player visible on big jumps
     if (player.airborne && player.altitude > 100) {
@@ -5203,7 +5502,7 @@ function updateCamera(dt) {
     camera.zoom = expLerp(camera.zoom, camera.targetZoom, 8, dt);
 
     // If player is very far ahead (massive jump), increase camera catch-up speed
-    const distanceAhead = player.y - (camera.y + CANVAS_HEIGHT * 0.35);
+    const distanceAhead = player.y - (camera.y + CANVAS_HEIGHT * riderAnchor);
     if (distanceAhead > CANVAS_HEIGHT) {
         camera.y = expLerp(camera.y, camera.targetY, camPreset.catchUpSpeed, dt);
     } else {
@@ -5340,7 +5639,7 @@ function draw() {
     }
 
     // Draw ghost replay (behind player, in front of obstacles)
-    if (ghostSystem.bestGhost && ghostSystem.bestGhost.length > 0) {
+    if (ghostSystem.bestGhost && ghostSystem.bestGhost.frames && ghostSystem.bestGhost.frames.length > 0) {
         ghostSystem.drawGhost(ctx, gameState.camera.y);
     }
 
@@ -5349,6 +5648,9 @@ function draw() {
 
     // Draw particles
     drawParticles();
+
+    // Draw landing shockwaves above snow spray
+    drawLandingImpacts();
 
     // Draw celebrations
     drawCelebrations();
@@ -5414,30 +5716,29 @@ function draw() {
         ctx.fillStyle = COLORS.gold;
         ctx.shadowColor = COLORS.gold;
         ctx.shadowBlur = getShadowBlur(4);
-        ctx.fillText('DAILY: ' + dailyChallenge.modifierLabel, CANVAS_WIDTH - 10, CANVAS_HEIGHT - 10);
+        ctx.fillText('DAILY: ' + dailyChallenge.modifierLabel, CANVAS_WIDTH - 12, 22);
         ctx.shadowBlur = 0;
         ctx.restore();
     }
 }
 
 function drawBackground() {
-    // Use cached gradient for performance - snow palette with subtle cyan/pink
+    const atmosphere = getAtmosphereTheme();
+
+    // Use cached gradient for performance - map-specific snow/synth palette
     if (!gradientCache.background) {
         gradientCache.background = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
-        const mapBg = gameState.currentMap && gameState.currentMap.bgColors;
-        if (mapBg) {
-            gradientCache.background.addColorStop(0, mapBg.light);
-            gradientCache.background.addColorStop(0.5, mapBg.mid);
-            gradientCache.background.addColorStop(1, mapBg.dark);
-        } else {
-            gradientCache.background.addColorStop(0, COLORS.bgLight);    // Bright snow at top
-            gradientCache.background.addColorStop(0.4, COLORS.bgMid);    // Mid-tone
-            gradientCache.background.addColorStop(0.7, COLORS.snowCyan); // Cyan hint
-            gradientCache.background.addColorStop(1, COLORS.bgDark);     // Slightly shadowed at bottom
-        }
+        gradientCache.background.addColorStop(0, atmosphere.sky[0]);
+        gradientCache.background.addColorStop(0.42, atmosphere.sky[1]);
+        gradientCache.background.addColorStop(0.72, atmosphere.sky[2]);
+        gradientCache.background.addColorStop(1, atmosphere.sky[3]);
     }
     ctx.fillStyle = gradientCache.background;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    drawAtmosphereBands(atmosphere);
+    drawHorizonMountainRidge(atmosphere);
+    drawScrollingSnowContours(atmosphere);
 
     // Zone color tint — subtle shift as player descends
     if (gameState.mode === 'og') {
@@ -5447,9 +5748,6 @@ function drawBackground() {
             ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
         }
     }
-
-    // PERFORMANCE: Removed decorative background line loops (was ~40 stroke calls per frame)
-    // The gradient background provides sufficient visual appeal
 
     // Draw side margins for landscape mode (snowy mountain scenery)
     const res = RESOLUTIONS[displaySettings.currentResolution];
@@ -5471,6 +5769,96 @@ function drawBackground() {
             ctx.fillRect(CANVAS_WIDTH - marginWidth * 0.6, 0, marginWidth * 0.6, CANVAS_HEIGHT);
         }
     }
+}
+
+function drawHorizonMountainRidge(atmosphere) {
+    const clipBottom = CANVAS_HEIGHT * 0.22;
+    const step = Math.max(95, CANVAS_WIDTH / 7);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, CANVAS_WIDTH, clipBottom);
+    ctx.clip();
+
+    function ridge(color, baseY, height, alpha, seedOffset) {
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(-step * 2, baseY);
+        for (let x = -step * 2; x <= CANVAS_WIDTH + step * 2; x += step) {
+            const peak = baseY - height * (0.35 + 0.5 * seededRandom(Math.floor((x + seedOffset) * 0.19)));
+            ctx.lineTo(x + step * 0.48, peak);
+            ctx.lineTo(x + step, baseY);
+        }
+        ctx.lineTo(CANVAS_WIDTH + step * 2, clipBottom);
+        ctx.lineTo(-step * 2, clipBottom);
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    ridge(atmosphere.farMountain, CANVAS_HEIGHT * 0.14, CANVAS_HEIGHT * 0.12, 0.46, 2000);
+    ridge(atmosphere.nearMountain, CANVAS_HEIGHT * 0.20, CANVAS_HEIGHT * 0.10, 0.30, 5000);
+    ctx.restore();
+    ctx.globalAlpha = 1;
+}
+
+function drawAtmosphereBands(atmosphere) {
+    const time = gameState.animationTime || 0;
+    const cameraY = gameState.camera ? gameState.camera.y : 0;
+    const scroll = cameraY * 0.22;
+
+    ctx.save();
+    ctx.globalAlpha = 0.55;
+    ctx.fillStyle = atmosphere.band;
+    for (let i = 0; i < 4; i++) {
+        const bandPeriod = CANVAS_HEIGHT * 0.72;
+        const rawY = CANVAS_HEIGHT * (0.10 + i * 0.18) - scroll + time * (5 + i);
+        const y = ((rawY % bandPeriod) + bandPeriod) % bandPeriod;
+        ctx.fillRect(0, y, CANVAS_WIDTH, 2 + i);
+    }
+    ctx.restore();
+}
+
+function drawScrollingSnowContours(atmosphere) {
+    const cameraY = gameState.camera ? gameState.camera.y : 0;
+    const spacing = Math.max(150, CANVAS_HEIGHT * 0.22);
+    const parallaxY = cameraY * 0.46;
+    const wrap = (value, period) => ((value % period) + period) % period;
+    const offsetY = wrap(parallaxY, spacing);
+
+    ctx.save();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = atmosphere.grid;
+    ctx.fillStyle = atmosphere.horizonGlow;
+
+    for (let y = -spacing - offsetY; y < CANVAS_HEIGHT + spacing; y += spacing) {
+        const seed = Math.floor((cameraY + y * 13) * 0.02);
+        const wobble = seededRandom(seed) * CANVAS_WIDTH * 0.12;
+        const crestY = y + CANVAS_HEIGHT * 0.16;
+        const bandH = Math.max(30, CANVAS_HEIGHT * 0.045);
+
+        ctx.globalAlpha = 0.10;
+        ctx.beginPath();
+        ctx.moveTo(0, crestY + bandH);
+        ctx.bezierCurveTo(CANVAS_WIDTH * 0.25, crestY - bandH + wobble * 0.12,
+                          CANVAS_WIDTH * 0.58, crestY + bandH * 1.6,
+                          CANVAS_WIDTH, crestY - bandH * 0.3);
+        ctx.lineTo(CANVAS_WIDTH, crestY + bandH * 2.2);
+        ctx.bezierCurveTo(CANVAS_WIDTH * 0.55, crestY + bandH * 2.8,
+                          CANVAS_WIDTH * 0.25, crestY + bandH * 1.7,
+                          0, crestY + bandH * 2.3);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.globalAlpha = 0.18;
+        ctx.beginPath();
+        ctx.moveTo(0, crestY);
+        ctx.bezierCurveTo(CANVAS_WIDTH * 0.28, crestY - bandH + wobble * 0.08,
+                          CANVAS_WIDTH * 0.64, crestY + bandH,
+                          CANVAS_WIDTH, crestY - bandH * 0.2);
+        ctx.stroke();
+    }
+    ctx.restore();
 }
 
 // ============================================
@@ -5737,30 +6125,65 @@ function spawnMapAmbientParticles() {
 }
 
 function drawTerrain() {
-    // Only draw slope edge markers if slope doesn't fill the screen
-    // In fullscreen widescreen mode, the entire screen is playable
+    const atmosphere = getAtmosphereTheme();
     const slopeWidth = TERRAIN.slopeWidth;
     const leftEdge = CANVAS_WIDTH / 2 - slopeWidth / 2;
     const rightEdge = CANVAS_WIDTH / 2 + slopeWidth / 2;
+    const cameraY = gameState.camera ? gameState.camera.y : 0;
 
-    // Only draw edge markers if there's a visible margin (not full-width)
-    if (leftEdge > 5) {
-        ctx.strokeStyle = COLORS.cyan;
-        ctx.lineWidth = 2;
-        ctx.setLineDash([10, 10]);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(Math.max(0, leftEdge), 0, Math.min(CANVAS_WIDTH, slopeWidth), CANVAS_HEIGHT);
+    ctx.clip();
 
+    // Subtle groomed snow/grid texture ties the title-screen fantasy into gameplay.
+    ctx.strokeStyle = atmosphere.grid;
+    ctx.lineWidth = 1;
+    const rowSpacing = 80;
+    const firstWorldY = Math.floor(cameraY / rowSpacing) * rowSpacing;
+    for (let worldY = firstWorldY; worldY < cameraY + CANVAS_HEIGHT + rowSpacing; worldY += rowSpacing) {
+        const y = worldY - cameraY;
+        const perspectiveAlpha = clamp((y / CANVAS_HEIGHT) * 0.35 + 0.08, 0.08, 0.32);
+        ctx.globalAlpha = perspectiveAlpha;
         ctx.beginPath();
-        ctx.moveTo(leftEdge, 0);
-        ctx.lineTo(leftEdge, CANVAS_HEIGHT);
+        ctx.moveTo(leftEdge, y);
+        ctx.lineTo(rightEdge, y);
         ctx.stroke();
-
-        ctx.beginPath();
-        ctx.moveTo(rightEdge, 0);
-        ctx.lineTo(rightEdge, CANVAS_HEIGHT);
-        ctx.stroke();
-
-        ctx.setLineDash([]);
     }
+
+    ctx.globalAlpha = 0.22;
+    const laneCount = getTerrainLaneCount();
+    for (let lane = 1; lane < laneCount; lane++) {
+        const x = CANVAS_WIDTH / 2 - slopeWidth / 2 + lane * TERRAIN.laneWidth;
+        if (x <= 0 || x >= CANVAS_WIDTH) continue;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, CANVAS_HEIGHT);
+        ctx.stroke();
+    }
+    ctx.restore();
+
+    // Neon edges remain visible even when the playable slope fills the viewport.
+    ctx.save();
+    ctx.strokeStyle = atmosphere.edge;
+    ctx.shadowColor = atmosphere.edge;
+    ctx.shadowBlur = getShadowBlur(8);
+    ctx.lineWidth = leftEdge > 5 ? 3 : 2;
+    ctx.setLineDash([12, 12]);
+    ctx.globalAlpha = leftEdge > 5 ? 0.9 : 0.45;
+
+    ctx.beginPath();
+    ctx.moveTo(clamp(leftEdge, 0, CANVAS_WIDTH), 0);
+    ctx.lineTo(clamp(leftEdge, 0, CANVAS_WIDTH), CANVAS_HEIGHT);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(clamp(rightEdge, 0, CANVAS_WIDTH), 0);
+    ctx.lineTo(clamp(rightEdge, 0, CANVAS_WIDTH), CANVAS_HEIGHT);
+    ctx.stroke();
+
+    ctx.setLineDash([]);
+    ctx.restore();
 }
 
 function drawObstacles() {
@@ -8038,11 +8461,17 @@ function drawBeast() {
     const screen = worldToScreen(chase.beastX, chase.beastY);
     const time = gameState.animationTime;
 
+    if (chase.beastState === 'telegraphing') {
+        drawBeastTelegraph(chase, screen);
+    }
+
     // Try sprite-based rendering first
     if (sprites.beast && sprites.beast.sheet.loaded) {
         // Determine animation based on beast state
         if (chase.beastState === 'lunging') {
             sprites.beast.setAnimation('lunge');
+        } else if (chase.beastState === 'telegraphing') {
+            sprites.beast.setAnimation('rageHigh');
         } else if (chase.beastState === 'retreating') {
             sprites.beast.setAnimation('recover');
         } else {
@@ -8062,6 +8491,8 @@ function drawBeast() {
         let scale = 0.9 + chase.beastRage * 0.2;
         if (chase.beastState === 'lunging') {
             scale += chase.lungeProgress * 0.3;
+        } else if (chase.beastState === 'telegraphing') {
+            scale += 0.12 + Math.sin(time * 28) * 0.04;
         }
 
         // Breathing effect
@@ -8093,6 +8524,8 @@ function drawBeast() {
     let scale = 1 + chase.beastRage * 0.25;
     if (chase.beastState === 'lunging') {
         scale += chase.lungeProgress * 0.5;
+    } else if (chase.beastState === 'telegraphing') {
+        scale += 0.15 + Math.sin(time * 28) * 0.05;
     }
     ctx.scale(scale, scale);
 
@@ -8286,6 +8719,35 @@ function drawBeast() {
     ctx.restore();
 }
 
+function drawBeastTelegraph(chase, screen) {
+    const target = worldToScreen2(chase.lungeTargetX, chase.lungeTargetY);
+    const pulse = 0.45 + 0.35 * Math.sin(gameState.animationTime * 24);
+
+    ctx.save();
+    ctx.globalAlpha = pulse;
+    ctx.strokeStyle = COLORS.magenta;
+    ctx.fillStyle = COLORS.magenta;
+    ctx.shadowColor = COLORS.magenta;
+    ctx.shadowBlur = getShadowBlur(12);
+    ctx.lineWidth = 3;
+    ctx.setLineDash([10, 8]);
+    ctx.beginPath();
+    ctx.moveTo(screen.x, screen.y);
+    ctx.lineTo(target.x, target.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    const radius = 20 + pulse * 14;
+    ctx.beginPath();
+    ctx.arc(target.x, target.y, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 0.18 + pulse * 0.2;
+    ctx.beginPath();
+    ctx.arc(target.x, target.y, radius * 0.65, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+}
+
 function drawParticles() {
     const particles = gameState.particles;
 
@@ -8315,6 +8777,31 @@ function drawParticles() {
         ctx.fill();
     }
     ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+}
+
+function drawLandingImpacts() {
+    const impacts = gameState._landingImpacts;
+    if (!impacts || impacts.length === 0) return;
+
+    ctx.save();
+    ctx.lineCap = 'round';
+    for (const impact of impacts) {
+        const t = clamp(impact.age / impact.life, 0, 1);
+        const screen = worldToScreen(impact.x, impact.y);
+        const radius = (18 + impact.force * 30) * t;
+        const alpha = (1 - t) * Math.min(0.75, 0.28 + impact.force * 0.22);
+
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = impact.color;
+        ctx.shadowColor = impact.color;
+        ctx.shadowBlur = getShadowBlur(10 * impact.force);
+        ctx.lineWidth = Math.max(2, 4 * (1 - t) + impact.force);
+        ctx.beginPath();
+        ctx.ellipse(screen.x, screen.y + 2, radius * 1.35, radius * 0.45, 0, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+    ctx.restore();
     ctx.globalAlpha = 1;
 }
 
@@ -8465,6 +8952,28 @@ function drawPanelHUD() {
         ctx.fillText('SPEED UP!', CANVAS_WIDTH / 2, panelY - Math.round(28 * scale));
         ctx.shadowBlur = 0;
         ctx.globalAlpha = 1;
+    }
+
+    if (gameState.trickMultiplier > 1 || gameState.flowMeter > 5) {
+        const meterY = panelY - Math.round(18 * scale);
+        const meterW = Math.min(170 * scale, CANVAS_WIDTH * 0.32);
+        const meterH = Math.max(4, Math.round(5 * scale));
+        const meterX = CANVAS_WIDTH / 2 - meterW / 2;
+        const comboFill = clamp(gameState.trickComboTimer / 2.5, 0, 1);
+        const flowFill = clamp(gameState.flowMeter / 100, 0, 1);
+
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+        ctx.fillRect(meterX, meterY, meterW, meterH);
+        ctx.fillStyle = COLORS.gold;
+        ctx.shadowColor = COLORS.gold;
+        ctx.shadowBlur = getShadowBlur(5);
+        ctx.fillRect(meterX, meterY, meterW * Math.max(comboFill, flowFill * 0.65), meterH);
+        ctx.shadowBlur = 0;
+
+        ctx.font = FONTS.pressStart8;
+        ctx.textAlign = 'center';
+        ctx.fillStyle = gameState.trickMultiplier > 1 ? COLORS.gold : COLORS.cyan;
+        ctx.fillText(gameState.trickMultiplier > 1 ? `x${gameState.trickMultiplier.toFixed(1)} FLOW` : 'FLOW', CANVAS_WIDTH / 2, meterY - Math.round(10 * scale));
     }
 
     // Restore textBaseline
@@ -8670,21 +9179,35 @@ function drawTitleScreen() {
     ctx.fillText('DOWN TO TUCK', CANVAS_WIDTH/2, CANVAS_HEIGHT * 0.9);
 }
 
+function getNextUnlockStatusText() {
+    let best = gameState.distance || 0;
+    try {
+        best = Math.max(best, parseInt(localStorage.getItem('shredordead_bestdistance') || '0', 10));
+    } catch (e) {}
+
+    const next = Object.entries(MAP_UNLOCKS)
+        .filter(([id, req]) => req.distance > best)
+        .sort((a, b) => a[1].distance - b[1].distance)[0];
+
+    if (!next) return 'ALL MAPS UNLOCKED';
+    const req = next[1];
+    return `${req.name.toUpperCase()} IN ${req.distance - best}m`;
+}
+
 function drawGameOverScreen() {
-    // Darken background
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.84)';
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
+    const compact = CANVAS_HEIGHT <= 760;
     const cx = CANVAS_WIDTH / 2;
 
-    // Death message - large and prominent
     let deathText = 'WRECKED!';
     let deathColor = COLORS.danger;
     if (gameState.deathCause === 'xgames') {
-        deathText = '🏆 X GAMES COMPLETE!';
+        deathText = 'X GAMES COMPLETE!';
         deathColor = COLORS.gold;
     } else if (gameState.deathCause === 'fog') {
         deathText = 'BURIED BY THE';
@@ -8694,172 +9217,133 @@ function drawGameOverScreen() {
         deathColor = COLORS.magenta;
     }
 
-    // Main death text
-    ctx.font = 'bold 28px "Press Start 2P", monospace';
+    const titleY = compact ? CANVAS_HEIGHT * 0.14 : CANVAS_HEIGHT * 0.18;
+    const subjectY = compact ? CANVAS_HEIGHT * 0.205 : CANVAS_HEIGHT * 0.255;
+    ctx.font = `bold ${compact ? 22 : 28}px "Press Start 2P", monospace`;
     ctx.shadowColor = deathColor;
     ctx.shadowBlur = getShadowBlur(12);
     ctx.fillStyle = deathColor;
     if (gameState.deathCause === 'fog' || gameState.deathCause === 'beast') {
-        ctx.fillText(deathText, cx, CANVAS_HEIGHT * 0.2);
-        // Second line for the subject
+        ctx.fillText(deathText, cx, titleY);
         const subjectText = gameState.deathCause === 'fog' ? 'AVALANCHE' : 'BEAST';
-        ctx.font = 'bold 36px "Press Start 2P", monospace';
-        ctx.fillText(subjectText, cx, CANVAS_HEIGHT * 0.27);
+        ctx.font = `bold ${compact ? 30 : 36}px "Press Start 2P", monospace`;
+        ctx.fillText(subjectText, cx, subjectY);
     } else {
-        ctx.fillText(deathText, cx, CANVAS_HEIGHT * 0.23);
+        ctx.fillText(deathText, cx, compact ? CANVAS_HEIGHT * 0.18 : CANVAS_HEIGHT * 0.22);
     }
     ctx.shadowBlur = 0;
 
-    // Divider line
+    const dividerY = compact ? CANVAS_HEIGHT * 0.265 : CANVAS_HEIGHT * 0.32;
     ctx.strokeStyle = deathColor;
     ctx.globalAlpha = 0.3;
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(cx - 140, CANVAS_HEIGHT * 0.33);
-    ctx.lineTo(cx + 140, CANVAS_HEIGHT * 0.33);
+    ctx.moveTo(cx - Math.min(180, CANVAS_WIDTH * 0.34), dividerY);
+    ctx.lineTo(cx + Math.min(180, CANVAS_WIDTH * 0.34), dividerY);
     ctx.stroke();
     ctx.globalAlpha = 1;
 
-    // Stats - larger font, cleaner layout
-    const statsY = CANVAS_HEIGHT * 0.40;
-    const statsSpacing = CANVAS_HEIGHT * 0.08;
+    const statsY = compact ? CANVAS_HEIGHT * 0.335 : CANVAS_HEIGHT * 0.385;
+    const statsSpacing = compact ? 34 : Math.min(56, CANVAS_HEIGHT * 0.07);
+    const statsFont = compact ? 12 : 16;
 
-    ctx.font = '16px "Press Start 2P", monospace';
-
-    // Distance
+    ctx.font = `${statsFont}px "Press Start 2P", monospace`;
     ctx.fillStyle = COLORS.cyan;
     ctx.shadowColor = COLORS.cyan;
     ctx.shadowBlur = getShadowBlur(4);
     ctx.fillText(`DISTANCE  ${gameState.distance}m`, cx, statsY);
-    ctx.shadowBlur = 0;
-
-    // Score
     ctx.fillStyle = COLORS.magenta;
     ctx.shadowColor = COLORS.magenta;
-    ctx.shadowBlur = getShadowBlur(4);
     ctx.fillText(`SCORE  ${gameState.score}`, cx, statsY + statsSpacing);
-    ctx.shadowBlur = 0;
-
-    // Max combo
     ctx.fillStyle = COLORS.gold;
     ctx.shadowColor = COLORS.gold;
-    ctx.shadowBlur = getShadowBlur(4);
     ctx.fillText(`MAX COMBO  x${gameState.maxCombo.toFixed(1)}`, cx, statsY + statsSpacing * 2);
     ctx.shadowBlur = 0;
 
-    // New high score
-    if (gameState.score > gameState.highScore) {
+    const metaY = statsY + statsSpacing * 3 + (compact ? 10 : 16);
+    const coinsEarned = shredCoinState.earned || 0;
+    const metaText = coinsEarned > 0 ? `+${coinsEarned} SHRED COINS` : getNextUnlockStatusText();
+    ctx.font = `${compact ? 9 : 11}px "Press Start 2P", monospace`;
+    ctx.fillStyle = coinsEarned > 0 ? COLORS.limeGreen : COLORS.cyan;
+    ctx.shadowColor = ctx.fillStyle;
+    ctx.shadowBlur = getShadowBlur(4);
+    ctx.fillText(metaText, cx, metaY);
+    ctx.shadowBlur = 0;
+
+    const achCount = achievementState.getCount();
+    const achTotal = achievementState.getTotal();
+    ctx.font = `${compact ? 8 : 10}px "Press Start 2P", monospace`;
+    ctx.fillStyle = 'rgba(255, 215, 0, 0.62)';
+    ctx.fillText(`${achCount}/${achTotal} ACHIEVEMENTS`, cx, metaY + (compact ? 24 : 30));
+
+    if (gameState._newHighScore) {
         const pulse = Math.sin(gameState.animationTime * 5) * 0.3 + 0.7;
         ctx.globalAlpha = pulse;
-        ctx.font = 'bold 20px "Press Start 2P", monospace';
+        ctx.font = `bold ${compact ? 12 : 16}px "Press Start 2P", monospace`;
         ctx.fillStyle = COLORS.gold;
         ctx.shadowColor = COLORS.gold;
         ctx.shadowBlur = getShadowBlur(10);
-        ctx.fillText('NEW HIGH SCORE!', cx, statsY + statsSpacing * 3);
+        ctx.fillText('NEW HIGH SCORE!', cx, metaY + (compact ? 48 : 58));
         ctx.shadowBlur = 0;
         ctx.globalAlpha = 1;
     }
 
-    // Shred coins earned this run
-    const coinsEarned = shredCoinState.earned || 0;
-    if (coinsEarned > 0) {
-        ctx.font = '12px "Press Start 2P", monospace';
-        ctx.fillStyle = COLORS.limeGreen;
-        ctx.shadowColor = COLORS.limeGreen;
-        ctx.shadowBlur = getShadowBlur(4);
-        ctx.fillText(`+${coinsEarned} SHRED COINS`, cx, statsY + statsSpacing * 3);
+    const btnW = Math.min(320, CANVAS_WIDTH * 0.74);
+    const btnH = compact ? 40 : 44;
+    const btnSpacing = compact ? 47 : 52;
+    const btnY = Math.min(CANVAS_HEIGHT - (compact ? 142 : 160), metaY + (compact ? 94 : 122));
+
+    gameState._gameOverButtons = [
+        { x: cx - btnW / 2, y: btnY - btnH / 2, w: btnW, h: btnH, action: 'restart' },
+        { x: cx - btnW / 2, y: btnY + btnSpacing - btnH / 2, w: btnW, h: btnH, action: 'menu' },
+        { x: cx - btnW / 2, y: btnY + btnSpacing * 2 - btnH / 2, w: btnW, h: btnH, action: 'share' }
+    ];
+
+    function drawButton(action, label, y, color, primary = false) {
+        const hover = gameState._gameOverHover === action;
+        ctx.fillStyle = hover ? color.replace('1)', '0.28)') : color.replace('1)', primary ? '0.18)' : '0.08)');
+        ctx.strokeStyle = primary ? COLORS.cyan : (action === 'share' ? COLORS.magenta : 'rgba(255, 255, 255, 0.5)');
+        ctx.lineWidth = primary ? 3 : 2;
+        ctx.beginPath();
+        ctx.roundRect(cx - btnW / 2, y - btnH / 2, btnW, btnH, 6);
+        ctx.fill();
+        ctx.stroke();
+        ctx.font = `bold ${primary ? (compact ? 14 : 16) : (compact ? 11 : 13)}px "Press Start 2P", monospace`;
+        ctx.fillStyle = primary ? COLORS.cyan : (action === 'share' ? COLORS.magenta : '#dddddd');
+        ctx.shadowColor = ctx.fillStyle;
+        ctx.shadowBlur = getShadowBlur(hover ? 8 : 3);
+        ctx.fillText(label, cx, y);
         ctx.shadowBlur = 0;
     }
 
-    // Achievements unlocked count
-    const achCount = achievementState.getCount();
-    const achTotal = achievementState.getTotal();
-    ctx.font = '10px "Press Start 2P", monospace';
-    ctx.fillStyle = 'rgba(255, 215, 0, 0.6)';
-    ctx.fillText(`${achCount}/${achTotal} ACHIEVEMENTS`, cx, statsY + statsSpacing * 3.6);
+    drawButton('restart', 'TRY AGAIN', btnY, 'rgba(0, 255, 255, 1)', true);
+    drawButton('menu', 'NEXT UNLOCK', btnY + btnSpacing, 'rgba(255, 255, 255, 1)');
+    drawButton('share', gameState._shareConfirm ? 'COPIED!' : 'SHARE RUN', btnY + btnSpacing * 2, 'rgba(255, 0, 255, 1)');
 
-    // Buttons - drawn on canvas for both desktop and mobile
-    const btnW = 280;
-    const btnH = 44;
-    const btnY = CANVAS_HEIGHT * 0.70;
-    const btnSpacing = 52;
-
-    // Store button rects for click/tap detection
-    gameState._gameOverButtons = [
-        { x: cx - btnW/2, y: btnY - btnH/2, w: btnW, h: btnH, action: 'restart' },
-        { x: cx - btnW/2, y: btnY + btnSpacing - btnH/2, w: btnW, h: btnH, action: 'menu' },
-        { x: cx - btnW/2, y: btnY + btnSpacing * 2 - btnH/2, w: btnW, h: btnH, action: 'share' }
-    ];
-
-    // Retry button
-    const retryHover = gameState._gameOverHover === 'restart';
-    ctx.fillStyle = retryHover ? 'rgba(0, 255, 255, 0.25)' : 'rgba(0, 255, 255, 0.12)';
-    ctx.strokeStyle = COLORS.cyan;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.roundRect(cx - btnW/2, btnY - btnH/2, btnW, btnH, 6);
-    ctx.fill();
-    ctx.stroke();
-    ctx.font = 'bold 16px "Press Start 2P", monospace';
-    ctx.fillStyle = COLORS.cyan;
-    ctx.shadowColor = COLORS.cyan;
-    ctx.shadowBlur = getShadowBlur(retryHover ? 8 : 3);
-    ctx.fillText('RETRY', cx, btnY);
-    ctx.shadowBlur = 0;
-
-    // Menu button
-    const menuHover = gameState._gameOverHover === 'menu';
-    ctx.fillStyle = menuHover ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255, 255, 255, 0.06)';
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.roundRect(cx - btnW/2, btnY + btnSpacing - btnH/2, btnW, btnH, 6);
-    ctx.fill();
-    ctx.stroke();
-    ctx.font = '14px "Press Start 2P", monospace';
-    ctx.fillStyle = '#ccc';
-    ctx.fillText('MAIN MENU', cx, btnY + btnSpacing);
-
-    // Share button
-    const shareHover = gameState._gameOverHover === 'share';
-    ctx.fillStyle = shareHover ? 'rgba(255, 0, 255, 0.25)' : 'rgba(255, 0, 255, 0.10)';
-    ctx.strokeStyle = COLORS.magenta;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.roundRect(cx - btnW/2, btnY + btnSpacing * 2 - btnH/2, btnW, btnH, 6);
-    ctx.fill();
-    ctx.stroke();
-    ctx.font = '14px "Press Start 2P", monospace';
-    ctx.fillStyle = shareHover ? COLORS.magenta : '#cc88cc';
-    ctx.shadowColor = COLORS.magenta;
-    ctx.shadowBlur = getShadowBlur(shareHover ? 6 : 2);
-    ctx.fillText(gameState._shareConfirm ? 'COPIED!' : 'SHARE YOUR RUN', cx, btnY + btnSpacing * 2);
-    ctx.shadowBlur = 0;
-
-    // Leaderboard name entry prompt (shows if no name set and good score)
+    const nameY = CANVAS_HEIGHT - (compact ? 56 : 60);
     if (!leaderboard.hasName() && !gameState._nameEntryActive && gameState.score > 0) {
-        ctx.font = '8px "Press Start 2P", monospace';
+        ctx.font = `${compact ? 7 : 8}px "Press Start 2P", monospace`;
         ctx.fillStyle = COLORS.gold;
         const namePulse = 0.6 + 0.4 * Math.sin(gameState.animationTime * 3);
         ctx.globalAlpha = namePulse;
-        ctx.fillText('TAP HERE TO SET YOUR NAME FOR LEADERBOARDS', cx, CANVAS_HEIGHT * 0.88);
+        ctx.fillText('TAP HERE TO SET LEADERBOARD NAME', cx, nameY);
         ctx.globalAlpha = 1;
-        // Add a clickable region
-        if (!gameState._gameOverButtons.find(b => b.action === 'setname')) {
-            gameState._gameOverButtons.push({
-                x: cx - 200, y: CANVAS_HEIGHT * 0.88 - 12, w: 400, h: 24, action: 'setname'
-            });
-        }
+        gameState._gameOverButtons.push({
+            x: cx - Math.min(210, CANVAS_WIDTH * 0.46),
+            y: nameY - 12,
+            w: Math.min(420, CANVAS_WIDTH * 0.92),
+            h: 24,
+            action: 'setname'
+        });
     } else if (leaderboard.hasName()) {
-        ctx.font = '8px "Press Start 2P", monospace';
-        ctx.fillStyle = 'rgba(0, 255, 255, 0.5)';
-        ctx.fillText('PLAYING AS: ' + leaderboard.playerName, cx, CANVAS_HEIGHT * 0.88);
+        ctx.font = `${compact ? 7 : 8}px "Press Start 2P", monospace`;
+        ctx.fillStyle = 'rgba(0, 255, 255, 0.55)';
+        ctx.fillText('PLAYING AS: ' + leaderboard.playerName, cx, nameY);
     }
 
-    // Keyboard hint (smaller, subtle)
-    ctx.font = '10px "Press Start 2P", monospace';
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-    ctx.fillText('SPACE/A to retry \u00B7 ESC/B for menu', cx, CANVAS_HEIGHT * 0.95);
+    ctx.font = `${compact ? 7 : 9}px "Press Start 2P", monospace`;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.32)';
+    ctx.fillText('SPACE/A retry  ESC/B menu', cx, CANVAS_HEIGHT - 22);
 }
 
 // Name entry overlay for leaderboard
@@ -8884,9 +9368,13 @@ function promptNameEntry() {
 // GAME FLOW
 // ===================
 
-function startGame() {
+function startGame(runOptions = {}) {
+    const options = runOptions || {};
+
     // Hide the HTML start screen
     hideStartScreen();
+    document.body.classList.remove('game-over-active');
+    resetRunTuning();
 
     // Reset cursor from game over hover
     if (canvas) canvas.style.cursor = 'default';
@@ -8914,6 +9402,7 @@ function startGame() {
 
     // Apply map theme
     gameState.currentMap = MAP_THEMES[selectedMap] || MAP_THEMES.classic;
+    gameState.selectedMap = selectedMap;
     gameState.xgamesFinished = false;
 
     // Apply terrain mods from map theme (save originals for reset)
@@ -8924,10 +9413,13 @@ function startGame() {
         TERRAIN[key] = mapMods[key];
     }
 
-    // Invalidate gradient cache if map has custom bg colors
-    if (gameState.currentMap.bgColors) {
-        gradientCache.invalidate();
+    dailyChallenge.active = !!options.daily;
+    if (dailyChallenge.active) {
+        dailyChallenge.applyModifier();
     }
+
+    // Invalidate gradient cache if map has custom bg colors
+    gradientCache.invalidate();
 
     // Start music loop
     musicManager.play();
@@ -8968,13 +9460,15 @@ function startGame() {
         preJumpAngle: 0,
         jumpLaunchPower: 0,
         preloadCrouch: 0,
+        trickCharge: 0,
+        jumpInputHeld: false,
         approachingJump: null
     };
 
     gameState.camera = {
-        y: -CANVAS_HEIGHT * 0.35,
+        y: -CANVAS_HEIGHT * 0.58,
         targetY: 0,
-        lookAhead: 150,
+        lookAhead: 190,
         zoom: 1.0,
         targetZoom: 1.0
     };
@@ -8982,7 +9476,7 @@ function startGame() {
     gameState.terrain = {
         chunks: [],
         nextChunkY: 0,
-        seed: Math.floor(Math.random() * 100000),
+        seed: options.seed !== undefined ? options.seed : Math.floor(Math.random() * 100000),
         lastLodgeY: -9999,
         pendingExclusions: {}  // Cross-chunk landing zone exclusions keyed by chunkIndex
     };
@@ -9000,8 +9494,11 @@ function startGame() {
         beastX: 0,
         beastState: 'chasing',
         beastLungeTimer: 0,
+        telegraphTimer: 0,
         lungeTargetX: 0,
         lungeTargetY: 0,
+        lungeStartX: 0,
+        lungeStartY: 0,
         lungeProgress: 0,
         retreatTimer: 0,
         distanceTraveled: 0,
@@ -9072,6 +9569,8 @@ function startGame() {
     };
     gameState._noCrashDistance = 0;
     gameState._comboChainCelebrated = false;
+    gameState._landingImpacts = [];
+    gameState._newHighScore = false;
 
     // Start ghost recording + playback
     ghostSystem.startRecording();
@@ -9093,6 +9592,7 @@ function triggerGameOver(cause) {
 
     gameState.screen = 'gameOver';
     gameState.deathCause = cause;
+    document.body.classList.add('game-over-active');
 
     // Restore terrain values from map mods
     if (gameState._baseTerrain) {
@@ -9110,6 +9610,7 @@ function triggerGameOver(cause) {
     resetShopEffects();
 
     // Update high score
+    gameState._newHighScore = gameState.score > gameState.highScore;
     if (gameState.score > gameState.highScore) {
         gameState.highScore = gameState.score;
         saveHighScore();
@@ -9152,6 +9653,7 @@ function triggerGameOver(cause) {
         dailyChallenge.saveBest(gameState.score);
         dailyChallenge.active = false;
     }
+    resetRunTuning();
 
     // Report score to embed parent (if in iframe mode)
     embedMode.reportScore(gameState.score, gameState.distance, gameState.maxCombo);
@@ -10659,6 +11161,7 @@ function update(dt) {
     updateChase(dt);
     updateTimedShopEffects(dt);
     updateParticles(dt);
+    updateLandingImpacts(dt);
     updateCelebrations(dt);
     updateCombo(dt);
     updateScreenShake(dt);
@@ -10930,6 +11433,7 @@ function updateMapLockUI() {
 }
 
 function startSelectedMode() {
+    musicManager.startRunFromGesture();
     sfxManager.resume();
     if (selectedMode === 'slalom') {
         startSlalom();
@@ -10941,14 +11445,10 @@ function startSelectedMode() {
 }
 
 function startDailyChallenge() {
+    musicManager.startRunFromGesture();
     sfxManager.resume();
-    dailyChallenge.active = true;
     selectedMap = 'classic'; // Daily always uses classic
-    startGame();
-    // Apply daily seed for deterministic terrain
-    gameState.terrain.seed = dailyChallenge.seed;
-    // Apply daily modifier
-    dailyChallenge.applyModifier();
+    startGame({ daily: true, seed: dailyChallenge.seed });
     // Show modifier announcement
     gameState.celebrations.push({
         text: 'DAILY: ' + dailyChallenge.modifierLabel,
@@ -12796,14 +13296,17 @@ function fitCanvasToViewport() {
     if (!canvas) return;
 
     const isFullscreen = document.fullscreenElement || displaySettings.fullscreen;
-    const marginX = isFullscreen ? 0 : 20;
-    const marginY = isFullscreen ? 0 : 40;
+    const compactViewport = window.innerWidth <= 768 || window.innerHeight > window.innerWidth * 1.15;
+    const gameActive = !document.body.classList.contains('menu-active');
+    const shouldFillViewport = displaySettings.fillScreen && (isFullscreen || gameActive || compactViewport);
+    const marginX = shouldFillViewport ? 0 : 20;
+    const marginY = shouldFillViewport ? 0 : 40;
 
     const maxWidth = window.innerWidth - marginX;
     const maxHeight = window.innerHeight - marginY;
 
     // In fill screen mode, adapt canvas resolution to match screen dimensions
-    if (displaySettings.fillScreen && isFullscreen) {
+    if (shouldFillViewport) {
         // Calculate internal resolution to match screen aspect ratio
         // Use a reasonable base height and scale width to match aspect ratio
         const screenAspect = maxWidth / maxHeight;
@@ -12811,8 +13314,8 @@ function fitCanvasToViewport() {
         let internalWidth = Math.round(internalHeight * screenAspect);
 
         // Cap resolution to avoid performance issues
-        const maxInternalWidth = 1920;
-        const maxInternalHeight = 1080;
+        const maxInternalWidth = isFullscreen ? 1920 : 1440;
+        const maxInternalHeight = isFullscreen ? 1080 : 900;
         if (internalWidth > maxInternalWidth) {
             internalWidth = maxInternalWidth;
             internalHeight = Math.round(internalWidth / screenAspect);
@@ -12972,6 +13475,8 @@ function autoDetectResolution() {
 
     // iOS / Mobile - conservative internal resolution
     if (isIOS || isMobile) {
+        if (aspectRatio <= 0.65 && screenHeight >= 1080) return '608x1080';
+        if (aspectRatio <= 0.65) return '405x720';
         if (Math.min(screenWidth, screenHeight) >= 900 || dpr > 2) return '600x800';
         return '480x640';
     }
@@ -13125,6 +13630,7 @@ function toggleHapticsSetting(enabled) {
 function toggleMusic(enabled) {
     musicManager.enabled = enabled;
     if (!enabled) musicManager.stop();
+    else if (gameState.screen === 'playing') musicManager.play();
     try {
         localStorage.setItem('shredordead_music', enabled.toString());
     } catch (e) {}
@@ -13344,6 +13850,58 @@ const embedMode = {
         try {
             window.parent.postMessage({ type: 'shredordead:start' }, '*');
         } catch (e) {}
+    }
+};
+
+window.ShredQA = {
+    start(options = {}) {
+        selectedMap = options.map || 'classic';
+        selectedMode = options.mode || 'og';
+        startGame({ seed: options.seed !== undefined ? options.seed : 424242, daily: !!options.daily });
+    },
+
+    step(seconds = 1, dt = 1 / 60) {
+        const frames = Math.max(1, Math.ceil(seconds / dt));
+        for (let i = 0; i < frames; i++) {
+            stepGameFrame(dt, false);
+            if (gameState.screen !== 'playing') break;
+        }
+    },
+
+    state() {
+        return {
+            screen: gameState.screen,
+            score: gameState.score,
+            distance: gameState.distance,
+            map: gameState.selectedMap,
+            obstacles: gameState.obstacles.length,
+            jumps: gameState.jumps.length,
+            rails: gameState.rails.length,
+            ghostFrames: ghostSystem.bestGhost && ghostSystem.bestGhost.frames ? ghostSystem.bestGhost.frames.length : 0,
+            dailyActive: dailyChallenge.active
+        };
+    },
+
+    forceGameOver(cause = 'tree') {
+        if (gameState.screen !== 'gameOver') triggerGameOver(cause);
+        draw();
+    },
+
+    canvasSample() {
+        const sampleCanvas = canvas;
+        const sampleCtx = ctx;
+        if (!sampleCanvas || !sampleCtx) return { nonBlankRatio: 0, width: 0, height: 0 };
+        const w = sampleCanvas.width;
+        const h = sampleCanvas.height;
+        const data = sampleCtx.getImageData(0, 0, w, h).data;
+        let sampled = 0;
+        let nonBlank = 0;
+        const stride = Math.max(4, Math.floor((w * h) / 5000) * 4);
+        for (let i = 0; i < data.length; i += stride) {
+            sampled++;
+            if (data[i] + data[i + 1] + data[i + 2] > 18) nonBlank++;
+        }
+        return { nonBlankRatio: sampled ? nonBlank / sampled : 0, width: w, height: h };
     }
 };
 
