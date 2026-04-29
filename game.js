@@ -2282,6 +2282,499 @@ let gameState = {
     }
 };
 
+// ============================================
+// FUN PASS MODULE (additive — 2026-04-29)
+// Trick lanes, near-miss feedback, beast meter,
+// pacing wave director, mini-goals, next-unlock card.
+// All hooks guarded by funPass.enabled.
+// ============================================
+const funPass = {
+    enabled: true,
+    lanes: [],            // authored trick-lane attractors {x, y, type, fadeIn}
+    lastChunkInjected: -1,
+
+    wave: { idx: 0, name: 'WARMUP', timer: 0, duration: 14, announced: false },
+    waves: [
+        { name: 'WARMUP',   duration: 14, prefer: 'breather' },
+        { name: 'TRICK PARK', duration: 26, prefer: 'tricks'  },
+        { name: 'OPEN RIP',  duration: 22, prefer: 'breather' },
+        { name: 'TIGHT WOODS', duration: 22, prefer: 'forest'  },
+        { name: 'TRICK PARK', duration: 26, prefer: 'tricks'  },
+        { name: 'BEAST WATCH', duration: 24, prefer: 'beast'   }
+    ],
+
+    goal: null,
+    goalPool: [
+        { id: 'closeCalls3', label: 'DODGE 3 CLOSE CALLS', target: 3, color: '#00ffff' },
+        { id: 'grabs2',      label: 'LAND 2 GRABS',         target: 2, color: '#ff00ff' },
+        { id: 'rail1',       label: 'GRIND 1 RAIL',         target: 1, color: '#ffd700' },
+        { id: 'beast1',      label: 'ESCAPE 1 BEAST LUNGE', target: 1, color: '#ff4d8d' }
+    ],
+
+    // Edge tracking
+    _wasGrinding: false,
+    _wasAirborne: false,
+    _trickBanked: false,
+    _beastMissAt: -1,
+    _proximityFlash: 0,
+
+    // Career stats persisted across runs (used by mini-goal completion bonus)
+    careerCompletions: 0,
+
+    seed(n) {
+        // Deterministic small RNG based on int seed
+        const x = Math.sin(n * 9301 + 49297) * 233280;
+        return x - Math.floor(x);
+    },
+
+    beginRun() {
+        if (!this.enabled) return;
+        this.lanes.length = 0;
+        this.lastChunkInjected = -1;
+        this.wave = { idx: 0, name: 'WARMUP', timer: 0, duration: this.waves[0].duration, announced: false };
+        this._wasGrinding = false;
+        this._wasAirborne = false;
+        this._trickBanked = false;
+        this._beastMissAt = -1;
+        this._proximityFlash = 0;
+        // Pick a goal that suits the selected map. Avoid beast goal on no-beast modes.
+        const seedInt = (gameState.terrain && gameState.terrain.seed) || Math.floor(Math.random() * 99999);
+        const r = Math.floor(this.seed(seedInt) * this.goalPool.length);
+        const pick = this.goalPool[r] || this.goalPool[0];
+        this.goal = { id: pick.id, label: pick.label, target: pick.target, color: pick.color, progress: 0, completed: false };
+        // Announce after a short delay so opening tutorial isn't drowned out
+        gameState.celebrations.push({
+            text: 'GOAL: ' + pick.label,
+            subtext: '',
+            color: pick.color,
+            timer: 2.4,
+            scale: 0.85
+        });
+    },
+
+    update(dt, player) {
+        if (!this.enabled || !player) return;
+        // Wave director
+        const w = this.wave;
+        const def = this.waves[w.idx];
+        if (def) {
+            if (!w.announced && w.timer > 0.5) {
+                w.announced = true;
+                if (w.idx > 0) {
+                    gameState.celebrations.push({
+                        text: '» ' + def.name,
+                        subtext: '',
+                        color: '#ff00ff',
+                        timer: 1.4,
+                        scale: 0.8
+                    });
+                }
+            }
+            w.timer += dt;
+            if (w.timer >= w.duration) {
+                w.idx = (w.idx + 1) % this.waves.length;
+                w.timer = 0;
+                w.announced = false;
+                w.duration = this.waves[w.idx].duration;
+                w.name = this.waves[w.idx].name;
+            }
+        }
+
+        // Edge-detect grind start (rail goal)
+        if (player.grinding && !this._wasGrinding) {
+            this.noteEvent('rail');
+        }
+        this._wasGrinding = player.grinding;
+
+        // Edge-detect trick land — was airborne with auto trick → landed
+        const hadTrick = player.autoTrick != null;
+        if (this._wasAirborne && !player.airborne && hadTrick && !this._trickBanked && !player.crashed) {
+            this.noteEvent('trick');
+            this._trickBanked = true;
+        }
+        if (!player.airborne) this._trickBanked = false;
+        this._wasAirborne = player.airborne;
+
+        // Lane fade-in pulse cleanup; cull lanes far behind camera
+        const camY = gameState.camera ? gameState.camera.y : 0;
+        for (let i = this.lanes.length - 1; i >= 0; i--) {
+            const lane = this.lanes[i];
+            if (lane.fadeIn < 1) lane.fadeIn = Math.min(1, lane.fadeIn + dt * 1.6);
+            if (lane.y < camY - 200) this.lanes.splice(i, 1);
+        }
+
+        if (this._proximityFlash > 0) this._proximityFlash = Math.max(0, this._proximityFlash - dt * 2.5);
+    },
+
+    noteEvent(kind) {
+        if (!this.enabled || !this.goal || this.goal.completed) return;
+        let credit = false;
+        if (kind === 'closeCall' && this.goal.id === 'closeCalls3') credit = true;
+        else if (kind === 'trick' && this.goal.id === 'grabs2') credit = true;
+        else if (kind === 'rail' && this.goal.id === 'rail1') credit = true;
+        else if (kind === 'beastEscape' && this.goal.id === 'beast1') credit = true;
+        if (!credit) return;
+        this.goal.progress = Math.min(this.goal.target, this.goal.progress + 1);
+        if (this.goal.progress >= this.goal.target) {
+            this.goal.completed = true;
+            this.careerCompletions++;
+            try {
+                const stored = parseInt(localStorage.getItem('shredordead_goalcompletions') || '0', 10) || 0;
+                localStorage.setItem('shredordead_goalcompletions', String(stored + 1));
+            } catch (e) {}
+            const bonus = 750;
+            gameState.score += bonus;
+            gameState.flowMeter = Math.min(100, (gameState.flowMeter || 0) + 25);
+            gameState.celebrations.push({
+                text: 'GOAL COMPLETE!',
+                subtext: '+' + bonus,
+                color: this.goal.color,
+                timer: 1.8,
+                scale: 1.1
+            });
+            triggerScreenShake(8, 0.85);
+            if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([14, 22, 14]);
+        }
+    },
+
+    currentPrefer() {
+        const def = this.waves[this.wave.idx];
+        return def ? def.prefer : 'tricks';
+    },
+
+    // Inject 0–1 authored trick lane into a freshly generated terrain chunk.
+    // Mutates chunk.jumps / chunk.rails / chunk.collectibles / chunk.obstacles.
+    injectTrickLane(chunk, baseSeed, chunkIndex) {
+        if (!this.enabled) return;
+        if (chunkIndex <= this.lastChunkInjected) return;
+        // Skip the very first chunk so the tutorial / opening aren't crowded
+        if (chunk.y < 1200) return;
+        // Spacing: every 2-3 chunks
+        const spacing = 2 + Math.floor(this.seed(baseSeed + 7777) * 2); // 2..3
+        if ((chunkIndex - Math.max(0, this.lastChunkInjected)) < spacing && this.lastChunkInjected >= 0) return;
+
+        const prefer = this.currentPrefer();
+        if (prefer === 'forest') return; // tight woods stays raw
+
+        const rng = this.seed(baseSeed + 13371);
+        const slopeWidth = (typeof TERRAIN !== 'undefined' && TERRAIN.slopeWidth) ? TERRAIN.slopeWidth : 480;
+        const halfSlope = slopeWidth / 2;
+        // Center-ish lane offset (-0.4..0.4 of slope)
+        const laneX = (rng - 0.5) * (slopeWidth - 220);
+        const baseY = chunk.y + 80 + this.seed(baseSeed + 13373) * (TERRAIN.chunkHeight - 320);
+
+        // Choose template
+        let template;
+        if (prefer === 'tricks') {
+            template = rng < 0.5 ? 'rampCombo' : 'rampToRail';
+        } else if (prefer === 'beast') {
+            template = rng < 0.6 ? 'rampCombo' : 'coinArc';
+        } else {
+            template = rng < 0.55 ? 'coinArc' : 'rampCombo';
+        }
+
+        // Helper to clear nearby obstacles in this chunk so lane stays readable.
+        const clearArea = (cx, cy, rx, ry) => {
+            for (let i = chunk.obstacles.length - 1; i >= 0; i--) {
+                const o = chunk.obstacles[i];
+                if (Math.abs(o.x - cx) < rx && Math.abs(o.y - cy) < ry) {
+                    chunk.obstacles.splice(i, 1);
+                }
+            }
+        };
+
+        if (template === 'rampCombo') {
+            const jumpType = JUMP_TYPES.medium;
+            chunk.jumps.push({
+                x: laneX,
+                y: baseY,
+                width: jumpType.width,
+                height: jumpType.height,
+                launchPower: jumpType.power,
+                color: jumpType.color,
+                glow: jumpType.glow,
+                type: 'normal',
+                massive: false,
+                _funLane: true
+            });
+            clearArea(laneX, baseY + 180, 100, 220);
+            // Add coin arc landing reward
+            chunk.collectibles = chunk.collectibles || [];
+            for (let k = 0; k < 5; k++) {
+                const t = k / 4;
+                chunk.collectibles.push({
+                    x: laneX + (t - 0.5) * 30,
+                    y: baseY + 120 + t * 200,
+                    type: 'normal',
+                    collected: false,
+                    _funLane: true
+                });
+            }
+            this.lanes.push({ x: laneX, y: baseY, type: 'rampCombo', fadeIn: 0 });
+        } else if (template === 'rampToRail') {
+            const jumpType = JUMP_TYPES.medium;
+            chunk.jumps.push({
+                x: laneX,
+                y: baseY,
+                width: jumpType.width,
+                height: jumpType.height,
+                launchPower: jumpType.power,
+                color: jumpType.color,
+                glow: jumpType.glow,
+                type: 'normal',
+                massive: false,
+                _funLane: true
+            });
+            const railX = laneX;
+            const railY = baseY + 260;
+            chunk.rails.push({
+                x: railX,
+                y: railY,
+                endX: railX + 8,
+                endY: railY + 180,
+                length: 180,
+                grindableType: 'rail',
+                _funLane: true
+            });
+            clearArea(laneX, baseY + 230, 110, 320);
+            this.lanes.push({ x: laneX, y: baseY, type: 'rampToRail', fadeIn: 0 });
+        } else { // coinArc
+            chunk.collectibles = chunk.collectibles || [];
+            for (let k = 0; k < 7; k++) {
+                const t = k / 6;
+                const arc = Math.sin(t * Math.PI) * 36;
+                chunk.collectibles.push({
+                    x: laneX + (t - 0.5) * 80,
+                    y: baseY + t * 220 - arc,
+                    type: k === 3 ? 'big' : 'normal',
+                    collected: false,
+                    _funLane: true
+                });
+            }
+            clearArea(laneX, baseY + 110, 90, 180);
+            this.lanes.push({ x: laneX, y: baseY, type: 'coinArc', fadeIn: 0 });
+        }
+
+        this.lastChunkInjected = chunkIndex;
+    },
+
+    drawLanes(ctx) {
+        if (!this.enabled) return;
+        const camY = gameState.camera ? gameState.camera.y : 0;
+        const ahead = camY + CANVAS_HEIGHT * 0.25;
+        const time = gameState.animationTime || 0;
+        ctx.save();
+        // Authored lanes (stronger / coloured)
+        for (const lane of this.lanes) {
+            const dy = lane.y - ahead;
+            if (dy < -CANVAS_HEIGHT * 0.6 || dy > CANVAS_HEIGHT * 0.9) continue;
+            const screen = worldToScreen(lane.x, lane.y);
+            const visibility = lane.fadeIn * (1 - Math.max(0, (lane.y - camY - CANVAS_HEIGHT * 0.85) / 200));
+            if (visibility <= 0) continue;
+            const color = lane.type === 'rampToRail' ? '#ffd700'
+                       : lane.type === 'rampCombo'  ? '#00ffff'
+                                                    : '#ff00ff';
+            for (let i = 0; i < 3; i++) {
+                const phase = (time * 2 + i * 0.4) % 1;
+                const alpha = visibility * (0.55 - i * 0.13) * (0.6 + 0.4 * (1 - phase));
+                if (alpha <= 0.02) continue;
+                const cy = screen.y - 40 - i * 22 - phase * 6;
+                ctx.globalAlpha = alpha;
+                ctx.strokeStyle = color;
+                ctx.shadowColor = color;
+                ctx.shadowBlur = getShadowBlur(6);
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(screen.x - 18, cy);
+                ctx.lineTo(screen.x, cy + 12);
+                ctx.lineTo(screen.x + 18, cy);
+                ctx.stroke();
+            }
+        }
+        // Universal subtle hint above any approaching ramp
+        const player = gameState.player;
+        const jumps = gameState.jumps || [];
+        if (player) {
+            for (let j = 0; j < jumps.length; j++) {
+                const jp = jumps[j];
+                if (jp._funLane) continue; // already covered above
+                const dy = jp.y - player.y;
+                if (dy < 60 || dy > 360) continue;
+                const dx = Math.abs(jp.x - player.x);
+                if (dx > 120) continue;
+                const screen = worldToScreen(jp.x, jp.y);
+                const proximity = 1 - Math.min(1, dy / 360);
+                const phase = (time * 1.6) % 1;
+                ctx.globalAlpha = 0.32 * proximity * (0.6 + 0.4 * (1 - phase));
+                ctx.strokeStyle = '#9bf0ff';
+                ctx.shadowColor = '#9bf0ff';
+                ctx.shadowBlur = getShadowBlur(4);
+                ctx.lineWidth = 2;
+                const cy = screen.y - 28 - phase * 4;
+                ctx.beginPath();
+                ctx.moveTo(screen.x - 14, cy);
+                ctx.lineTo(screen.x, cy + 10);
+                ctx.lineTo(screen.x + 14, cy);
+                ctx.stroke();
+            }
+        }
+        ctx.restore();
+        ctx.globalAlpha = 1;
+        ctx.shadowBlur = 0;
+    },
+
+    drawProximityMeter(ctx) {
+        if (!this.enabled) return;
+        const chase = gameState.chase;
+        if (!chase || !chase.beastActive) return;
+        const player = gameState.player;
+        if (!player) return;
+        // Only show when meaningful (player.y - beastY between 0 and 360)
+        const dist = player.y - chase.beastY;
+        if (dist < -60 || dist > 420) return;
+        const proximity = Math.max(0, Math.min(1, 1 - (dist / 360)));
+        const x = CANVAS_WIDTH - 28;
+        const y0 = 70;
+        const h = Math.min(160, CANVAS_HEIGHT * 0.32);
+        ctx.save();
+        // Frame
+        ctx.globalAlpha = 0.55;
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillRect(x - 8, y0 - 6, 16, h + 12);
+        ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x - 8, y0 - 6, 16, h + 12);
+        // Fill
+        const fillH = h * proximity;
+        const r = Math.floor(255 * proximity);
+        const g = Math.floor(255 * (1 - proximity));
+        const fillColor = `rgb(${r},${g},${Math.floor(80 + 60 * (1 - proximity))})`;
+        ctx.globalAlpha = 0.85;
+        ctx.fillStyle = fillColor;
+        ctx.shadowColor = fillColor;
+        ctx.shadowBlur = getShadowBlur(8);
+        ctx.fillRect(x - 5, y0 + (h - fillH), 10, fillH);
+        // Label
+        ctx.shadowBlur = 0;
+        ctx.globalAlpha = 0.85;
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '7px "Press Start 2P", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('BEAST', x, y0 - 12);
+        // DODGE NOW! during lunge
+        if (chase.beastState === 'lunging' && chase.lungeProgress > 0.35) {
+            const pulse = 0.6 + 0.4 * Math.sin((gameState.animationTime || 0) * 22);
+            ctx.globalAlpha = pulse;
+            ctx.fillStyle = '#ff00ff';
+            ctx.shadowColor = '#ff00ff';
+            ctx.shadowBlur = getShadowBlur(10);
+            ctx.font = 'bold 12px "Press Start 2P", monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('DODGE!', CANVAS_WIDTH / 2, CANVAS_HEIGHT * 0.42);
+        }
+        ctx.restore();
+        ctx.globalAlpha = 1;
+        ctx.shadowBlur = 0;
+    },
+
+    drawGoalHud(ctx) {
+        if (!this.enabled || !this.goal) return;
+        const g = this.goal;
+        const x = 12;
+        const y = 14;
+        const w = 198;
+        const h = 26;
+        ctx.save();
+        ctx.globalAlpha = g.completed ? 0.55 : 0.85;
+        ctx.fillStyle = 'rgba(0,0,0,0.55)';
+        ctx.fillRect(x, y, w, h);
+        ctx.strokeStyle = g.color;
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(x, y, w, h);
+        // Progress bar
+        const pad = 3;
+        const pw = (w - pad * 2) * (g.progress / g.target);
+        ctx.fillStyle = g.color;
+        ctx.globalAlpha = g.completed ? 0.5 : 0.75;
+        ctx.fillRect(x + pad, y + h - 5, pw, 3);
+        // Label
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = g.completed ? '#9be59b' : '#ffffff';
+        ctx.font = '8px "Press Start 2P", monospace';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        const label = g.completed ? 'GOAL COMPLETE' : g.label;
+        ctx.fillText(label, x + 6, y + 5);
+        ctx.font = '7px "Press Start 2P", monospace';
+        ctx.fillStyle = g.color;
+        ctx.fillText(g.progress + ' / ' + g.target, x + 6, y + 16);
+        ctx.restore();
+        ctx.globalAlpha = 1;
+    },
+
+    drawNextUnlockCard(ctx, cx, topY, compact) {
+        if (!this.enabled) return topY;
+        // Pull current best distance and find next unlock
+        let best = gameState.distance || 0;
+        try { best = Math.max(best, parseInt(localStorage.getItem('shredordead_bestdistance') || '0', 10)); } catch (e) {}
+        const next = Object.entries(MAP_UNLOCKS)
+            .filter(([id, req]) => req.distance > 0 && req.distance > best)
+            .sort((a, b) => a[1].distance - b[1].distance)[0];
+
+        const w = Math.min(360, CANVAS_WIDTH * 0.82);
+        const h = compact ? 32 : 50;
+        const x = cx - w / 2;
+        const y = topY;
+
+        ctx.save();
+        ctx.globalAlpha = 0.92;
+        ctx.fillStyle = 'rgba(8, 8, 22, 0.85)';
+        ctx.fillRect(x, y, w, h);
+        ctx.strokeStyle = 'rgba(0, 255, 255, 0.7)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, w, h);
+
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        ctx.font = `bold ${compact ? 7 : 9}px "Press Start 2P", monospace`;
+        ctx.fillStyle = '#00ffff';
+        ctx.fillText('NEXT UNLOCK', x + 8, y + 5);
+
+        if (next) {
+            const req = next[1];
+            const left = Math.max(0, req.distance - best);
+            ctx.font = `${compact ? 9 : 13}px "Press Start 2P", monospace`;
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'right';
+            ctx.fillText(req.name.toUpperCase(), x + w - 8, y + 5);
+            ctx.font = `${compact ? 7 : 8}px "Press Start 2P", monospace`;
+            ctx.fillStyle = '#ffd700';
+            ctx.textAlign = 'left';
+            ctx.fillText(`${left}m to go`, x + 8, y + (compact ? 18 : 28));
+            ctx.fillStyle = 'rgba(255,255,255,0.55)';
+            ctx.textAlign = 'right';
+            ctx.fillText('one more run', x + w - 8, y + (compact ? 18 : 28));
+            // Progress bar across the bottom
+            const pct = Math.max(0.02, Math.min(1, best / req.distance));
+            ctx.globalAlpha = 0.55;
+            ctx.fillStyle = '#00ffff';
+            ctx.fillRect(x, y + h - 3, w * pct, 3);
+        } else {
+            ctx.font = `${compact ? 9 : 13}px "Press Start 2P", monospace`;
+            ctx.fillStyle = '#9be59b';
+            ctx.textAlign = 'right';
+            ctx.fillText('ALL MAPS UNLOCKED', x + w - 8, y + 5);
+            ctx.font = `${compact ? 7 : 8}px "Press Start 2P", monospace`;
+            ctx.fillStyle = 'rgba(255,255,255,0.55)';
+            ctx.textAlign = 'left';
+            ctx.fillText('chase the leaderboard', x + 8, y + (compact ? 18 : 28));
+        }
+        ctx.restore();
+        ctx.globalAlpha = 1;
+        return y + h;
+    }
+};
+
 // ===================
 // INPUT HANDLING
 // ===================
@@ -3895,6 +4388,11 @@ function generateTerrainChunk(chunkIndex) {
         }
     }
 
+    // Fun pass: optional authored trick lane (additive). Skipped during opening / forest waves.
+    if (typeof funPass !== 'undefined' && funPass.enabled && gameState.mode === 'og') {
+        funPass.injectTrickLane(chunk, baseSeed, chunkIndex);
+    }
+
     return chunk;
 }
 
@@ -4859,12 +5357,14 @@ function collectItem(collectible) {
 
 function checkNearMisses(player) {
     // Check for near-misses with obstacles
-    // Use squared distances to avoid expensive sqrt (threshold^2 = 35^2 = 1225, min^2 = 20^2 = 400)
-    const nearMissThresholdSq = 1225;
-    const minDistSq = 400;
+    // Loosened thresholds for fun pass: outer 46px, inner 22px
+    // (threshold^2 = 46^2 = 2116, min^2 = 22^2 = 484, reset^2 = 66^2 = 4356)
+    const nearMissThresholdSq = 2116;
+    const minDistSq = 484;
+    const resetDistSq = 4356;
 
-    const nearMinY = player.y - 55;
-    const nearMaxY = player.y + 55;
+    const nearMinY = player.y - 70;
+    const nearMaxY = player.y + 70;
     for (const obs of gameState.obstacles) {
         if (obs.y < nearMinY) continue;
         if (obs.y > nearMaxY) break;
@@ -4878,17 +5378,18 @@ function checkNearMisses(player) {
                 obs.nearMissTriggered = true;
 
                 gameState.nearMissStreak++;
-                const points = 25 * gameState.nearMissStreak;
+                const streak = gameState.nearMissStreak;
+                const points = 25 * streak;
                 gameState.score += points;
 
-                // Build flow meter
-                gameState.flowMeter = Math.min(100, gameState.flowMeter + 8);
+                // Build flow meter — slightly hotter on streaks
+                gameState.flowMeter = Math.min(100, gameState.flowMeter + (streak >= 2 ? 11 : 8));
 
                 // Celebrate every close call with escalating excitement
-                const streak = gameState.nearMissStreak;
                 const ccColor = streak >= 3 ? COLORS.limeGreen : streak >= 2 ? COLORS.gold : COLORS.warning;
                 const ccScale = streak >= 3 ? 0.9 + Math.min(streak * 0.05, 0.4) : streak >= 2 ? 0.85 : 0.75;
-                const ccText = streak >= 2 ? `CLOSE CALL x${streak}!` : 'CLOSE CALL!';
+                let ccText = streak >= 2 ? `CLOSE CALL x${streak}!` : 'CLOSE CALL!';
+                if (streak >= 4) ccText = 'THREAD THE NEEDLE!';
                 gameState.celebrations.push({
                     text: ccText,
                     subtext: `+${points}`,
@@ -4897,8 +5398,18 @@ function checkNearMisses(player) {
                     scale: ccScale
                 });
                 triggerScreenShake(2 + Math.min(streak, 4), 0.85);
+
+                // Camera pulse + audio accent on big streaks
+                if (streak >= 4) {
+                    if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([10, 20, 10]);
+                    if (typeof sfxManager !== 'undefined' && sfxManager.trickLand) {
+                        try { sfxManager.trickLand(); } catch (e) {}
+                    }
+                }
+
+                if (typeof funPass !== 'undefined') funPass.noteEvent('closeCall');
             }
-        } else if (distSq > 3025) {  // (35 + 20)^2 = 55^2 = 3025
+        } else if (distSq > resetDistSq) {
             // Reset near-miss flag when far enough away
             obs.nearMissTriggered = false;
         }
@@ -5318,17 +5829,21 @@ function updateBeast(dt) {
                 chase.missCount++;
                 chase.beastState = 'retreating';
                 chase.retreatTimer = CHASE.beastRetreatDuration;
-                const escapePoints = Math.floor((CHASE.beastEscapeBonus + chase.missCount * 100) * (gameState.flowMultiplier || 1));
+                // Fun pass: bigger payoff so escapes feel earned
+                const funBonus = 200;
+                const escapePoints = Math.floor((CHASE.beastEscapeBonus + funBonus + chase.missCount * 120) * (gameState.flowMultiplier || 1));
                 gameState.score += escapePoints;
-                gameState.flowMeter = Math.min(100, gameState.flowMeter + 16);
+                gameState.flowMeter = Math.min(100, gameState.flowMeter + 22);
                 gameState.celebrations.push({
-                    text: 'BEAST DODGED',
+                    text: 'OUTPLAYED!',
                     subtext: `+${escapePoints}`,
                     color: COLORS.cyan,
-                    timer: 1.1,
-                    scale: 1.0
+                    timer: 1.4,
+                    scale: 1.2
                 });
+                triggerScreenShake(7, 0.86);
                 if (navigator.vibrate) navigator.vibrate([14, 18, 14]);
+                if (typeof funPass !== 'undefined') funPass.noteEvent('beastEscape');
 
                 // Warn player if next lunge is guaranteed
                 if (chase.missCount >= CHASE.maxMisses - 1) {
@@ -5652,6 +6167,9 @@ function draw() {
     // Draw landing shockwaves above snow spray
     drawLandingImpacts();
 
+    // Fun pass: chevron attractors above lanes (drawn before celebrations so floating text wins)
+    if (typeof funPass !== 'undefined') funPass.drawLanes(ctx);
+
     // Draw celebrations
     drawCelebrations();
 
@@ -5690,6 +6208,12 @@ function draw() {
 
     // Draw HUD overlay at bottom of screen
     drawHUD();
+
+    // Fun pass HUD overlays (after main HUD so they sit on top)
+    if (typeof funPass !== 'undefined') {
+        funPass.drawProximityMeter(ctx);
+        funPass.drawGoalHud(ctx);
+    }
 
     // X Games photo finish overlay
     if (gameState.xgamesFinished) {
@@ -9262,19 +9786,40 @@ function drawGameOverScreen() {
 
     const metaY = statsY + statsSpacing * 3 + (compact ? 10 : 16);
     const coinsEarned = shredCoinState.earned || 0;
-    const metaText = coinsEarned > 0 ? `+${coinsEarned} SHRED COINS` : getNextUnlockStatusText();
-    ctx.font = `${compact ? 9 : 11}px "Press Start 2P", monospace`;
-    ctx.fillStyle = coinsEarned > 0 ? COLORS.limeGreen : COLORS.cyan;
-    ctx.shadowColor = ctx.fillStyle;
-    ctx.shadowBlur = getShadowBlur(4);
-    ctx.fillText(metaText, cx, metaY);
-    ctx.shadowBlur = 0;
+    // Fun pass: card replaces redundant unlock text in the meta slot when there's room.
+    const showFunUnlockCard = (typeof funPass !== 'undefined') && funPass.enabled && CANVAS_HEIGHT > 520;
+
+    let cursorY = metaY;
+    if (coinsEarned > 0) {
+        ctx.font = `${compact ? 9 : 11}px "Press Start 2P", monospace`;
+        ctx.fillStyle = COLORS.limeGreen;
+        ctx.shadowColor = ctx.fillStyle;
+        ctx.shadowBlur = getShadowBlur(4);
+        ctx.fillText(`+${coinsEarned} SHRED COINS`, cx, cursorY);
+        ctx.shadowBlur = 0;
+        cursorY += compact ? 22 : 28;
+    } else if (!showFunUnlockCard) {
+        ctx.font = `${compact ? 9 : 11}px "Press Start 2P", monospace`;
+        ctx.fillStyle = COLORS.cyan;
+        ctx.shadowColor = ctx.fillStyle;
+        ctx.shadowBlur = getShadowBlur(4);
+        ctx.fillText(getNextUnlockStatusText(), cx, cursorY);
+        ctx.shadowBlur = 0;
+        cursorY += compact ? 22 : 28;
+    }
+
+    let unlockBottom = cursorY;
+    if (showFunUnlockCard) {
+        unlockBottom = funPass.drawNextUnlockCard(ctx, cx, cursorY, compact);
+        cursorY = unlockBottom + (compact ? 6 : 10);
+    }
 
     const achCount = achievementState.getCount();
     const achTotal = achievementState.getTotal();
     ctx.font = `${compact ? 8 : 10}px "Press Start 2P", monospace`;
     ctx.fillStyle = 'rgba(255, 215, 0, 0.62)';
-    ctx.fillText(`${achCount}/${achTotal} ACHIEVEMENTS`, cx, metaY + (compact ? 24 : 30));
+    ctx.fillText(`${achCount}/${achTotal} ACHIEVEMENTS`, cx, cursorY);
+    cursorY += compact ? 18 : 22;
 
     if (gameState._newHighScore) {
         const pulse = Math.sin(gameState.animationTime * 5) * 0.3 + 0.7;
@@ -9283,15 +9828,17 @@ function drawGameOverScreen() {
         ctx.fillStyle = COLORS.gold;
         ctx.shadowColor = COLORS.gold;
         ctx.shadowBlur = getShadowBlur(10);
-        ctx.fillText('NEW HIGH SCORE!', cx, metaY + (compact ? 48 : 58));
+        ctx.fillText('NEW HIGH SCORE!', cx, cursorY + (compact ? 8 : 10));
         ctx.shadowBlur = 0;
         ctx.globalAlpha = 1;
+        cursorY += compact ? 22 : 28;
     }
 
     const btnW = Math.min(320, CANVAS_WIDTH * 0.74);
     const btnH = compact ? 40 : 44;
     const btnSpacing = compact ? 47 : 52;
-    const btnY = Math.min(CANVAS_HEIGHT - (compact ? 142 : 160), metaY + (compact ? 94 : 122));
+    // Buttons sit below the stack
+    let btnY = Math.min(CANVAS_HEIGHT - (compact ? 142 : 160), cursorY + (compact ? 18 : 24) + btnH / 2);
 
     gameState._gameOverButtons = [
         { x: cx - btnW / 2, y: btnY - btnH / 2, w: btnW, h: btnH, action: 'restart' },
@@ -9571,6 +10118,9 @@ function startGame(runOptions = {}) {
     gameState._comboChainCelebrated = false;
     gameState._landingImpacts = [];
     gameState._newHighScore = false;
+
+    // Fun pass: kick off pacing waves, mini-goal, lane attractors
+    if (typeof funPass !== 'undefined') funPass.beginRun();
 
     // Start ghost recording + playback
     ghostSystem.startRecording();
@@ -11166,6 +11716,7 @@ function update(dt) {
     updateCombo(dt);
     updateScreenShake(dt);
     updateNoCrashDistance(dt);
+    if (typeof funPass !== 'undefined') funPass.update(dt, gameState.player);
 
     // Ghost replay recording
     ghostSystem.recordFrame(gameState.player);
@@ -13878,7 +14429,14 @@ window.ShredQA = {
             jumps: gameState.jumps.length,
             rails: gameState.rails.length,
             ghostFrames: ghostSystem.bestGhost && ghostSystem.bestGhost.frames ? ghostSystem.bestGhost.frames.length : 0,
-            dailyActive: dailyChallenge.active
+            dailyActive: dailyChallenge.active,
+            funPass: (typeof funPass !== 'undefined' && funPass.enabled) ? {
+                enabled: true,
+                wave: funPass.wave && funPass.waves[funPass.wave.idx] ? funPass.waves[funPass.wave.idx].name : null,
+                waveTimer: funPass.wave ? funPass.wave.timer : 0,
+                lanes: funPass.lanes.length,
+                goal: funPass.goal ? { id: funPass.goal.id, progress: funPass.goal.progress, target: funPass.goal.target, completed: !!funPass.goal.completed } : null
+            } : { enabled: false }
         };
     },
 
