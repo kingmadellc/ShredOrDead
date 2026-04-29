@@ -94,6 +94,20 @@ try {
     if (!dailyDuring.dailyActive) failures.push(`${viewport.name}: daily modifier did not activate`);
     if (dailyAfter.dailyActive) failures.push(`${viewport.name}: daily modifier leaked into normal run`);
 
+    // Fun pass focused check: short structured run, then confirm
+    // wave timer has advanced and a mini-goal exists. Keep total well under
+    // QA budget by capping the step length.
+    await page.evaluate(() => {
+      window.ShredQA.start({ seed: 314159, map: 'classic' });
+      window.ShredQA.step(20);
+    });
+    const funState = await page.evaluate(() => window.ShredQA.state());
+    if (funState && funState.funPass && funState.funPass.enabled) {
+      if (!funState.funPass.goal) failures.push(`${viewport.name}: fun pass mini-goal did not initialize`);
+      if (typeof funState.funPass.lanes !== 'number') failures.push(`${viewport.name}: fun pass lane count missing`);
+      if ((funState.funPass.waveTimer || 0) <= 0) failures.push(`${viewport.name}: fun pass wave timer did not advance`);
+    }
+
     await page.evaluate(() => {
       window.ShredQA.forceGameOver('tree');
     });
