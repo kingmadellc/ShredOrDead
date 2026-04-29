@@ -3,9 +3,11 @@
   "version": "1.0.0",
   "description": "Shred or Dead - A retro snowboarding game inspired by SkiFree",
   "scripts": {
-    "start": "npx serve -p 3001"
+    "start": "npx serve -p 3001",
+    "qa": "node scripts/qa-smoke.mjs"
   },
   "devDependencies": {
+    "playwright": "^1.56.1",
     "serve": "^14.2.0"
   }
 }
