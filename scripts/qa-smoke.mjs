@@ -107,6 +107,22 @@ try {
       if (typeof funState.funPass.lanes !== 'number') failures.push(`${viewport.name}: fun pass lane count missing`);
       if ((funState.funPass.waveTimer || 0) <= 0) failures.push(`${viewport.name}: fun pass wave timer did not advance`);
     }
+    const sidewaysRails = (funState.railOrientation || []).filter((rail) => {
+      const dy = Math.abs(rail.dy || 0);
+      const dx = Math.abs(rail.dx || 0);
+      return dy <= 0 || dx > Math.max(14, dy * 0.12);
+    });
+    if (sidewaysRails.length) failures.push(`${viewport.name}: sideways rail geometry detected (${JSON.stringify(sidewaysRails[0])})`);
+    if (funState.camera && (funState.camera.zoom !== 1 || funState.camera.targetZoom !== 1)) {
+      failures.push(`${viewport.name}: camera zoom changed during play (${JSON.stringify(funState.camera)})`);
+    }
+
+    await page.evaluate(() => {
+      window.ShredQA.start({ seed: 271828, map: 'classic' });
+      window.ShredQA.step(30);
+    });
+    const lodgeState = await page.evaluate(() => window.ShredQA.state());
+    if ((lodgeState.lastLodgeY || -1) < 1200) failures.push(`${viewport.name}: lodge did not populate by 30s fixed-seed run`);
 
     await page.evaluate(() => {
       window.ShredQA.forceGameOver('tree');
