@@ -1833,9 +1833,10 @@ const LODGE = {
     // Entrance ramp (points UP the mountain so player can snowboard in)
     rampWidth: 80,              // Width of entrance ramp
     rampLength: 100,            // Length of ramp leading to lodge
-    spawnChance: 0.01,          // 1% chance per chunk (very rare)
-    minSpawnDistance: 1500,     // Only spawn after 1500 units traveled
-    minLodgeSpacing: 3000,      // Minimum distance between lodges
+    spawnChance: 0.14,          // Visible safe havens without turning the run into lodge hopping
+    minSpawnDistance: 1200,     // Only spawn after the opening stretch
+    minLodgeSpacing: 2200,      // Minimum distance between lodges
+    firstGuaranteedDistance: 3600, // Ensure the lodge loop appears in normal playtests
     // Interior settings
     interiorWidth: 400,         // Lodge interior room width
     interiorHeight: 300,        // Lodge interior room height
@@ -2410,7 +2411,7 @@ const funPass = {
         if (!this.enabled || !this.goal || this.goal.completed) return;
         let credit = false;
         if (kind === 'closeCall' && this.goal.id === 'closeCalls3') credit = true;
-        else if (kind === 'trick' && this.goal.id === 'grabs2') credit = true;
+        else if (kind === 'grab' && this.goal.id === 'grabs2') credit = true;
         else if (kind === 'rail' && this.goal.id === 'rail1') credit = true;
         else if (kind === 'beastEscape' && this.goal.id === 'beast1') credit = true;
         if (!credit) return;
@@ -2530,11 +2531,12 @@ const funPass = {
             chunk.rails.push({
                 x: railX,
                 y: railY,
-                endX: railX + 8,
-                endY: railY + 180,
-                length: 180,
+                endX: railX,
+                endY: railY + 220,
+                length: 220,
                 grindableType: 'rail',
-                _funLane: true
+                _funLane: true,
+                _downhillRail: true
             });
             clearArea(laneX, baseY + 230, 110, 320);
             this.lanes.push({ x: laneX, y: baseY, type: 'rampToRail', fadeIn: 0 });
@@ -3775,6 +3777,35 @@ function spawnLandingImpact(x, y, force, color = COLORS.cyan) {
     });
 }
 
+function spawnBigAirLaunchEffect(x, y, power, massive = false) {
+    const force = clamp(power / 1.4, 0.9, 2.4);
+    const color = massive ? COLORS.gold : COLORS.cyan;
+    gameState._bigAirCue = {
+        timer: 0.72,
+        life: 0.72,
+        power,
+        color,
+        massive
+    };
+
+    const count = Math.min(24, Math.floor(8 + force * 8));
+    for (let i = 0; i < count; i++) {
+        const spread = (Math.random() - 0.5) * Math.PI;
+        const angle = -Math.PI / 2 + spread;
+        const speed = 90 + Math.random() * (120 + force * 70);
+        gameState.particles.push(ParticlePool.spawn(
+            x + (Math.random() - 0.5) * 26,
+            y + 8,
+            Math.cos(angle) * speed,
+            Math.sin(angle) * speed,
+            2 + Math.random() * (2 + force),
+            i % 3 === 0 ? COLORS.hotPink : color,
+            0.28 + Math.random() * 0.24,
+            i % 3 === 0 ? 'spark' : 'snow'
+        ));
+    }
+}
+
 function updateLandingImpacts(dt) {
     const impacts = gameState._landingImpacts;
     if (!impacts) return;
@@ -3783,6 +3814,13 @@ function updateLandingImpacts(dt) {
         impacts[i].age += dt;
         if (impacts[i].age >= impacts[i].life) impacts.splice(i, 1);
     }
+}
+
+function updateBigAirCue(dt) {
+    const cue = gameState._bigAirCue;
+    if (!cue) return;
+    cue.timer -= dt;
+    if (cue.timer <= 0) gameState._bigAirCue = null;
 }
 
 function updateParticles(dt) {
@@ -3969,9 +4007,8 @@ function generateTerrainChunk(chunkIndex) {
                 // Rails - must be mostly VERTICAL (player goes DOWN the mountain)
                 const railLength = 100 + seededRandom(cellSeed + 0.8) * 150;
 
-                // FIXED: Rails should be mostly vertical with only slight horizontal drift
-                // Max horizontal drift is 20% of rail length to ensure grindable
-                const maxDrift = railLength * 0.15;
+                // Rails should read as downhill lines, not sideways props.
+                const maxDrift = Math.min(12, railLength * 0.06);
                 const horizontalDrift = (seededRandom(cellSeed + 0.9) - 0.5) * maxDrift;
 
                 const railX = (col - gridCols / 2 + 0.5) * TERRAIN.laneWidth;
@@ -3984,7 +4021,8 @@ function generateTerrainChunk(chunkIndex) {
                     endY: railY + railLength,       // Always goes DOWN (positive Y)
                     length: railLength,
                     col: col,
-                    endColApprox: col
+                    endColApprox: col,
+                    downhillRail: true
                 };
 
                 // Check for collision with existing rails AND jumps
@@ -4134,7 +4172,8 @@ function generateTerrainChunk(chunkIndex) {
             endX: rail.endX,
             endY: rail.endY,
             length: rail.length,
-            grindableType: grindableType
+            grindableType: grindableType,
+            _downhillRail: true
         });
     }
 
@@ -4317,15 +4356,24 @@ function generateTerrainChunk(chunkIndex) {
     const chunkCenterY = chunk.y + TERRAIN.chunkHeight / 2;
     const distanceFromStart = chunk.y;
     const distanceFromLastLodge = chunkCenterY - gameState.terrain.lastLodgeY;
+    const lodgeRoll = seededRandom(baseSeed + 5555);
+    const firstLodgeMissing = gameState.terrain.lastLodgeY < 0 &&
+        distanceFromStart >= LODGE.firstGuaranteedDistance;
 
     if (gameState.mode === 'og' &&
         distanceFromStart >= LODGE.minSpawnDistance &&
         distanceFromLastLodge >= LODGE.minLodgeSpacing &&
-        seededRandom(baseSeed + 5555) < LODGE.spawnChance) {
+        (lodgeRoll < LODGE.spawnChance || firstLodgeMissing)) {
 
         const lodgeSeed = baseSeed + 5556;
-        // Place lodge in center-ish area (avoid edges)
-        const lodgeCol = 1 + Math.floor(seededRandom(lodgeSeed) * (gridCols - 3));
+        // Place lodge in a side lane so it reads as an optional haven, not an auto-interrupt.
+        const lodgeSide = seededRandom(lodgeSeed) < 0.5 ? -1 : 1;
+        const sideOffset = Math.max(2, Math.floor(gridCols * 0.28));
+        const lodgeCol = clamp(
+            centerLane + lodgeSide * sideOffset + Math.floor((seededRandom(lodgeSeed + 2) - 0.5) * 2),
+            1,
+            gridCols - 2
+        );
         const lodgeRow = 1 + Math.floor(seededRandom(lodgeSeed + 1) * (gridRows - 3));
         const lodgeX = (lodgeCol - gridCols / 2 + 0.5) * TERRAIN.laneWidth;
         const lodgeY = chunk.y + lodgeRow * 80;
@@ -4341,6 +4389,15 @@ function generateTerrainChunk(chunkIndex) {
                     usedCells.add(`${cellRow},${cellCol}`);
                 }
             }
+        }
+
+        // Lodge is generated after obstacles, so actively clear its approach.
+        for (let i = chunk.obstacles.length - 1; i >= 0; i--) {
+            const obstacle = chunk.obstacles[i];
+            const nearLodgeX = Math.abs(obstacle.x - lodgeX) < LODGE.width * 0.75;
+            const nearLodgeY = obstacle.y > lodgeY - LODGE.rampLength - 80 &&
+                obstacle.y < lodgeY + LODGE.height + 160;
+            if (nearLodgeX && nearLodgeY) chunk.obstacles.splice(i, 1);
         }
 
         chunk.lodges.push({
@@ -4572,8 +4629,9 @@ function updateAirbornePhysics(player, dt) {
     // Auto trick animation
     if (player.autoTrick) {
         const trick = player.autoTrick;
-        const stabilizeBonus = (!input.space && inputDir === 0 && player.autoTrickProgress > 0.45) ? 0.4 : 0;
-        player.autoTrickProgress += dt * (1.5 + stabilizeBonus); // Complete trick over ~0.67 seconds
+        const stabilizeBonus = (!input.space && inputDir === 0 && player.autoTrickProgress > 0.45) ? 0.55 : 0;
+        const intentBonus = trick.inputDriven ? 0.12 : 0;
+        player.autoTrickProgress = Math.min(1.15, player.autoTrickProgress + dt * (1.75 + stabilizeBonus + intentBonus));
 
         if (trick.type === 'spin' || trick.type === 'combo') {
             // Spin tricks - only spin if player has a spin direction
@@ -4605,6 +4663,10 @@ function updateAirbornePhysics(player, dt) {
             if (trick.poked) {
                 player.grabPoke = Math.sin(player.autoTrickProgress * Math.PI * 0.9) * 0.4;
             }
+        } else {
+            player.grabPhase = 0;
+            player.grabTweak = 0;
+            player.grabPoke = 0;
         }
     }
 
@@ -4774,6 +4836,21 @@ function triggerJump(player, jump) {
     player.massiveJump = jump.massive || false; // Track if this is a massive jump
     player.jumpInputHeld = input.space;
 
+    const bigAirLaunch = jump.massive || jump.launchPower >= 1.25;
+    if (bigAirLaunch) {
+        spawnBigAirLaunchEffect(player.x, player.y, jump.launchPower, jump.massive);
+        triggerScreenShake(jump.massive ? 9 : 5, 0.9);
+        if (!jump.massive) {
+            gameState.celebrations.push({
+                text: jump.launchPower >= 1.6 ? 'MEGA POP!' : 'BIG AIR!',
+                subtext: '',
+                color: jump.launchPower >= 1.6 ? COLORS.gold : COLORS.cyan,
+                timer: 1.1,
+                scale: 0.9
+            });
+        }
+    }
+
     // Special celebration for MASSIVE jumps
     if (jump.massive) {
         gameState.celebrations.push({
@@ -4787,6 +4864,10 @@ function triggerJump(player, jump) {
 
     player.autoTrick = selectIntentionalAirTrick(player, jump, inputDir);
     if (player.autoTrick) {
+        if ((player.autoTrick.type === 'spin' || player.autoTrick.type === 'combo') && player.spinDirection === 0) {
+            const spinSeed = Math.floor(jump.x * 17 + jump.y * 11 + gameState.terrain.seed);
+            player.spinDirection = spinSeed % 2 === 0 ? 1 : -1;
+        }
         player.autoTrickProgress = 0;
         player.flipRotation = 0;
         player.grabPhase = 0;
@@ -4808,6 +4889,7 @@ function landFromJump(player) {
     let trickLanded = null;
     let trickName = null;
     let trickPoints = 0;
+    const landedAutoTrick = player.autoTrick;
 
     if (player.autoTrick && player.autoTrickProgress >= 0.8) {
         // Auto trick completed successfully!
@@ -4875,6 +4957,9 @@ function landFromJump(player) {
                 timer: 0.8,
                 scale: 0.85
             });
+        }
+        if (typeof funPass !== 'undefined' && landedAutoTrick && landedAutoTrick.type === 'grab') {
+            funPass.noteEvent('grab');
         }
     } else if (player.airTime > 0.4) {
         // Even without a trick, reward hang time
@@ -6007,14 +6092,9 @@ function updateCamera(dt) {
         camera.targetY -= cameraShift;
     }
 
-    // Zoom out for extreme altitude so player + ground stay in frame
-    if (player.airborne && player.altitude > 400) {
-        const zoomOutAmount = Math.min(0.3, (player.altitude - 400) / 2000);
-        camera.targetZoom = 1.0 - zoomOutAmount; // Range: 1.0 to 0.7
-    } else {
-        camera.targetZoom = 1.0;
-    }
-    camera.zoom = expLerp(camera.zoom, camera.targetZoom, 8, dt);
+    // Keep scale stable during big air; launch juice handles the big-jump read.
+    camera.targetZoom = 1.0;
+    camera.zoom = 1.0;
 
     // If player is very far ahead (massive jump), increase camera catch-up speed
     const distanceAhead = player.y - (camera.y + CANVAS_HEIGHT * riderAnchor);
@@ -6166,6 +6246,9 @@ function draw() {
 
     // Draw landing shockwaves above snow spray
     drawLandingImpacts();
+
+    // Big jumps get a launch burst instead of camera zoom.
+    drawBigAirCue();
 
     // Fun pass: chevron attractors above lanes (drawn before celebrations so floating text wins)
     if (typeof funPass !== 'undefined') funPass.drawLanes(ctx);
@@ -7268,14 +7351,15 @@ function drawBench(startScreen, endScreen, rail) {
     const midX = (startScreen.x + endScreen.x) / 2;
     const midY = (startScreen.y + endScreen.y) / 2;
 
-    // Calculate rotation angle to match rail direction
+    // Calculate rotation angle to match the downhill rail direction.
     const angle = Math.atan2(dy, dx);
 
     ctx.save();
     ctx.translate(midX, midY);
-    // Benches are fixed structures — limit rotation to ±10° for realism
-    const clampedAngleB = Math.max(-0.17, Math.min(0.17, angle));
-    ctx.rotate(clampedAngleB);
+    // Benches used as grindables should sit down the fall line, not sideways.
+    const downhillAngle = Math.PI / 2;
+    const offsetFromDownhill = Math.atan2(Math.sin(angle - downhillAngle), Math.cos(angle - downhillAngle));
+    ctx.rotate(downhillAngle + clamp(offsetFromDownhill, -0.14, 0.14));
 
     // Shadow
     ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
@@ -8131,8 +8215,8 @@ function drawPlayer() {
         ctx.restore();
     }
 
-    // Try sprite-based rendering first
-    if (sprites.player && sprites.player.sheet.loaded) {
+    // Use sprites on the ground, and procedural poses for airborne/grind style.
+    if (sprites.player && sprites.player.sheet.loaded && !player.airborne && !player.grinding) {
         // Determine animation based on player state
         if (player.crashed) {
             if (player.crashTimer < 0.3) {
@@ -8200,7 +8284,8 @@ function drawPlayer() {
     ctx.translate(screen.x, drawY);
 
     // Determine player pose based on input and state
-    const isSpinning = player.airborne && player.spinDirection !== 0 && Math.abs(player.trickRotation) > 30;
+    const isSpinning = player.airborne && player.spinDirection !== 0 && Math.abs(player.trickRotation) > 18;
+    const isFlipping = player.airborne && Math.abs(player.flipRotation) > 5;
 
     // BRAKING (UP pressed) - board turns perpendicular to slope (horizontal), scraping snow to slow down
     const isBraking = !player.airborne && !player.crashed && input.up;
@@ -8212,25 +8297,21 @@ function drawPlayer() {
         // On ground and going straight (or pressing down for speed)
         (!player.airborne && Math.abs(player.angle) < 5) ||
         // Airborne but NOT spinning (maintains straight orientation)
-        (player.airborne && !isSpinning)
+        (player.airborne && !isSpinning && !isFlipping)
     );
 
-    // Apply rotation for tricks - only rotate when actually spinning
-    if (player.airborne && isSpinning) {
-        ctx.rotate(player.trickRotation * Math.PI / 180);
-        // Apply flip rotation — perspective-simulated tumble for realistic backflips/frontflips
-        if (player.flipRotation !== 0) {
+    // Apply trick motion smoothly. Flips still keep some body thickness at 90°.
+    if (player.airborne && (isSpinning || isFlipping)) {
+        if (isSpinning) {
+            ctx.rotate(player.trickRotation * Math.PI / 180);
+        }
+        if (isFlipping) {
             const flipAngle = player.flipRotation * Math.PI / 180;
             const flipCos = Math.cos(flipAngle);
             const flipSin = Math.sin(flipAngle);
-            // Scale Y to simulate depth (squash at 90/270 degrees)
-            ctx.scale(1, Math.abs(flipCos));
-            // Shift vertically based on flip phase
-            ctx.translate(0, flipSin * -15);
-            // When upside down (cos < 0), invert drawing
-            if (flipCos < 0) {
-                ctx.scale(1, -1);
-            }
+            const depthScale = 0.38 + Math.abs(flipCos) * 0.62;
+            ctx.translate(0, flipSin * -10);
+            ctx.scale(1, flipCos < 0 ? -depthScale : depthScale);
         }
     } else if (player.grinding && player.grindTrick) {
         // Apply grind trick rotation based on trick type
@@ -9329,6 +9410,54 @@ function drawLandingImpacts() {
     ctx.globalAlpha = 1;
 }
 
+function drawBigAirCue() {
+    const cue = gameState._bigAirCue;
+    const player = gameState.player;
+    if (!cue || !player || !player.airborne) return;
+
+    const t = clamp(1 - cue.timer / cue.life, 0, 1);
+    const alpha = clamp(cue.timer / cue.life, 0, 1);
+    const screen = worldToScreen(player.visualX, player.visualY);
+    const drawY = screen.y - player.altitude * 0.5;
+    const color = cue.color || COLORS.cyan;
+    const radius = 22 + t * (cue.massive ? 72 : 48);
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = color;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = getShadowBlur(cue.massive ? 14 : 9);
+    ctx.lineWidth = cue.massive ? 4 : 3;
+
+    for (let i = 0; i < 2; i++) {
+        const ringT = clamp(t + i * 0.22, 0, 1);
+        const ringAlpha = alpha * (1 - i * 0.35) * (1 - ringT * 0.55);
+        ctx.globalAlpha = ringAlpha;
+        ctx.beginPath();
+        ctx.ellipse(screen.x, drawY + 8, radius * (0.75 + i * 0.28), radius * (0.28 + i * 0.12), 0, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+
+    ctx.globalAlpha = alpha * 0.8;
+    ctx.lineWidth = 2;
+    for (let i = -2; i <= 2; i++) {
+        const x = screen.x + i * 18;
+        ctx.beginPath();
+        ctx.moveTo(x, drawY + 30 + t * 18);
+        ctx.lineTo(x + i * 3, drawY + 82 + t * 24);
+        ctx.stroke();
+    }
+
+    ctx.font = cue.massive ? FONTS.pressStart12 : FONTS.pressStart10;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillStyle = color;
+    ctx.globalAlpha = alpha * (0.7 + 0.3 * Math.sin(gameState.animationTime * 18));
+    ctx.fillText(cue.massive ? 'MEGA AIR!' : 'BIG AIR!', screen.x, drawY - 40);
+    ctx.restore();
+    ctx.globalAlpha = 1;
+}
+
 function drawCelebrations() {
     ctx.textAlign = 'right';
     ctx.textBaseline = 'top';
@@ -10117,6 +10246,7 @@ function startGame(runOptions = {}) {
     gameState._noCrashDistance = 0;
     gameState._comboChainCelebrated = false;
     gameState._landingImpacts = [];
+    gameState._bigAirCue = null;
     gameState._newHighScore = false;
 
     // Fun pass: kick off pacing waves, mini-goal, lane attractors
@@ -11712,6 +11842,7 @@ function update(dt) {
     updateTimedShopEffects(dt);
     updateParticles(dt);
     updateLandingImpacts(dt);
+    updateBigAirCue(dt);
     updateCelebrations(dt);
     updateCombo(dt);
     updateScreenShake(dt);
@@ -12388,6 +12519,7 @@ function updateSlalom(dt) {
     }
 
     updateParticles(dt);
+    updateBigAirCue(dt);
     updateCelebrations(dt);
     updateScreenShake(dt);
 }
@@ -13266,6 +13398,7 @@ function updateOlympics(dt) {
     updateTerrain();
     checkCollisions();
     updateParticles(dt);
+    updateBigAirCue(dt);
     updateCelebrations(dt);
     updateCombo(dt);
     updateScreenShake(dt);
@@ -13389,6 +13522,7 @@ function drawOlympics() {
 
     // Draw particles and celebrations
     drawParticles();
+    drawBigAirCue();
     drawCelebrations();
 
     // End zoom
@@ -14428,8 +14562,19 @@ window.ShredQA = {
             obstacles: gameState.obstacles.length,
             jumps: gameState.jumps.length,
             rails: gameState.rails.length,
+            lodges: gameState.lodges.length,
+            lastLodgeY: gameState.terrain.lastLodgeY,
+            railOrientation: gameState.rails.slice(0, 40).map(r => ({
+                dx: Number(((r.endX ?? r.x) - r.x).toFixed(2)),
+                dy: Number(((r.endY ?? r.y) - r.y).toFixed(2)),
+                type: r.grindableType || 'rail'
+            })),
             ghostFrames: ghostSystem.bestGhost && ghostSystem.bestGhost.frames ? ghostSystem.bestGhost.frames.length : 0,
             dailyActive: dailyChallenge.active,
+            camera: {
+                zoom: Number((gameState.camera.zoom || 1).toFixed(3)),
+                targetZoom: Number((gameState.camera.targetZoom || 1).toFixed(3))
+            },
             funPass: (typeof funPass !== 'undefined' && funPass.enabled) ? {
                 enabled: true,
                 wave: funPass.wave && funPass.waves[funPass.wave.idx] ? funPass.waves[funPass.wave.idx].name : null,
