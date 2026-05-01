@@ -2346,14 +2346,7 @@ const funPass = {
         const r = Math.floor(this.seed(seedInt) * this.goalPool.length);
         const pick = this.goalPool[r] || this.goalPool[0];
         this.goal = { id: pick.id, label: pick.label, target: pick.target, color: pick.color, progress: 0, completed: false };
-        // Announce after a short delay so opening tutorial isn't drowned out
-        gameState.celebrations.push({
-            text: 'GOAL: ' + pick.label,
-            subtext: '',
-            color: pick.color,
-            timer: 2.4,
-            scale: 0.85
-        });
+        // The responsive objective card is the persistent goal announcement.
     },
 
     update(dt, player) {
@@ -2685,34 +2678,66 @@ const funPass = {
     drawGoalHud(ctx) {
         if (!this.enabled || !this.goal) return;
         const g = this.goal;
-        const x = 12;
-        const y = 14;
-        const w = 198;
-        const h = 26;
+        const narrow = CANVAS_WIDTH <= 520;
+        const uiScale = narrow ? 1 : clamp(CANVAS_WIDTH / 1280, 1, 1.28);
+        const x = Math.round(narrow ? 10 : 14 * uiScale);
+        const y = Math.round(narrow ? 12 : 14 * uiScale);
+        const rightReserve = narrow ? 64 : 0;
+        const w = Math.min(CANVAS_WIDTH - x * 2 - rightReserve, Math.round(narrow ? CANVAS_WIDTH - x * 2 - rightReserve : 310 * uiScale));
+        const h = Math.round(narrow ? 58 : 46 * uiScale);
+        const pad = Math.round(narrow ? 8 : 9 * uiScale);
+        const titleSize = Math.round(narrow ? 8 : 8 * uiScale);
+        const labelSize = Math.round(narrow ? 10 : 9 * uiScale);
         ctx.save();
-        ctx.globalAlpha = g.completed ? 0.55 : 0.85;
-        ctx.fillStyle = 'rgba(0,0,0,0.55)';
-        ctx.fillRect(x, y, w, h);
+        ctx.globalAlpha = g.completed ? 0.66 : 0.94;
+        ctx.fillStyle = 'rgba(4, 10, 18, 0.76)';
+        ctx.beginPath();
+        ctx.roundRect(x, y, w, h, 6);
+        ctx.fill();
         ctx.strokeStyle = g.color;
-        ctx.lineWidth = 1.5;
-        ctx.strokeRect(x, y, w, h);
-        // Progress bar
-        const pad = 3;
-        const pw = (w - pad * 2) * (g.progress / g.target);
-        ctx.fillStyle = g.color;
-        ctx.globalAlpha = g.completed ? 0.5 : 0.75;
-        ctx.fillRect(x + pad, y + h - 5, pw, 3);
-        // Label
-        ctx.globalAlpha = 1;
-        ctx.fillStyle = g.completed ? '#9be59b' : '#ffffff';
-        ctx.font = '8px "Press Start 2P", monospace';
-        ctx.textAlign = 'left';
+        ctx.lineWidth = narrow ? 2 : 1.8;
+        ctx.stroke();
+
         ctx.textBaseline = 'top';
-        const label = g.completed ? 'GOAL COMPLETE' : g.label;
-        ctx.fillText(label, x + 6, y + 5);
-        ctx.font = '7px "Press Start 2P", monospace';
+        ctx.lineJoin = 'round';
+
+        // Header row
+        ctx.font = `bold ${titleSize}px "Press Start 2P", monospace`;
+        ctx.textAlign = 'left';
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 3;
         ctx.fillStyle = g.color;
-        ctx.fillText(g.progress + ' / ' + g.target, x + 6, y + 16);
+        ctx.strokeText('GOAL', x + pad, y + pad);
+        ctx.fillText('GOAL', x + pad, y + pad);
+
+        ctx.textAlign = 'right';
+        const progressText = g.progress + '/' + g.target;
+        ctx.strokeText(progressText, x + w - pad, y + pad);
+        ctx.fillText(progressText, x + w - pad, y + pad);
+
+        // Objective label
+        const label = g.completed ? 'GOAL COMPLETE' : g.label;
+        ctx.font = `bold ${labelSize}px "Press Start 2P", monospace`;
+        ctx.textAlign = 'left';
+        ctx.fillStyle = g.completed ? '#9be59b' : '#ffffff';
+        const labelY = y + pad + Math.round(narrow ? 18 : 15 * uiScale);
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 3;
+        ctx.strokeText(label, x + pad, labelY);
+        ctx.fillText(label, x + pad, labelY);
+
+        // Progress bar
+        const barX = x + pad;
+        const barY = y + h - Math.round(narrow ? 10 : 9 * uiScale);
+        const barW = w - pad * 2;
+        const barH = Math.round(narrow ? 5 : 4 * uiScale);
+        const pw = barW * (g.progress / g.target);
+        ctx.globalAlpha = g.completed ? 0.38 : 0.5;
+        ctx.fillStyle = '#10151f';
+        ctx.fillRect(barX, barY, barW, barH);
+        ctx.globalAlpha = g.completed ? 0.7 : 0.92;
+        ctx.fillStyle = g.color;
+        ctx.fillRect(barX, barY, pw, barH);
         ctx.restore();
         ctx.globalAlpha = 1;
     },
@@ -5384,14 +5409,18 @@ function checkCollisions() {
         }
     }
 
-    // Check collectibles
-    const colMinY = player.y - 30;
-    const colMaxY = player.y + 30;
+    // Check flake pickups. Generous radius keeps the tiny tokens from feeling fake on phones.
+    const maxPickupRadius = 56;
+    const colMinY = player.y - maxPickupRadius;
+    const colMaxY = player.y + maxPickupRadius;
     for (const col of gameState.collectibles) {
         if (col.y < colMinY) continue;
         if (col.y > colMaxY) break;
         if (col.collected) continue;
-        if (Math.abs(col.x - player.x) > 25) continue;
+        const radius = col.type === 'big' ? 52 : 42;
+        const dx = col.x - player.x;
+        const dy = col.y - player.y;
+        if (dx * dx + dy * dy > radius * radius) continue;
 
         collectItem(col);
     }
@@ -5411,9 +5440,10 @@ function collectItem(collectible) {
     const isBig = collectible.type === 'big';
     const basePoints = isBig ? 100 : 25;
     const points = Math.floor(basePoints * gameState.flowMultiplier);
+    const flakeValue = isBig ? 3 : 1;
 
     gameState.score += points;
-    gameState.collectiblesCollected++;
+    gameState.collectiblesCollected += flakeValue;
 
     // Build flow meter
     gameState.flowMeter = Math.min(100, gameState.flowMeter + (isBig ? 15 : 5));
@@ -5432,15 +5462,13 @@ function collectItem(collectible) {
         ));
     }
 
-    if (isBig) {
-        gameState.celebrations.push({
-            text: 'BIG SNOWFLAKE!',
-            subtext: `+${points}`,
-            color: COLORS.gold,
-            timer: 1.0,
-            scale: 1.0
-        });
-    }
+    gameState.celebrations.push({
+        text: isBig ? 'BIG FLAKE +3' : 'FLAKE +1',
+        subtext: `+${points}`,
+        color: isBig ? COLORS.gold : COLORS.cyan,
+        timer: isBig ? 1.0 : 0.65,
+        scale: isBig ? 1.0 : 0.75
+    });
 }
 
 function checkNearMisses(player) {
@@ -7721,34 +7749,48 @@ function drawCollectibles() {
 
         const screen = worldToScreen(col.x, col.y);
         const isBig = col.type === 'big';
-        const size = isBig ? 16 : 10;
+        const size = isBig ? 17 : 12;
 
         // Floating animation
         const float = animCache.sin4 * 5;
         const cx = screen.x;
         const cy = screen.y + float;
 
-        // Simplified snowflake: 3 crossed lines + center dot (no save/restore/rotate)
-        ctx.strokeStyle = isBig ? COLORS.gold : '#fff';
-        ctx.lineWidth = isBig ? 3 : 2;
-        ctx.lineCap = 'round';
-
+        // Flake pickup token: reads as currency, not a decorative ground star.
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(time * (isBig ? 1.8 : 1.25));
+        ctx.fillStyle = isBig ? 'rgba(255, 215, 0, 0.20)' : 'rgba(0, 255, 255, 0.14)';
         ctx.beginPath();
-        // Vertical line
-        ctx.moveTo(cx, cy - size);
-        ctx.lineTo(cx, cy + size);
-        // Diagonal lines
-        ctx.moveTo(cx - size * 0.87, cy - size * 0.5);
-        ctx.lineTo(cx + size * 0.87, cy + size * 0.5);
-        ctx.moveTo(cx - size * 0.87, cy + size * 0.5);
-        ctx.lineTo(cx + size * 0.87, cy - size * 0.5);
+        ctx.arc(0, 0, size + 7, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = isBig ? 'rgba(255, 215, 0, 0.86)' : 'rgba(232, 255, 255, 0.92)';
+        ctx.strokeStyle = isBig ? '#fff5a8' : COLORS.cyan;
+        ctx.lineWidth = isBig ? 3 : 2;
+        ctx.beginPath();
+        ctx.moveTo(0, -size);
+        ctx.lineTo(size * 0.78, 0);
+        ctx.lineTo(0, size);
+        ctx.lineTo(-size * 0.78, 0);
+        ctx.closePath();
+        ctx.fill();
         ctx.stroke();
 
-        // Center dot
-        ctx.fillStyle = isBig ? COLORS.gold : '#fff';
+        ctx.strokeStyle = isBig ? '#fffbe0' : '#80ffff';
+        ctx.lineWidth = isBig ? 2 : 1.5;
         ctx.beginPath();
-        ctx.arc(cx, cy, isBig ? 3 : 2, 0, Math.PI * 2);
+        ctx.moveTo(0, -size * 0.62);
+        ctx.lineTo(0, size * 0.62);
+        ctx.moveTo(-size * 0.48, 0);
+        ctx.lineTo(size * 0.48, 0);
+        ctx.stroke();
+
+        ctx.fillStyle = isBig ? '#fffbe0' : COLORS.cyan;
+        ctx.beginPath();
+        ctx.arc(0, 0, isBig ? 3 : 2, 0, Math.PI * 2);
         ctx.fill();
+        ctx.restore();
     }
 }
 
@@ -8194,6 +8236,36 @@ function drawLodgeInterior() {
     ctx.fillText('MOVE TO SHOP OR EXIT DOOR', CANVAS_WIDTH / 2, CANVAS_HEIGHT - 20);
 }
 
+function drawPlayerTrickLabel(player, screenX, drawY) {
+    if (!player.airborne || !player.autoTrick || player.autoTrickProgress <= 0.1) return;
+
+    const trickName = player.autoTrick.name;
+    const trickY = drawY - 50;
+    const fadeIn = Math.min(1, (player.autoTrickProgress - 0.1) * 5);
+    ctx.save();
+    ctx.font = FONTS.pressStart8;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillStyle = COLORS.gold;
+    ctx.shadowColor = COLORS.gold;
+    ctx.shadowBlur = getShadowBlur(4);
+    ctx.globalAlpha = fadeIn;
+    ctx.fillText(trickName, screenX, trickY);
+    // Show spin degree if spinning
+    if (player.spinDirection !== 0 && Math.abs(player.trickRotation) > 90) {
+        const spinDeg = Math.floor(Math.abs(player.trickRotation) / 180) * 180;
+        if (spinDeg >= 180) {
+            ctx.font = FONTS.pressStart10;
+            ctx.fillStyle = COLORS.cyan;
+            ctx.shadowColor = COLORS.cyan;
+            ctx.fillText(spinDeg + '°', screenX, trickY - 12);
+        }
+    }
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+    ctx.restore();
+}
+
 function drawPlayer() {
     const player = gameState.player;
     const screen = worldToScreen(player.visualX, player.visualY);
@@ -8221,8 +8293,8 @@ function drawPlayer() {
         ctx.restore();
     }
 
-    // Use sprites on the ground, and procedural poses for airborne/grind style.
-    if (sprites.player && sprites.player.sheet.loaded && !player.airborne && !player.grinding) {
+    // Use the same sprite family for riding and airborne tricks; procedural fallback remains for grinds.
+    if (sprites.player && sprites.player.sheet.loaded && !player.grinding) {
         // Determine animation based on player state
         if (player.crashed) {
             if (player.crashTimer < 0.3) {
@@ -8282,7 +8354,10 @@ function drawPlayer() {
         const drawn = sprites.player.draw(ctx, screen.x, drawY, 1, rotation, false);
         ctx.globalAlpha = 1;
 
-        if (drawn) return; // Success, skip procedural drawing
+        if (drawn) {
+            drawPlayerTrickLabel(player, screen.x, drawY);
+            return; // Success, skip procedural drawing
+        }
     }
 
     // Fallback to procedural drawing
@@ -8921,34 +8996,7 @@ function drawPlayer() {
     ctx.shadowBlur = 0;
     ctx.restore();
 
-    // Real-time trick name display during air
-    if (player.airborne && player.autoTrick && player.autoTrickProgress > 0.1) {
-        const trickName = player.autoTrick.name;
-        const trickY = drawY - 50;
-        const fadeIn = Math.min(1, (player.autoTrickProgress - 0.1) * 5);
-        ctx.save();
-        ctx.font = FONTS.pressStart8;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'bottom';
-        ctx.fillStyle = COLORS.gold;
-        ctx.shadowColor = COLORS.gold;
-        ctx.shadowBlur = getShadowBlur(4);
-        ctx.globalAlpha = fadeIn;
-        ctx.fillText(trickName, screen.x, trickY);
-        // Show spin degree if spinning
-        if (player.spinDirection !== 0 && Math.abs(player.trickRotation) > 90) {
-            const spinDeg = Math.floor(Math.abs(player.trickRotation) / 180) * 180;
-            if (spinDeg >= 180) {
-                ctx.font = FONTS.pressStart10;
-                ctx.fillStyle = COLORS.cyan;
-                ctx.shadowColor = COLORS.cyan;
-                ctx.fillText(spinDeg + '°', screen.x, trickY - 12);
-            }
-        }
-        ctx.shadowBlur = 0;
-        ctx.globalAlpha = 1;
-        ctx.restore();
-    }
+    drawPlayerTrickLabel(player, screen.x, drawY);
 }
 
 function drawAvalanche() {
@@ -9473,9 +9521,11 @@ function drawCelebrations() {
     const sortedCelebrations = gameState.celebrations;
     const maxVisible = 3;
 
-    // Position in top-right corner, below HUD (around y=50)
+    // Position in top-right corner, below the responsive objective card when it is visible.
     const baseX = CANVAS_WIDTH - 15;
-    const baseY = 50;
+    const baseY = (typeof funPass !== 'undefined' && funPass.enabled && funPass.goal)
+        ? (CANVAS_WIDTH <= 520 ? 82 : 68)
+        : 50;
 
     for (let i = 0; i < Math.min(sortedCelebrations.length, maxVisible); i++) {
         const c = sortedCelebrations[i];
@@ -9599,6 +9649,8 @@ function drawPanelHUD() {
     drawNeonText(`${speedPercent}%`, col2X, rowY, speedColor, fontSize, 'center');
 
     drawNeonText(gameState.score.toString().padStart(6, '0'), col3X, rowY, COLORS.magenta, fontSize, 'center');
+    const flakeFontSize = Math.max(7, Math.round(6 * scale));
+    drawNeonText(`FLAKES ${gameState.collectiblesCollected}`, col3X, rowY + Math.round(17 * scale), COLORS.gold, flakeFontSize, 'center');
 
     // Danger warning (above the panel)
     if (gameState.dangerLevel > 0.5) {
@@ -9692,15 +9744,13 @@ function drawFallbackHUD() {
         }
     }
 
-    if (gameState.collectiblesCollected > 0) {
-        ctx.font = FONTS.pressStart10;
-        ctx.textAlign = 'right';
-        ctx.fillStyle = COLORS.gold;
-        ctx.shadowColor = COLORS.gold;
-        ctx.shadowBlur = getShadowBlur(8);
-        ctx.fillText(`\u2744${gameState.collectiblesCollected}`, CANVAS_WIDTH - 15, CANVAS_HEIGHT - 35);
-        ctx.shadowBlur = 0;
-    }
+    ctx.font = FONTS.pressStart10;
+    ctx.textAlign = 'right';
+    ctx.fillStyle = COLORS.gold;
+    ctx.shadowColor = COLORS.gold;
+    ctx.shadowBlur = getShadowBlur(8);
+    ctx.fillText(`FLAKES ${gameState.collectiblesCollected}`, CANVAS_WIDTH - 15, CANVAS_HEIGHT - 35);
+    ctx.shadowBlur = 0;
 
     if (gameState.dangerLevel > 0.5) {
         const pulse = animCache.sin10 * 0.3 + 0.7;
@@ -14660,6 +14710,45 @@ window.ShredQA = {
             beastState: chase.beastState,
             beastIntroTimer: Number((chase.beastIntroTimer || 0).toFixed(2)),
             beastRage: Number((chase.beastRage || 0).toFixed(2))
+        };
+    },
+
+    forceAirborneTrick(kind = 'grab') {
+        if (gameState.screen !== 'playing') this.start({ seed: 424242 });
+        const player = gameState.player;
+        player.airborne = true;
+        player.altitude = 160;
+        player.verticalVelocity = 0;
+        player.autoTrickProgress = 0.45;
+        player.grabPhase = kind === 'grab' ? 0.8 : 0;
+        player.flipRotation = 0;
+        player.spinDirection = kind === 'spin' ? 1 : 0;
+        player.trickRotation = kind === 'spin' ? 360 : 0;
+        player.autoTrick = kind === 'spin'
+            ? { name: '360', type: 'spin', rotSpeed: 720, points: 150 }
+            : { name: 'Method', type: 'grab', grabStyle: 'method', points: 125 };
+        draw();
+        return {
+            screen: gameState.screen,
+            airborne: player.airborne,
+            trick: player.autoTrick.name,
+            sprite: sprites.player ? sprites.player.currentAnim : null
+        };
+    },
+
+    forcePickup(type = 'normal') {
+        if (gameState.screen !== 'playing') this.start({ seed: 424242 });
+        const player = gameState.player;
+        const before = gameState.collectiblesCollected;
+        const pickup = { x: player.x, y: player.y, type, collected: false };
+        gameState.collectibles.push(pickup);
+        collectItem(pickup);
+        draw();
+        return {
+            before,
+            after: gameState.collectiblesCollected,
+            score: gameState.score,
+            type
         };
     },
 

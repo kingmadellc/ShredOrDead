@@ -15,6 +15,7 @@ const mimeTypes = {
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
   '.webp': 'image/webp',
+  '.svg': 'image/svg+xml',
   '.gif': 'image/gif',
   '.mp3': 'audio/mpeg',
   '.wav': 'audio/wav',
@@ -115,6 +116,15 @@ try {
     if (sidewaysRails.length) failures.push(`${viewport.name}: sideways rail geometry detected (${JSON.stringify(sidewaysRails[0])})`);
     if (funState.camera && (funState.camera.zoom !== 1 || funState.camera.targetZoom !== 1)) {
       failures.push(`${viewport.name}: camera zoom changed during play (${JSON.stringify(funState.camera)})`);
+    }
+
+    const trickCheck = await page.evaluate(() => window.ShredQA.forceAirborneTrick('grab'));
+    if (!trickCheck.airborne || trickCheck.sprite !== 'grab') {
+      failures.push(`${viewport.name}: airborne trick sprite did not use grab animation (${JSON.stringify(trickCheck)})`);
+    }
+    const pickupCheck = await page.evaluate(() => window.ShredQA.forcePickup('big'));
+    if (pickupCheck.after - pickupCheck.before !== 3) {
+      failures.push(`${viewport.name}: big flake pickup did not increment by 3 (${JSON.stringify(pickupCheck)})`);
     }
 
     await page.evaluate(() => {
