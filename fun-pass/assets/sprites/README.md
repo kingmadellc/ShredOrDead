@@ -60,38 +60,43 @@ This directory contains sprite sheets for the snowboarder player character and t
 ---
 
 ### Yeti/Beast (`yeti-spritesheet.svg`)
-- **Dimensions:** 512 × 384 pixels
+- **Dimensions:** 768 × 512 pixels
 - **Frame Size:** 128 × 128 pixels
-- **Grid:** 4 columns × 3 rows = 12 frames
-- **Color Palette:** Dark purple body, cyan/magenta glowing eyes
+- **Grid:** 6 columns × 4 rows = 24 frames
+- **Color Palette:** Pale snow fur, icy cyan shadows, dark face mask, cyan glowing eyes
 
 #### Animation Layout
 
 | Row | Frames | Animation | Description |
 |-----|--------|-----------|-------------|
-| 0 | 0-3 | Chase | Movement cycle with arm swing |
-| 1 | 0-3 | Attack | Wind up → lunge → swipe → recovery |
-| 2 | 0-3 | Rage Levels | Low → Medium → High → Max/Berserk |
+| 0 | 0-5 | Emerge | Snow mound → head reveal → full roar |
+| 1 | 0-5 | Chase | Bounding run cycle with arm swing and snow kick |
+| 2 | 0-5 | Telegraph/Lunge | Coil → warning roar → lunge → swipe → recovery |
+| 3 | 0-5 | Rage Levels | Low → Medium → High → Max/Berserk loop |
 
 #### Frame Details
 
-**Row 0 - Chase Movement:**
-- Frame 0: Neutral chase pose
-- Frame 1: Leaning forward (8°)
-- Frame 2: Stride 1 (left arm up)
-- Frame 3: Stride 2 (right arm up)
+**Row 0 - Emerge:**
+- Frame 0: Snow mound with eye hint
+- Frames 1-4: Rising through snow with more body revealed
+- Frame 5: Full roar reveal
 
-**Row 1 - Attack Sequence:**
-- Frame 0: Wind up (arms back, roar)
-- Frame 1: Mid lunge (15° forward)
-- Frame 2: Full lunge/swipe (25° forward, claws extended)
-- Frame 3: Recovery (returning to neutral)
+**Row 1 - Chase Movement:**
+- Frames 0-5: Continuous bounding run with alternating arms, legs, and snow puffs
 
-**Row 2 - Rage States:**
-- Frame 0: Low rage (smaller, calmer)
-- Frame 1: Medium rage (pulse ring, raised fur)
-- Frame 2: High rage (multiple rings, larger body)
-- Frame 3: Max rage/Berserk (full aura, maximum size, drool)
+**Row 2 - Telegraph/Lunge Sequence:**
+- Frame 0: Low crouch warning
+- Frame 1: Coiled roar
+- Frame 2: Lunge start
+- Frame 3: Full forward grab
+- Frame 4: Claw swipe
+- Frame 5: Recovery crouch
+
+**Row 3 - Rage States:**
+- Frame 0: Low rage
+- Frame 1: Medium rage
+- Frame 2: High rage
+- Frames 3-5: Max rage/Berserk loop
 
 ---
 
@@ -112,7 +117,7 @@ convert -background transparent yeti-spritesheet.svg yeti-spritesheet.png
 ### For Higher Resolution (2x)
 ```bash
 inkscape snowboarder-spritesheet.svg -w 768 -h 512 --export-filename=snowboarder-spritesheet@2x.png
-inkscape yeti-spritesheet.svg -w 1024 -h 768 --export-filename=yeti-spritesheet@2x.png
+inkscape yeti-spritesheet.svg -w 1536 -h 1024 --export-filename=yeti-spritesheet@2x.png
 ```
 
 ---
@@ -156,4 +161,4 @@ Both sprite sheets maintain the game's neon aesthetic:
 - **Glow effects:** SVG filters create soft glows around key elements
 - **Gradient fills:** Body parts use linear/radial gradients
 - **Color scheme:** Cyan (#00ffff), Magenta (#ff00ff), Hot Pink (#ff1493)
-- **Dark tones:** Deep purples (#1a0a2a, #4a2a5a) for shadows and yeti body
+- **Snow beast tones:** Pale whites and icy blues for fur, dark teal outlines for readable silhouettes

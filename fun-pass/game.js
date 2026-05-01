@@ -1936,16 +1936,18 @@ const SPRITE_CONFIG = {
         src: 'assets/sprites/yeti-spritesheet.svg',
         frameWidth: 128,
         frameHeight: 128,
-        columns: 4,
-        rows: 3,
+        columns: 6,
+        rows: 4,
         animations: {
-            chase: { row: 0, frames: [0, 1, 2, 3, 2, 1], frameTime: 120 },
-            lunge: { row: 1, frames: [0, 1, 2], frameTime: 100 },
-            recover: { row: 1, frames: [3], frameTime: 150 },
-            rageLow: { row: 2, frames: [0], frameTime: 100 },
-            rageMedium: { row: 2, frames: [1], frameTime: 100 },
-            rageHigh: { row: 2, frames: [2], frameTime: 100 },
-            rageMax: { row: 2, frames: [3], frameTime: 80 }
+            emerge: { row: 0, frames: [0, 1, 2, 3, 4, 5], frameTime: 105 },
+            chase: { row: 1, frames: [0, 1, 2, 3, 4, 5], frameTime: 90 },
+            telegraph: { row: 2, frames: [0, 1], frameTime: 110 },
+            lunge: { row: 2, frames: [2, 3, 4], frameTime: 70 },
+            recover: { row: 2, frames: [5], frameTime: 120 },
+            rageLow: { row: 3, frames: [0], frameTime: 100 },
+            rageMedium: { row: 3, frames: [1], frameTime: 100 },
+            rageHigh: { row: 3, frames: [2], frameTime: 90 },
+            rageMax: { row: 3, frames: [3, 4, 5, 4], frameTime: 80 }
         }
     }
 };
@@ -2199,6 +2201,7 @@ let gameState = {
         beastY: 0,
         beastX: 0,
         beastState: 'chasing',
+        beastIntroTimer: 0,
         beastLungeTimer: 0,
         lungeTargetX: 0,
         lungeTargetY: 0,
@@ -5784,6 +5787,7 @@ function spawnBeast(customMessage = null) {
     chase.beastY = chase.fogY + 50;
     chase.beastX = 0;
     chase.beastState = 'chasing';
+    chase.beastIntroTimer = 1.0;
     chase.beastLungeTimer = 2;
     chase.beastRage = 0;
     chase.telegraphTimer = 0;
@@ -5806,6 +5810,8 @@ function spawnBeast(customMessage = null) {
 function updateBeast(dt) {
     const chase = gameState.chase;
     const player = gameState.player;
+
+    chase.beastIntroTimer = Math.max(0, (chase.beastIntroTimer || 0) - dt);
 
     // Increase rage over time (makes beast more aggressive)
     chase.beastRage = Math.min(1, chase.beastRage + dt * 0.02);
@@ -5844,7 +5850,7 @@ function updateBeast(dt) {
             chase.beastLungeTimer -= dt * rageMod;
             const distToPlayer = player.y - chase.beastY;
 
-            if (chase.beastLungeTimer <= 0 && distToPlayer < 280 && distToPlayer > 40) {
+            if (chase.beastIntroTimer <= 0 && chase.beastLungeTimer <= 0 && distToPlayer < 280 && distToPlayer > 40) {
                 chase.beastState = 'telegraphing';
                 chase.telegraphTimer = CHASE.beastTelegraphDuration;
 
@@ -9072,30 +9078,27 @@ function drawBeast() {
 
     // Try sprite-based rendering first
     if (sprites.beast && sprites.beast.sheet.loaded) {
-        // Determine animation based on beast state
-        if (chase.beastState === 'lunging') {
+        const introAmount = clamp(chase.beastIntroTimer || 0, 0, 1);
+
+        if (introAmount > 0) {
+            sprites.beast.setAnimation('emerge');
+        } else if (chase.beastState === 'lunging') {
             sprites.beast.setAnimation('lunge');
         } else if (chase.beastState === 'telegraphing') {
-            sprites.beast.setAnimation('rageHigh');
+            sprites.beast.setAnimation('telegraph');
         } else if (chase.beastState === 'retreating') {
             sprites.beast.setAnimation('recover');
         } else {
-            // Chase state - select based on rage level
-            if (chase.beastRage > 0.75) {
-                sprites.beast.setAnimation('rageMax');
-            } else if (chase.beastRage > 0.5) {
-                sprites.beast.setAnimation('rageHigh');
-            } else if (chase.beastRage > 0.25) {
-                sprites.beast.setAnimation('rageMedium');
-            } else {
-                sprites.beast.setAnimation('chase');
-            }
+            sprites.beast.setAnimation('chase');
         }
 
         // Calculate scale
-        let scale = 0.9 + chase.beastRage * 0.2;
+        let scale = 1.0 + chase.beastRage * 0.16;
+        if (introAmount > 0) {
+            scale *= lerp(1.04, 0.82, introAmount);
+        }
         if (chase.beastState === 'lunging') {
-            scale += chase.lungeProgress * 0.3;
+            scale += chase.lungeProgress * 0.22;
         } else if (chase.beastState === 'telegraphing') {
             scale += 0.12 + Math.sin(time * 28) * 0.04;
         }
@@ -9104,16 +9107,20 @@ function drawBeast() {
         const breathe = Math.sin(time * 3) * 0.03 + 1;
         scale *= breathe;
 
-        // Draw dark energy aura behind sprite (concentric circles, no gradient)
-        const pulseIntensity = 0.4 + Math.sin(time * 3) * 0.2;
-        const auraRadius = 80 * scale;
-        ctx.fillStyle = `rgba(60, 0, 100, ${(pulseIntensity * 0.15).toFixed(3)})`;
+        // Snow-mist aura behind the sprite keeps the threat readable without making it a purple monster blob.
+        const pulseIntensity = 0.42 + Math.sin(time * 3) * 0.18 + chase.beastRage * 0.18;
+        const auraRadius = 74 * scale;
+        ctx.fillStyle = `rgba(198, 250, 255, ${(pulseIntensity * 0.13).toFixed(3)})`;
         ctx.beginPath();
         ctx.arc(screen.x, screen.y, auraRadius, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = `rgba(120, 0, 180, ${(pulseIntensity * 0.25).toFixed(3)})`;
+        ctx.fillStyle = `rgba(237, 253, 255, ${(pulseIntensity * 0.16).toFixed(3)})`;
         ctx.beginPath();
-        ctx.arc(screen.x, screen.y, auraRadius * 0.5, 0, Math.PI * 2);
+        ctx.arc(screen.x, screen.y + 18 * scale, auraRadius * 0.48, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = `rgba(10, 35, 45, ${(0.16 + chase.beastRage * 0.08).toFixed(3)})`;
+        ctx.beginPath();
+        ctx.ellipse(screen.x, screen.y + 54 * scale, 44 * scale, 10 * scale, 0, 0, Math.PI * 2);
         ctx.fill();
 
         // Draw sprite
@@ -9121,7 +9128,7 @@ function drawBeast() {
         if (drawn) return; // Success, skip procedural drawing
     }
 
-    // Fallback to procedural drawing - HUMANOID BEAST silhouette
+    // Fallback to procedural drawing - shaggy snow beast silhouette
     ctx.save();
     ctx.translate(screen.x, screen.y);
 
@@ -9138,9 +9145,9 @@ function drawBeast() {
     const breathe = animCache.sin3 * 0.05 + 1;
     ctx.scale(breathe, 1 / breathe);
 
-    // Subtle dark aura
+    // Subtle snow-mist aura
     const pulseIntensity = 0.3 + animCache.sin3 * 0.15;
-    ctx.fillStyle = `rgba(26, 10, 50, ${pulseIntensity * 0.2})`;
+    ctx.fillStyle = `rgba(198, 250, 255, ${pulseIntensity * 0.18})`;
     ctx.beginPath();
     ctx.arc(0, 0, 75, 0, Math.PI * 2);
     ctx.fill();
@@ -9148,8 +9155,8 @@ function drawBeast() {
     // Walking leg animation
     const walkPhase = Math.sin(time * 4) * 6;
 
-    // Legs - two thick limbs
-    ctx.strokeStyle = '#0d0d2a';
+    // Legs - two thick furry limbs
+    ctx.strokeStyle = '#082633';
     ctx.lineWidth = 13;
     ctx.lineCap = 'round';
     // Left leg
@@ -9176,7 +9183,7 @@ function drawBeast() {
     ctx.stroke();
 
     // Torso - barrel chest trapezoid
-    ctx.fillStyle = '#1a1a3a';
+    ctx.fillStyle = '#d9f7ff';
     ctx.beginPath();
     ctx.moveTo(-28, -18);
     ctx.lineTo(-22, 22);
@@ -9186,7 +9193,7 @@ function drawBeast() {
     ctx.fill();
 
     // Shoulder humps
-    ctx.fillStyle = '#1a1a3a';
+    ctx.fillStyle = '#eefcff';
     ctx.beginPath();
     ctx.ellipse(-26, -16, 10, 7, -0.3, 0, Math.PI * 2);
     ctx.fill();
@@ -9194,9 +9201,9 @@ function drawBeast() {
     ctx.ellipse(26, -16, 10, 7, 0.3, 0, Math.PI * 2);
     ctx.fill();
 
-    // Arms - gorilla length
+    // Arms - heavy, shaggy reach
     const armSwing = walkPhase * 0.8;
-    ctx.strokeStyle = '#0d0d2a';
+    ctx.strokeStyle = '#bcecf4';
     ctx.lineWidth = 11;
     // Left arm
     ctx.beginPath();
@@ -9212,7 +9219,7 @@ function drawBeast() {
     ctx.stroke();
 
     // Clawed hands
-    ctx.fillStyle = '#0d0d2a';
+    ctx.fillStyle = '#d8f7ff';
     ctx.beginPath();
     ctx.arc(-32 + armSwing * 0.5, 23, 5, 0, Math.PI * 2);
     ctx.fill();
@@ -9220,7 +9227,7 @@ function drawBeast() {
     ctx.arc(32 - armSwing * 0.5, 23, 5, 0, Math.PI * 2);
     ctx.fill();
     // Claw strokes
-    ctx.strokeStyle = '#3a3030';
+    ctx.strokeStyle = '#fff6df';
     ctx.lineWidth = 2;
     for (let side = -1; side <= 1; side += 2) {
         const hx = side * (32 - armSwing * 0.5 * side);
@@ -9232,21 +9239,21 @@ function drawBeast() {
         }
     }
 
-    // Head - rounded shape
-    ctx.fillStyle = '#1a1a3a';
+    // Head - rounded shaggy hood with dark face
+    ctx.fillStyle = '#dff9ff';
     ctx.beginPath();
     ctx.ellipse(0, -32, 16, 14, 0, 0, Math.PI * 2);
     ctx.fill();
 
     // Brow ridge
-    ctx.fillStyle = '#0d0d2a';
+    ctx.fillStyle = '#061923';
     ctx.beginPath();
     ctx.ellipse(0, -38, 14, 4, 0, Math.PI, Math.PI * 2);
     ctx.fill();
 
     // Fur spikes on head
-    ctx.strokeStyle = '#4a4a6a';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#082633';
+    ctx.lineWidth = 2.5;
     for (let i = -2; i <= 2; i++) {
         ctx.beginPath();
         ctx.moveTo(i * 5, -44);
@@ -9255,7 +9262,7 @@ function drawBeast() {
     }
 
     // Fur texture on torso
-    ctx.strokeStyle = '#4a4a6a';
+    ctx.strokeStyle = '#6fb7c9';
     ctx.lineWidth = 1.2;
     for (let i = 0; i < 6; i++) {
         const fx = -18 + i * 7;
@@ -9291,7 +9298,7 @@ function drawBeast() {
     ctx.shadowBlur = 0;
 
     // Mouth - grimace with fang tips
-    ctx.strokeStyle = '#0d0d2a';
+    ctx.strokeStyle = '#061923';
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(-10, -24);
@@ -10169,6 +10176,7 @@ function startGame(runOptions = {}) {
         beastY: 0,
         beastX: 0,
         beastState: 'chasing',
+        beastIntroTimer: 0,
         beastLungeTimer: 0,
         telegraphTimer: 0,
         lungeTargetX: 0,
@@ -10636,6 +10644,15 @@ function drawDeathAnimation() {
         ctx.restore();
     };
 
+    const drawDeathBeast = (px, py, scale, animationName, fallbackPose, facing = 1) => {
+        if (sprites.beast && sprites.beast.sheet.loaded) {
+            sprites.beast.setAnimation(animationName);
+            sprites.beast.draw(ctx, px, py, scale * 1.18, 0, facing < 0);
+            return;
+        }
+        drawBeastFullBody(ctx, px, py, anim.beastRunPhase, scale, facing, fallbackPose, time);
+    };
+
     if (anim.phase === 0) {
         // Phase 0: Approach — full-body yeti runs in from top, player visible below
         const progress = easeInOutQuad(Math.min(1, anim.timer / 1.2));
@@ -10644,7 +10661,7 @@ function drawDeathAnimation() {
         drawPlayerFigure(playerScreen.x, playerScreen.y, 1, 1);
 
         // Draw full-body beast approaching from above
-        drawBeastFullBody(ctx, anim.beastScreenX, anim.beastScreenY, anim.beastRunPhase, anim.beastScale, 1, 'running', time);
+        drawDeathBeast(anim.beastScreenX, anim.beastScreenY, anim.beastScale, 'chase', 'running');
 
         // Dust particles at beast feet
         const dustY = anim.beastScreenY + anim.beastScale * 56;
@@ -10667,7 +10684,7 @@ function drawDeathAnimation() {
         drawPlayerFigure(playerScreen.x + tremble, playerScreen.y, 1 - progress * 0.3, anim.playerAlpha);
 
         // Beast with reaching arms
-        drawBeastFullBody(ctx, anim.beastScreenX, anim.beastScreenY, anim.beastRunPhase, anim.beastScale, 1, 'reaching', time);
+        drawDeathBeast(anim.beastScreenX, anim.beastScreenY, anim.beastScale, 'lunge', 'reaching');
 
         // Brief white flash at contact
         if (anim.impactFlash > 0) {
@@ -10682,7 +10699,7 @@ function drawDeathAnimation() {
         ctx.rotate(anim.thrashAngle);
 
         // Draw beast body with holding arms (relative to beast center)
-        drawBeastFullBody(ctx, 0, 0, 0, anim.beastScale, 1, 'holding', time);
+        drawDeathBeast(0, 0, anim.beastScale, 'recover', 'holding');
 
         // Small player being thrashed — lifted and shaken
         const thrashX = Math.sin(anim.timer * 8) * 8;
@@ -10699,8 +10716,8 @@ function drawDeathAnimation() {
 
         // Scale context up for dramatic closeup
         ctx.save();
-        ctx.translate(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
-        const closeupScale = 1.2 + progress * 0.1;
+        ctx.translate(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 24);
+        const closeupScale = 2.0 + progress * 0.15;
         ctx.scale(closeupScale, closeupScale);
 
         // Chomp animation
@@ -10743,7 +10760,7 @@ function drawDeathAnimation() {
         const progress = easeInOutQuad(Math.min(1, anim.timer / 0.8));
 
         ctx.globalAlpha = anim.beastAlpha;
-        drawBeastFullBody(ctx, anim.beastScreenX, anim.beastScreenY, anim.beastRunPhase, anim.beastScale, -1, 'running', time);
+        drawDeathBeast(anim.beastScreenX, anim.beastScreenY, anim.beastScale, 'chase', 'running', -1);
         ctx.globalAlpha = 1;
 
         // Black overlay fading in
@@ -11190,10 +11207,10 @@ function drawAvalancheDeathAnimation(anim) {
     }
 }
 
-// Helper function to draw beast head with mouth - dark furry humanoid beast
+// Helper function to draw beast head with mouth - shaggy snow beast close-up
 function drawBeastHead(ctx, mouthOpen, satisfied, time) {
     // Fur fringe strokes around head perimeter
-    ctx.strokeStyle = '#4a4a6a';
+    ctx.strokeStyle = '#faffff';
     ctx.lineWidth = 2;
     const furAngles = [-2.5, -2.1, -1.7, -1.3, -0.9, -0.5, 0.5, 0.9, 1.3, 1.7, 2.1, 2.5];
     for (let i = 0; i < furAngles.length; i++) {
@@ -11205,8 +11222,8 @@ function drawBeastHead(ctx, mouthOpen, satisfied, time) {
         ctx.stroke();
     }
 
-    // Head shape - dark indigo fur, irregular
-    ctx.fillStyle = '#1a1a3a';
+    // Head shape - pale ice fur, irregular
+    ctx.fillStyle = '#dff9ff';
     ctx.beginPath();
     ctx.moveTo(-18, -48);
     ctx.quadraticCurveTo(-28, -44, -32, -30);
@@ -11218,9 +11235,39 @@ function drawBeastHead(ctx, mouthOpen, satisfied, time) {
     ctx.quadraticCurveTo(28, -44, 18, -48);
     ctx.quadraticCurveTo(0, -54, -18, -48);
     ctx.fill();
+    ctx.strokeStyle = '#082633';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
 
-    // Brow ridge - thick dark band
-    ctx.fillStyle = '#0d0d2a';
+    // Jagged cheek ruff so the close-up keeps the same hairy snow-beast read.
+    ctx.fillStyle = '#effcff';
+    ctx.strokeStyle = '#082633';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-28, -36);
+    ctx.lineTo(-45, -31);
+    ctx.lineTo(-34, -23);
+    ctx.lineTo(-49, -16);
+    ctx.lineTo(-33, -8);
+    ctx.lineTo(-42, 3);
+    ctx.lineTo(-23, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(28, -36);
+    ctx.lineTo(45, -31);
+    ctx.lineTo(34, -23);
+    ctx.lineTo(49, -16);
+    ctx.lineTo(33, -8);
+    ctx.lineTo(42, 3);
+    ctx.lineTo(23, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Brow ridge and mask - dark face under pale fur
+    ctx.fillStyle = '#061923';
     ctx.beginPath();
     ctx.moveTo(-24, -38);
     ctx.quadraticCurveTo(-16, -44, 0, -46);
@@ -11231,7 +11278,7 @@ function drawBeastHead(ctx, mouthOpen, satisfied, time) {
 
     // Upper jaw area
     const upperJawY = -18 - mouthOpen * 6;
-    ctx.fillStyle = '#0d0d2a';
+    ctx.fillStyle = '#061923';
     ctx.beginPath();
     ctx.moveTo(-22, upperJawY);
     ctx.quadraticCurveTo(-18, upperJawY - 4, 0, upperJawY - 5);
@@ -11242,7 +11289,7 @@ function drawBeastHead(ctx, mouthOpen, satisfied, time) {
 
     // Lower jaw
     const lowerJawY = -4 + mouthOpen * 14;
-    ctx.fillStyle = '#0d0d2a';
+    ctx.fillStyle = '#061923';
     ctx.beginPath();
     ctx.moveTo(-20, lowerJawY);
     ctx.quadraticCurveTo(-16, lowerJawY + 6, 0, lowerJawY + 8);
@@ -11314,7 +11361,7 @@ function drawBeastHead(ctx, mouthOpen, satisfied, time) {
 
     // Saliva strings when mouth wide open
     if (mouthOpen > 0.4) {
-        ctx.strokeStyle = 'rgba(180, 200, 220, 0.35)';
+        ctx.strokeStyle = 'rgba(205, 245, 255, 0.42)';
         ctx.lineWidth = 0.8;
         const wobble1 = time ? Math.sin(time * 8) * 2 : 0;
         const wobble2 = time ? Math.sin(time * 8 + 1.5) * 2 : 0;
@@ -11329,7 +11376,7 @@ function drawBeastHead(ctx, mouthOpen, satisfied, time) {
     }
 
     // Nose ridge
-    ctx.strokeStyle = '#0d0d2a';
+    ctx.strokeStyle = '#061923';
     ctx.lineWidth = 2.5;
     ctx.beginPath();
     ctx.moveTo(-3, -28);
@@ -11358,7 +11405,7 @@ function drawBeastHead(ctx, mouthOpen, satisfied, time) {
         ctx.ellipse(12, -38, 2, 1.5, 0, 0, Math.PI * 2);
         ctx.fill();
         // Angry brow furrows
-        ctx.strokeStyle = '#0d0d2a';
+        ctx.strokeStyle = '#061923';
         ctx.lineWidth = 3;
         ctx.beginPath();
         ctx.moveTo(-20, -44);
@@ -11398,9 +11445,9 @@ function drawBeastFullBody(ctx, x, y, runPhase, scale, facing, armPose, time) {
     const breathe = Math.sin(time * 3) * 0.03 + 1;
     ctx.scale(breathe, 1 / breathe);
 
-    // Subtle dark aura
+    // Subtle icy aura
     const pulseIntensity = 0.3 + Math.sin(time * 3) * 0.15;
-    ctx.fillStyle = `rgba(26, 10, 50, ${pulseIntensity * 0.15})`;
+    ctx.fillStyle = `rgba(198, 250, 255, ${pulseIntensity * 0.16})`;
     ctx.beginPath();
     ctx.arc(0, 0, 75, 0, Math.PI * 2);
     ctx.fill();
@@ -11409,7 +11456,7 @@ function drawBeastFullBody(ctx, x, y, runPhase, scale, facing, armPose, time) {
     const walkPhase = Math.sin(runPhase) * 6;
 
     // Legs
-    ctx.strokeStyle = '#0d0d2a';
+    ctx.strokeStyle = '#082633';
     ctx.lineWidth = 13;
     ctx.lineCap = 'round';
     ctx.beginPath();
@@ -11434,7 +11481,7 @@ function drawBeastFullBody(ctx, x, y, runPhase, scale, facing, armPose, time) {
     ctx.stroke();
 
     // Torso
-    ctx.fillStyle = '#1a1a3a';
+    ctx.fillStyle = '#d9f7ff';
     ctx.beginPath();
     ctx.moveTo(-28, -18);
     ctx.lineTo(-22, 22);
@@ -11453,7 +11500,7 @@ function drawBeastFullBody(ctx, x, y, runPhase, scale, facing, armPose, time) {
 
     // Arms — pose-dependent
     const armSwing = walkPhase * 0.8;
-    ctx.strokeStyle = '#0d0d2a';
+    ctx.strokeStyle = '#bcecf4';
     ctx.lineWidth = 11;
 
     if (armPose === 'running') {
@@ -11461,7 +11508,7 @@ function drawBeastFullBody(ctx, x, y, runPhase, scale, facing, armPose, time) {
         ctx.beginPath(); ctx.moveTo(-28, -12); ctx.lineTo(-34 + armSwing, 6); ctx.lineTo(-32 + armSwing * 0.5, 22); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(28, -12); ctx.lineTo(34 - armSwing, 6); ctx.lineTo(32 - armSwing * 0.5, 22); ctx.stroke();
         // Clawed hands
-        ctx.fillStyle = '#0d0d2a';
+        ctx.fillStyle = '#d8f7ff';
         ctx.beginPath(); ctx.arc(-32 + armSwing * 0.5, 23, 5, 0, Math.PI * 2); ctx.fill();
         ctx.beginPath(); ctx.arc(32 - armSwing * 0.5, 23, 5, 0, Math.PI * 2); ctx.fill();
     } else if (armPose === 'reaching') {
@@ -11469,11 +11516,11 @@ function drawBeastFullBody(ctx, x, y, runPhase, scale, facing, armPose, time) {
         ctx.beginPath(); ctx.moveTo(-28, -12); ctx.lineTo(-30, 8); ctx.lineTo(-22, 28); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(28, -12); ctx.lineTo(30, 8); ctx.lineTo(22, 28); ctx.stroke();
         // Clawed hands reaching
-        ctx.fillStyle = '#0d0d2a';
+        ctx.fillStyle = '#d8f7ff';
         ctx.beginPath(); ctx.arc(-22, 29, 6, 0, Math.PI * 2); ctx.fill();
         ctx.beginPath(); ctx.arc(22, 29, 6, 0, Math.PI * 2); ctx.fill();
         // Extended claws
-        ctx.strokeStyle = '#3a3030';
+        ctx.strokeStyle = '#fff6df';
         ctx.lineWidth = 2.5;
         for (let side = -1; side <= 1; side += 2) {
             const hx = side * 22;
@@ -11489,7 +11536,7 @@ function drawBeastFullBody(ctx, x, y, runPhase, scale, facing, armPose, time) {
         ctx.beginPath(); ctx.moveTo(-28, -12); ctx.lineTo(-24, 4); ctx.lineTo(-12, 12); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(28, -12); ctx.lineTo(24, 4); ctx.lineTo(12, 12); ctx.stroke();
         // Clenched fists inward
-        ctx.fillStyle = '#0d0d2a';
+        ctx.fillStyle = '#d8f7ff';
         ctx.beginPath(); ctx.arc(-12, 13, 5, 0, Math.PI * 2); ctx.fill();
         ctx.beginPath(); ctx.arc(12, 13, 5, 0, Math.PI * 2); ctx.fill();
     } else if (armPose === 'feeding') {
@@ -11497,14 +11544,14 @@ function drawBeastFullBody(ctx, x, y, runPhase, scale, facing, armPose, time) {
         ctx.beginPath(); ctx.moveTo(-28, -12); ctx.lineTo(-22, -18); ctx.lineTo(-10, -26); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(28, -12); ctx.lineTo(22, -18); ctx.lineTo(10, -26); ctx.stroke();
         // Hands near head
-        ctx.fillStyle = '#0d0d2a';
+        ctx.fillStyle = '#d8f7ff';
         ctx.beginPath(); ctx.arc(-10, -27, 5, 0, Math.PI * 2); ctx.fill();
         ctx.beginPath(); ctx.arc(10, -27, 5, 0, Math.PI * 2); ctx.fill();
     }
 
     // Claw strokes (for running pose)
     if (armPose === 'running') {
-        ctx.strokeStyle = '#3a3030';
+        ctx.strokeStyle = '#fff6df';
         ctx.lineWidth = 2;
         for (let side = -1; side <= 1; side += 2) {
             const hx = side * (32 - armSwing * 0.5 * side);
@@ -11518,19 +11565,19 @@ function drawBeastFullBody(ctx, x, y, runPhase, scale, facing, armPose, time) {
     }
 
     // Head
-    ctx.fillStyle = '#1a1a3a';
+    ctx.fillStyle = '#dff9ff';
     ctx.beginPath();
     ctx.ellipse(0, -32, 16, 14, 0, 0, Math.PI * 2);
     ctx.fill();
 
     // Brow ridge
-    ctx.fillStyle = '#0d0d2a';
+    ctx.fillStyle = '#061923';
     ctx.beginPath();
     ctx.ellipse(0, -38, 14, 4, 0, Math.PI, Math.PI * 2);
     ctx.fill();
 
     // Fur spikes on head
-    ctx.strokeStyle = '#4a4a6a';
+    ctx.strokeStyle = '#faffff';
     ctx.lineWidth = 2;
     for (let i = -2; i <= 2; i++) {
         ctx.beginPath();
@@ -11540,7 +11587,7 @@ function drawBeastFullBody(ctx, x, y, runPhase, scale, facing, armPose, time) {
     }
 
     // Fur texture on torso
-    ctx.strokeStyle = '#4a4a6a';
+    ctx.strokeStyle = '#6fb7c9';
     ctx.lineWidth = 1.2;
     for (let i = 0; i < 6; i++) {
         const fx = -18 + i * 7;
@@ -11568,7 +11615,7 @@ function drawBeastFullBody(ctx, x, y, runPhase, scale, facing, armPose, time) {
         ctx.beginPath(); ctx.ellipse(7 + eyeTrack, -34, 1.5, 2, 0, 0, Math.PI * 2); ctx.fill();
         ctx.shadowBlur = 0;
         // Mouth
-        ctx.strokeStyle = '#0d0d2a';
+        ctx.strokeStyle = '#061923';
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.moveTo(-10, -24);
@@ -11581,12 +11628,12 @@ function drawBeastFullBody(ctx, x, y, runPhase, scale, facing, armPose, time) {
         ctx.beginPath(); ctx.moveTo(6, -24); ctx.lineTo(7, -21); ctx.stroke();
     } else {
         // Facing away — just show back of head, no eyes
-        ctx.fillStyle = '#0d0d2a';
+        ctx.fillStyle = '#6fa8ba';
         ctx.beginPath();
         ctx.ellipse(0, -32, 14, 12, 0, 0, Math.PI * 2);
         ctx.fill();
         // Extra fur on back of head
-        ctx.strokeStyle = '#4a4a6a';
+        ctx.strokeStyle = '#faffff';
         ctx.lineWidth = 1.5;
         for (let i = -3; i <= 3; i++) {
             ctx.beginPath();
@@ -12268,7 +12315,7 @@ function startSlalom() {
     gameState.chase = {
         fogY: -99999, fogSpeed: 0, beastActive: false,
         beastY: 0, beastX: 0, beastState: 'chasing',
-        beastLungeTimer: 0, lungeTargetX: 0, lungeTargetY: 0,
+        beastIntroTimer: 0, beastLungeTimer: 0, lungeTargetX: 0, lungeTargetY: 0,
         lungeProgress: 0, retreatTimer: 0, distanceTraveled: 0,
         recentCrashes: [], totalCrashes: 0, missCount: 0,
         slowSpeedTimer: 0, beastRage: 0
@@ -13214,7 +13261,7 @@ function startOlympics() {
     gameState.chase = {
         fogY: -99999, fogSpeed: 0, beastActive: false,
         beastY: 0, beastX: 0, beastState: 'chasing',
-        beastLungeTimer: 0, lungeTargetX: 0, lungeTargetY: 0,
+        beastIntroTimer: 0, beastLungeTimer: 0, lungeTargetX: 0, lungeTargetY: 0,
         lungeProgress: 0, retreatTimer: 0, distanceTraveled: 0,
         recentCrashes: [], totalCrashes: 0, missCount: 0,
         slowSpeedTimer: 0, beastRage: 0, gameElapsed: 0,
@@ -14588,6 +14635,32 @@ window.ShredQA = {
     forceGameOver(cause = 'tree') {
         if (gameState.screen !== 'gameOver') triggerGameOver(cause);
         draw();
+    },
+
+    forceBeastState(state = 'chasing') {
+        if (gameState.screen !== 'playing') this.start({ seed: 424242 });
+        const chase = gameState.chase;
+        const player = gameState.player;
+        if (!chase.beastActive) spawnBeast('QA BEAST');
+        chase.beastActive = true;
+        chase.beastIntroTimer = state === 'emerge' ? 0.75 : 0;
+        chase.beastState = state === 'emerge' ? 'chasing' : state;
+        chase.beastX = player.x;
+        chase.beastY = player.y - 220;
+        chase.beastRage = state === 'lunging' ? 0.75 : 0.35;
+        chase.telegraphTimer = state === 'telegraphing' ? CHASE.beastTelegraphDuration * 0.6 : 0;
+        chase.lungeStartX = chase.beastX;
+        chase.lungeStartY = chase.beastY;
+        chase.lungeTargetX = player.x;
+        chase.lungeTargetY = player.y - 35;
+        chase.lungeProgress = state === 'lunging' ? 0.45 : 0;
+        draw();
+        return {
+            screen: gameState.screen,
+            beastState: chase.beastState,
+            beastIntroTimer: Number((chase.beastIntroTimer || 0).toFixed(2)),
+            beastRage: Number((chase.beastRage || 0).toFixed(2))
+        };
     },
 
     canvasSample() {
