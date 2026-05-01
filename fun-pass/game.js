@@ -1933,7 +1933,7 @@ const SPRITE_CONFIG = {
         }
     },
     yeti: {
-        src: 'assets/sprites/yeti-spritesheet.svg',
+        src: 'assets/sprites/yeti-spritesheet-fur-v2.svg',
         frameWidth: 128,
         frameHeight: 128,
         columns: 6,

@@ -59,7 +59,7 @@ This directory contains sprite sheets for the snowboarder player character and t
 
 ---
 
-### Yeti/Beast (`yeti-spritesheet.svg`)
+### Yeti/Beast (`yeti-spritesheet-fur-v2.svg`)
 - **Dimensions:** 768 × 512 pixels
 - **Frame Size:** 128 × 128 pixels
 - **Grid:** 6 columns × 4 rows = 24 frames
@@ -105,19 +105,19 @@ This directory contains sprite sheets for the snowboarder player character and t
 ### Using Inkscape (CLI)
 ```bash
 inkscape snowboarder-spritesheet.svg --export-filename=snowboarder-spritesheet.png
-inkscape yeti-spritesheet.svg --export-filename=yeti-spritesheet.png
+inkscape yeti-spritesheet-fur-v2.svg --export-filename=yeti-spritesheet.png
 ```
 
 ### Using ImageMagick
 ```bash
 convert -background transparent snowboarder-spritesheet.svg snowboarder-spritesheet.png
-convert -background transparent yeti-spritesheet.svg yeti-spritesheet.png
+convert -background transparent yeti-spritesheet-fur-v2.svg yeti-spritesheet.png
 ```
 
 ### For Higher Resolution (2x)
 ```bash
 inkscape snowboarder-spritesheet.svg -w 768 -h 512 --export-filename=snowboarder-spritesheet@2x.png
-inkscape yeti-spritesheet.svg -w 1536 -h 1024 --export-filename=yeti-spritesheet@2x.png
+inkscape yeti-spritesheet-fur-v2.svg -w 1536 -h 1024 --export-filename=yeti-spritesheet@2x.png
 ```
 
 ---
