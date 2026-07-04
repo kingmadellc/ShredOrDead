@@ -588,6 +588,24 @@ const sfxManager = {
     },
 
     // Menu select blip
+    // Low double-thump heartbeat — fog proximity tension (driven from updateChase)
+    heartbeat() {
+        if (!this.enabled || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        for (const delay of [0, 0.16]) {
+            const osc = this.ctx.createOscillator();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(65, now + delay);
+            osc.frequency.exponentialRampToValueAtTime(40, now + delay + 0.09);
+            const g = this._gain(delay === 0 ? 0.35 : 0.25);
+            g.gain.setValueAtTime((delay === 0 ? 0.35 : 0.25) * this.volume, now + delay);
+            g.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.1);
+            osc.connect(g);
+            osc.start(now + delay);
+            osc.stop(now + delay + 0.12);
+        }
+    },
+
     menuSelect() {
         if (!this.enabled || !this.ctx) return;
         const now = this.ctx.currentTime;
@@ -1679,7 +1697,20 @@ const CHASE = {
     maxGameTime: 90,            // Base max game time in seconds before fog guarantees death
     lodgeTimeBonus: 30,         // Extra seconds added per lodge visit
     fogRampStart: 30,           // Seconds before fog starts ramping aggressively
-    fogRampAccelMultiplier: 8   // How much faster fog accelerates in final phase
+    fogRampAccelMultiplier: 8,  // How much faster fog accelerates in final phase
+    // Beast fairness
+    telegraphDuration: 0.8,     // Roar/flash warning before a guaranteed-catch lunge
+    dodgeBasePoints: 500,       // Reward for surviving a lunge (scaled by combo)
+    // Performance-earned time: every N trick points pushes the fog back
+    pushbackPointsPer: 1000,    // Trick points needed per fog pushback
+    pushbackDistance: 250,      // How far the fog retreats (world px)
+    pushbackTimeBonus: 2,       // Seconds added to the fog clock
+    // Death Zone: riding close to the fog edge pays escalating bonuses
+    deathZoneRange: 220,        // Within this distance of the fog = in the zone
+    deathZonePointsBase: 100,   // Points per second, multiplied by streak
+    // Go Out Shredding: when the overtime fog finally catches you, the run
+    // ends with a double-points finale instead of an instant death
+    outroDuration: 10           // Seconds of finale before the avalanche wins
 };
 
 // Ski Lodge configuration - rare safe haven from the beast
@@ -1696,6 +1727,8 @@ const LODGE = {
     spawnChance: 0.01,          // 1% chance per chunk (very rare)
     minSpawnDistance: 1500,     // Only spawn after 1500 units traveled
     minLodgeSpacing: 3000,      // Minimum distance between lodges
+    firstLodgeDistance: 9000,   // First lodge is guaranteed by this depth (~20s in)
+    pitySpacing: 18000,         // Force a lodge if none seen for this long
     // Interior settings
     interiorWidth: 400,         // Lodge interior room width
     interiorHeight: 300,        // Lodge interior room height
@@ -3609,10 +3642,17 @@ function generateTerrainChunk(chunkIndex) {
     const distanceFromStart = chunk.y;
     const distanceFromLastLodge = chunkCenterY - gameState.terrain.lastLodgeY;
 
+    // First lodge is guaranteed (tutorializes the shop); after that a pity timer
+    // forces one if RNG goes cold, so the shop is never pure luck.
+    const noLodgeYet = gameState.terrain.lastLodgeY <= -9999;
+    const forceFirstLodge = noLodgeYet && distanceFromStart >= LODGE.firstLodgeDistance;
+    const pityLodge = !noLodgeYet && distanceFromLastLodge >= LODGE.pitySpacing;
+
     if (gameState.mode === 'og' &&
         distanceFromStart >= LODGE.minSpawnDistance &&
         distanceFromLastLodge >= LODGE.minLodgeSpacing &&
-        seededRandom(baseSeed + 5555) < LODGE.spawnChance) {
+        (forceFirstLodge || pityLodge ||
+         seededRandom(baseSeed + 5555) < LODGE.spawnChance)) {
 
         const lodgeSeed = baseSeed + 5556;
         // Place lodge in center-ish area (avoid edges)
@@ -3992,7 +4032,9 @@ function triggerJump(player, jump) {
 
     player.airborne = true;
     player.altitude = 1;
-    player.verticalVelocity = PHYSICS.jumpLaunchPower * jump.launchPower * (player.speed / 400);
+    // Final-run outro: every kicker launches huge for the last hurrah
+    const outroBoost = outroActive() ? 1.5 : 1;
+    player.verticalVelocity = PHYSICS.jumpLaunchPower * jump.launchPower * outroBoost * (player.speed / 400);
     sfxManager.jump();
     player.trickRotation = 0;
     player.airTime = 0;
@@ -4083,8 +4125,9 @@ function landFromJump(player) {
         const basePoints = Math.floor(trickPoints * bigAirBonus);
         const mapMult = gameState.mapScoreMult || 1;
         const dailyMult = dailyChallenge.getPointsMultiplier();
-        const points = Math.floor(basePoints * gameState.trickMultiplier * mapMult * dailyMult);
+        const points = Math.floor(basePoints * gameState.trickMultiplier * mapMult * dailyMult * shredMult());
         gameState.score += points;
+        creditFogPushback(points);
 
         // Enhanced celebration for combos
         let celebrationText = trickName + bigAirText;
@@ -4121,8 +4164,9 @@ function landFromJump(player) {
         }
     } else if (player.airTime > 0.4) {
         // Even without a trick, reward hang time
-        const airPoints = Math.floor(player.airTime * 25 * gameState.trickMultiplier);
+        const airPoints = Math.floor(player.airTime * 25 * gameState.trickMultiplier * shredMult());
         gameState.score += airPoints;
+        creditFogPushback(airPoints);
 
         if (player.airTime > 0.8) {
             gameState.celebrations.push({
@@ -4272,8 +4316,9 @@ function endGrind(player) {
     const chainBonus = gameState.trickComboTimer > 1.5 ? 1.5 : 1.0;
     const basePoints = Math.floor(trick.points * typeBonus);
     const mapMult = gameState.mapScoreMult || 1;
-    const points = Math.floor(basePoints * gameState.trickMultiplier * chainBonus * mapMult);
+    const points = Math.floor(basePoints * gameState.trickMultiplier * chainBonus * mapMult * shredMult());
     gameState.score += points;
+    creditFogPushback(points);
 
     // Celebrate rail chains
     if (chainBonus > 1.0) {
@@ -4321,6 +4366,7 @@ function endGrind(player) {
 
 function triggerCrash(player) {
     if (player.invincible > 0) return;
+    if (shredActive()) return; // Unstoppable during Shred Mode
 
     player.crashed = true;
     player.crashTimer = PHYSICS.crashDuration;
@@ -4424,6 +4470,17 @@ function checkCollisions() {
             px + pw/2 > obs.x - obs.width/2 &&
             py - ph/2 < obs.y + obs.height/2 &&
             py + ph/2 > obs.y - obs.height/2) {
+            // Shred Mode: smash through obstacles instead of crashing
+            if (shredActive()) {
+                if (!obs.smashed) {
+                    obs.smashed = true;
+                    spawnCrashParticles(obs.x, obs.y);
+                    gameState.score += 25;
+                    triggerScreenShake(4, 0.85);
+                    sfxManager.land(false);
+                }
+                continue;
+            }
             triggerCrash(player);
             return;
         }
@@ -4607,7 +4664,7 @@ function checkNearMisses(player) {
                 obs.nearMissTriggered = true;
 
                 gameState.nearMissStreak++;
-                const points = 25 * gameState.nearMissStreak;
+                const points = 25 * gameState.nearMissStreak * shredMult();
                 gameState.score += points;
 
                 // Build flow meter
@@ -4896,15 +4953,65 @@ function updateChase(dt) {
         chase.fogY += (200 + overtime * 100) * dt;
     }
 
-    // Check if fog caught player
+    // Check if fog caught player (Shred Mode surfs the edge — it can't swallow you)
     if (chase.fogY >= player.y - 30) {
-        triggerGameOver('fog');
-        return;
+        if (shredActive()) {
+            chase.fogY = player.y - 30;
+        } else if (outroActive()) {
+            // Riding the wall of snow — the finale, not the end
+            chase.fogY = player.y - 40;
+        } else if (!gameState.outro.used && chase.gameElapsed > chase.maxTime) {
+            // The mountain has won. Don't just die — go out shredding.
+            startOutro();
+        } else {
+            triggerGameOver('fog');
+            return;
+        }
     }
 
     // Calculate danger level (visual feedback)
     const fogDistance = player.y - chase.fogY;
     gameState.dangerLevel = clamp(1 - fogDistance / 400, 0, 1);
+
+    // Escalating heartbeat as the fog closes in
+    if (gameState.dangerLevel > 0.55) {
+        sfxManager._hbTimer = (sfxManager._hbTimer || 0) - dt;
+        if (sfxManager._hbTimer <= 0) {
+            sfxManager._hbTimer = lerp(0.9, 0.35, clamp((gameState.dangerLevel - 0.55) / 0.45, 0, 1));
+            sfxManager.heartbeat();
+        }
+    }
+
+    // DEATH ZONE — surfing the avalanche edge pays escalating bonuses each second.
+    // Flips optimal play from "stay safe" to "ride the edge" for those who dare.
+    const inZone = fogDistance > 0 && fogDistance < CHASE.deathZoneRange &&
+                   !player.crashed && !shredActive();
+    if (inZone) {
+        gameState.deathZoneTime += dt;
+        gameState.deathZoneGrace = 2; // leave-zone grace before the streak resets
+        if (gameState.deathZoneTime >= gameState.deathZoneNext) {
+            gameState.deathZoneNext += 1;
+            gameState.deathZoneStreak++;
+            const dzPoints = CHASE.deathZonePointsBase * gameState.deathZoneStreak;
+            gameState.score += dzPoints;
+            gameState.flowMeter = Math.min(100, gameState.flowMeter + 10);
+            gameState.celebrations.push({
+                text: `DEATH ZONE ×${gameState.deathZoneStreak}`,
+                subtext: `+${dzPoints}`,
+                color: COLORS.sunsetOrange,
+                timer: 0.8,
+                scale: Math.min(0.85 + gameState.deathZoneStreak * 0.05, 1.25)
+            });
+            sfxManager.carve(Math.min(1, 0.5 + gameState.deathZoneStreak * 0.1));
+        }
+    } else if (gameState.deathZoneStreak > 0 || gameState.deathZoneTime > 0) {
+        gameState.deathZoneGrace -= dt;
+        if (gameState.deathZoneGrace <= 0) {
+            gameState.deathZoneTime = 0;
+            gameState.deathZoneNext = 1;
+            gameState.deathZoneStreak = 0;
+        }
+    }
 
     // Update beast
     if (chase.beastActive) {
@@ -4977,22 +5084,48 @@ function updateBeast(dt) {
             const distToPlayer = player.y - chase.beastY;
 
             if (chase.beastLungeTimer <= 0 && distToPlayer < 280 && distToPlayer > 40) {
-                chase.beastState = 'lunging';
-
-                // If guaranteed catch, lunge directly at player with minimal prediction error
                 if (guaranteedCatch) {
-                    // Nearly perfect prediction - beast teleports closer
-                    chase.beastY = player.y - 50; // Start closer
-                    chase.lungeTargetX = player.x;
-                    chase.lungeTargetY = player.y + player.speed * 0.15;
+                    // Telegraph the kill lunge instead of silently rigging it —
+                    // the player gets a roar + flash and one real chance to react
+                    chase.beastState = 'telegraph';
+                    chase.telegraphTimer = CHASE.telegraphDuration;
+                    gameState.celebrations.push({
+                        text: "IT'S COMING FOR YOU!",
+                        subtext: '',
+                        color: COLORS.danger,
+                        timer: CHASE.telegraphDuration,
+                        scale: 1.1
+                    });
+                    sfxManager.beastGrowl();
+                    triggerScreenShake(12, 0.85);
                 } else {
+                    chase.beastState = 'lunging';
                     // Normal prediction with some variance
                     const predictTime = 0.3;
                     chase.lungeTargetX = player.x + player.lateralSpeed * predictTime * chase.beastRage;
                     chase.lungeTargetY = player.y + player.speed * predictTime * 0.5;
+                    chase.lungeProgress = 0;
+                    sfxManager.carve(1);
+                    triggerScreenShake(10, 0.8);
                 }
+            }
+            break;
+
+        case 'telegraph':
+            // Wind-up before a guaranteed-catch lunge: keep pace, then strike
+            chase.telegraphTimer -= dt;
+            chase.beastX += (player.x - chase.beastX) * 4 * dt;
+            chase.beastY += player.speed * CHASE.beastSpeed * rageMod * dt;
+            chase.beastY = Math.max(chase.beastY, chase.fogY + 60);
+
+            if (chase.telegraphTimer <= 0) {
+                chase.beastState = 'lunging';
+                // Accurate prediction, but no teleport — the lunge must be earned
+                chase.lungeTargetX = player.x;
+                chase.lungeTargetY = player.y + player.speed * 0.15;
                 chase.lungeProgress = 0;
-                triggerScreenShake(guaranteedCatch ? 15 : 10, 0.8);
+                sfxManager.carve(1);
+                triggerScreenShake(15, 0.8);
             }
             break;
 
@@ -5016,10 +5149,11 @@ function updateBeast(dt) {
             const cdy = player.y - chase.beastY;
             const catchDistSq = cdx * cdx + cdy * cdy;
 
-            // Catch check - if guaranteed catch, ignore some immunity
-            const canCatch = guaranteedCatch ?
+            // Catch check - if guaranteed catch, ignore some immunity.
+            // Shred Mode and the final-run outro make the player untouchable.
+            const canCatch = !shredActive() && !outroActive() && (guaranteedCatch ?
                            (player.invincible <= 0 && player.stunned <= 0) : // Can catch even if crashed
-                           (player.invincible <= 0 && !player.crashed && player.stunned <= 0);
+                           (player.invincible <= 0 && !player.crashed && player.stunned <= 0));
 
             if (catchDistSq < catchRadiusSq && canCatch) {
                 chase.missCount = 0; // Reset on successful catch
@@ -5028,7 +5162,19 @@ function updateBeast(dt) {
             }
 
             if (chase.lungeProgress >= 1) {
-                // Lunge finished without catching - count as miss
+                // Lunge finished without catching — that's a clutch dodge, reward it
+                const dodgePoints = Math.floor(CHASE.dodgeBasePoints * gameState.trickMultiplier * shredMult());
+                gameState.score += dodgePoints;
+                gameState.flowMeter = Math.min(100, gameState.flowMeter + 25);
+                gameState.celebrations.push({
+                    text: 'DODGED!',
+                    subtext: `+${dodgePoints}`,
+                    color: COLORS.limeGreen,
+                    timer: 1.2,
+                    scale: 1.1
+                });
+                sfxManager.achievement();
+
                 chase.missCount++;
                 chase.beastState = 'retreating';
                 chase.retreatTimer = CHASE.beastRetreatDuration;
@@ -5099,6 +5245,156 @@ function updateCelebrations(dt) {
         if (gameState.celebrations[i].timer <= 0) {
             gameState.celebrations.splice(i, 1);
         }
+    }
+}
+
+// Is the flow-meter payoff state active?
+function shredActive() {
+    return gameState.shredMode && gameState.shredMode.active;
+}
+
+// Is the Go Out Shredding finale active?
+function outroActive() {
+    return gameState.outro && gameState.outro.active;
+}
+
+// Score doubling during Shred Mode and the final-run outro
+function shredMult() {
+    return (shredActive() || outroActive()) ? 2 : 1;
+}
+
+// Performance-earned time: trick points accumulate toward fog pushbacks,
+// so skilled riding extends the run instead of a hard RNG-gated timer.
+function creditFogPushback(points) {
+    if (gameState.mode !== 'og') return;
+    if (gameState.currentMap && gameState.currentMap.isFinite) return;
+
+    gameState.fogPushCredit = (gameState.fogPushCredit || 0) + points;
+    while (gameState.fogPushCredit >= CHASE.pushbackPointsPer) {
+        gameState.fogPushCredit -= CHASE.pushbackPointsPer;
+        const chase = gameState.chase;
+        chase.fogY -= CHASE.pushbackDistance;
+        chase.maxTime += CHASE.pushbackTimeBonus;
+        gameState.celebrations.push({
+            text: 'FOG PUSHED BACK!',
+            subtext: `+${CHASE.pushbackTimeBonus}s`,
+            color: COLORS.cyan,
+            timer: 1.2,
+            scale: 0.9
+        });
+        sfxManager.coin();
+    }
+}
+
+// SHRED MODE — the flow-meter payoff: 5s of 2x score and invincibility
+function updateShredMode(dt) {
+    const shred = gameState.shredMode;
+    if (!shred) return;
+
+    if (!shred.active && gameState.flowMeter >= 100) {
+        shred.active = true;
+        shred.timer = 5;
+        gameState.celebrations.push({
+            text: '🔥 SHRED MODE! 🔥',
+            subtext: '2x SCORE · UNSTOPPABLE',
+            color: COLORS.hotPink,
+            timer: 1.8,
+            scale: 1.3
+        });
+        triggerScreenShake(8, 0.85);
+        sfxManager.achievement();
+    }
+
+    if (shred.active) {
+        shred.timer -= dt;
+        // Drain the flow bar over the duration so the HUD shows time remaining
+        gameState.flowMeter = Math.max(0, (shred.timer / 5) * 100);
+        gameState.flowMultiplier = 2;
+
+        // Rainbow trail behind the rider
+        const player = gameState.player;
+        if (!player.crashed && Math.random() < 0.6) {
+            gameState.particles.push(ParticlePool.spawn(
+                player.x + (Math.random() - 0.5) * 16,
+                player.y - 8,
+                (Math.random() - 0.5) * 60,
+                -40 - Math.random() * 40,
+                3,
+                getNeonColor(),
+                0.5,
+                'spark'
+            ));
+        }
+
+        if (shred.timer <= 0) {
+            shred.active = false;
+            gameState.flowMeter = 0;
+            addCelebration('SHRED MODE OVER', COLORS.powder);
+        }
+    }
+}
+
+// GO OUT SHREDDING — the overtime fog caught you, so the run ends with a
+// 10-second double-points finale instead of an instant death. The avalanche
+// rides your heels, every jump launches huge, and then it takes you.
+function startOutro() {
+    const outro = gameState.outro;
+    outro.active = true;
+    outro.used = true;
+    outro.timer = CHASE.outroDuration;
+
+    gameState.celebrations.push({
+        text: '⚡ FINAL RUN ⚡',
+        subtext: 'GO OUT SHREDDING! 2x POINTS',
+        color: COLORS.gold,
+        timer: 2.5,
+        scale: 1.4
+    });
+    triggerScreenShake(15, 0.85);
+    sfxManager.beastGrowl(); // the mountain rumbles
+    sfxManager.achievement();
+}
+
+function updateOutro(dt) {
+    const outro = gameState.outro;
+    if (!outro || !outro.active) return;
+
+    const prevSecs = Math.ceil(outro.timer);
+    outro.timer -= dt;
+    const nowSecs = Math.ceil(outro.timer);
+
+    // Max drama: vignette pinned, snow debris kicked up around the rider
+    gameState.dangerLevel = 1;
+    const player = gameState.player;
+    if (!player.crashed && Math.random() < 0.4) {
+        gameState.particles.push(ParticlePool.spawn(
+            player.x + (Math.random() - 0.5) * 60,
+            player.y - 30 - Math.random() * 30,
+            (Math.random() - 0.5) * 120,
+            -60 - Math.random() * 60,
+            3,
+            COLORS.snow,
+            0.6,
+            'spray'
+        ));
+    }
+
+    // Final countdown: 3... 2... 1...
+    if (nowSecs < prevSecs && nowSecs >= 1 && nowSecs <= 3) {
+        gameState.celebrations.push({
+            text: `${nowSecs}`,
+            subtext: '',
+            color: COLORS.danger,
+            timer: 0.7,
+            scale: 1.5
+        });
+        sfxManager.menuSelect();
+        triggerScreenShake(6, 0.85);
+    }
+
+    if (outro.timer <= 0) {
+        outro.active = false;
+        triggerGameOver('fog');
     }
 }
 
@@ -8437,21 +8733,73 @@ function drawPanelHUD() {
     const col2X = padX + Math.round(usableW * (3 / 6));
     const col3X = padX + Math.round(usableW * (5 / 6));
 
-    // Single row vertically centered in the interior (~30% to ~60%)
+    // Two rows inside the panel interior
     ctx.textBaseline = 'middle';
-    const interiorCenter = panelH * 0.45;
-    const rowY = panelY + Math.round(interiorCenter);
+    const row1Y = panelY + Math.round(panelH * 0.3);
+    const row2Y = panelY + Math.round(panelH * 0.68);
 
     const fontSize = Math.round(8 * scale);
+    const fontSize2 = Math.round(7 * scale);
 
-    // === Distance | Speed | Score ===
-    drawNeonText(`${gameState.distance}m`, col1X, rowY, COLORS.cyan, fontSize, 'center');
+    // === Row 1: Distance | Speed | Score ===
+    drawNeonText(`${gameState.distance}m`, col1X, row1Y, COLORS.cyan, fontSize, 'center');
 
     const speedPercent = Math.floor((gameState.player.speed / PHYSICS.maxSpeed) * 100);
     const speedColor = speedPercent > 75 ? COLORS.hotPink : COLORS.electricBlue;
-    drawNeonText(`${speedPercent}%`, col2X, rowY, speedColor, fontSize, 'center');
+    drawNeonText(`${speedPercent}%`, col2X, row1Y, speedColor, fontSize, 'center');
 
-    drawNeonText(gameState.score.toString().padStart(6, '0'), col3X, rowY, COLORS.magenta, fontSize, 'center');
+    drawNeonText(gameState.score.toString().padStart(6, '0'), col3X, row1Y, COLORS.magenta, fontSize, 'center');
+
+    // === Row 2: ❄ wallet | Fog clock | Combo ===
+    drawNeonText(`❄${gameState.collectiblesCollected}`, col1X, row2Y, COLORS.warmWhite, fontSize2, 'center');
+
+    // Fog clock — the survival timer, extended by lodges and big tricks.
+    // During the Go Out Shredding finale it becomes the outro countdown.
+    const isOGChase = gameState.mode === 'og' && !(gameState.currentMap && gameState.currentMap.isFinite);
+    if (isOGChase && outroActive()) {
+        const outroSecs = Math.max(0, Math.ceil(gameState.outro.timer));
+        ctx.globalAlpha = animCache.sin10 * 0.25 + 0.75;
+        drawNeonText(`🔥0:${outroSecs.toString().padStart(2, '0')}`, col2X, row2Y, COLORS.gold, fontSize2, 'center');
+        ctx.globalAlpha = 1;
+    } else if (isOGChase && gameState.chase) {
+        const timeLeft = Math.max(0, gameState.chase.maxTime - gameState.chase.gameElapsed);
+        const secs = Math.ceil(timeLeft);
+        const clockText = `⏱${Math.floor(secs / 60)}:${(secs % 60).toString().padStart(2, '0')}`;
+        let clockColor = COLORS.cyan;
+        if (timeLeft < 15) {
+            clockColor = COLORS.danger;
+        } else if (timeLeft < 30) {
+            clockColor = COLORS.gold;
+        }
+        if (timeLeft < 15) {
+            ctx.globalAlpha = animCache.sin10 * 0.25 + 0.75;
+        }
+        drawNeonText(clockText, col2X, row2Y, clockColor, fontSize2, 'center');
+        ctx.globalAlpha = 1;
+    }
+
+    // Combo multiplier — gold and bright while a chain is alive
+    if (gameState.trickMultiplier > 1) {
+        drawNeonText(`×${gameState.trickMultiplier.toFixed(1)}`, col3X, row2Y, COLORS.gold, fontSize2, 'center');
+    } else {
+        ctx.globalAlpha = 0.4;
+        drawNeonText('×1.0', col3X, row2Y, '#aaa', fontSize2, 'center');
+        ctx.globalAlpha = 1;
+    }
+
+    // Flow bar across the top edge of the panel; flashes during Shred Mode
+    if (gameState.flowMeter > 0 || shredActive()) {
+        const flowFill = clamp(gameState.flowMeter / 100, 0, 1);
+        const barH = Math.max(3, Math.round(3 * scale));
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+        ctx.fillRect(0, panelY, CANVAS_WIDTH, barH);
+        if (shredActive()) {
+            ctx.fillStyle = getNeonColor();
+        } else {
+            ctx.fillStyle = flowFill >= 0.99 ? COLORS.gold : COLORS.cyan;
+        }
+        ctx.fillRect(0, panelY, Math.round(CANVAS_WIDTH * flowFill), barH);
+    }
 
     // Danger warning (above the panel)
     if (gameState.dangerLevel > 0.5) {
@@ -8459,10 +8807,10 @@ function drawPanelHUD() {
         ctx.globalAlpha = gameState.dangerLevel * pulse;
         ctx.font = FONTS.pressStart20;
         ctx.textAlign = 'center';
-        ctx.fillStyle = COLORS.danger;
-        ctx.shadowColor = COLORS.danger;
+        ctx.fillStyle = outroActive() ? COLORS.gold : COLORS.danger;
+        ctx.shadowColor = outroActive() ? COLORS.gold : COLORS.danger;
         ctx.shadowBlur = getShadowBlur(6);
-        ctx.fillText('SPEED UP!', CANVAS_WIDTH / 2, panelY - Math.round(28 * scale));
+        ctx.fillText(outroActive() ? 'GO OUT SHREDDING!' : 'SPEED UP!', CANVAS_WIDTH / 2, panelY - Math.round(28 * scale));
         ctx.shadowBlur = 0;
         ctx.globalAlpha = 1;
     }
@@ -8681,10 +9029,14 @@ function drawGameOverScreen() {
     const cx = CANVAS_WIDTH / 2;
 
     // Death message - large and prominent
+    const wentOutShredding = gameState.deathCause === 'fog' && gameState.outro && gameState.outro.used;
     let deathText = 'WRECKED!';
     let deathColor = COLORS.danger;
     if (gameState.deathCause === 'xgames') {
         deathText = '🏆 X GAMES COMPLETE!';
+        deathColor = COLORS.gold;
+    } else if (wentOutShredding) {
+        deathText = 'WENT OUT';
         deathColor = COLORS.gold;
     } else if (gameState.deathCause === 'fog') {
         deathText = 'BURIED BY THE';
@@ -8702,7 +9054,8 @@ function drawGameOverScreen() {
     if (gameState.deathCause === 'fog' || gameState.deathCause === 'beast') {
         ctx.fillText(deathText, cx, CANVAS_HEIGHT * 0.2);
         // Second line for the subject
-        const subjectText = gameState.deathCause === 'fog' ? 'AVALANCHE' : 'BEAST';
+        const subjectText = wentOutShredding ? 'SHREDDING!' :
+                            (gameState.deathCause === 'fog' ? 'AVALANCHE' : 'BEAST');
         ctx.font = 'bold 36px "Press Start 2P", monospace';
         ctx.fillText(subjectText, cx, CANVAS_HEIGHT * 0.27);
     } else {
@@ -8748,7 +9101,7 @@ function drawGameOverScreen() {
     ctx.shadowBlur = 0;
 
     // New high score
-    if (gameState.score > gameState.highScore) {
+    if (gameState._newHighScore) {
         const pulse = Math.sin(gameState.animationTime * 5) * 0.3 + 0.7;
         ctx.globalAlpha = pulse;
         ctx.font = 'bold 20px "Press Start 2P", monospace';
@@ -9004,6 +9357,7 @@ function startGame() {
         lungeTargetY: 0,
         lungeProgress: 0,
         retreatTimer: 0,
+        telegraphTimer: 0,
         distanceTraveled: 0,
         recentCrashes: [],
         totalCrashes: 0,
@@ -9042,6 +9396,21 @@ function startGame() {
     gameState.nearMissStreak = 0;
     gameState.speedStreak = 0;
     gameState.speedBonus = 0;
+
+    // Shred Mode (flow-meter payoff) + performance-earned fog pushback
+    gameState.shredMode = { active: false, timer: 0 };
+    gameState.fogPushCredit = 0;
+    sfxManager._hbTimer = 0;
+
+    // Death Zone streak (fog-edge riding bonus)
+    gameState.deathZoneTime = 0;
+    gameState.deathZoneNext = 1;
+    gameState.deathZoneStreak = 0;
+    gameState.deathZoneGrace = 0;
+
+    // Go Out Shredding finale (one per run)
+    gameState.outro = { active: false, timer: 0, used: false };
+    gameState._newHighScore = false;
 
     gameState.particles = [];
     gameState.celebrations = [];
@@ -9109,8 +9478,12 @@ function triggerGameOver(cause) {
     // Reset shop effects (items are current-run-only)
     resetShopEffects();
 
-    // Update high score
+    // Don't let Shred Mode leak into the next run/mode
+    if (gameState.shredMode) gameState.shredMode.active = false;
+
+    // Update high score (flag first — the screen compares after the update)
     if (gameState.score > gameState.highScore) {
+        gameState._newHighScore = true;
         gameState.highScore = gameState.score;
         saveHighScore();
     }
@@ -10661,6 +11034,8 @@ function update(dt) {
     updateParticles(dt);
     updateCelebrations(dt);
     updateCombo(dt);
+    updateShredMode(dt);
+    updateOutro(dt);
     updateScreenShake(dt);
     updateNoCrashDistance(dt);
 
@@ -12537,7 +12912,9 @@ function olympicsBackToMenu() {
 // SHARE YOUR RUN
 // ============================================
 function shareRun() {
+    const wentOut = gameState.deathCause === 'fog' && gameState.outro && gameState.outro.used;
     const deathMsg = gameState.deathCause === 'beast' ? 'the yeti got me' :
+                     wentOut ? 'I went out shredding' :
                      gameState.deathCause === 'fog' ? 'the avalanche buried me' : 'I wiped out';
     const text = `I survived ${gameState.distance}m and scored ${gameState.score} in Shred or Dead before ${deathMsg}. Can you beat it?\n\nhttps://kingmadellc.github.io/ShredOrDead/`;
 
