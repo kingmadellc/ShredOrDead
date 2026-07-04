@@ -8729,10 +8729,13 @@ function drawPanelHUD() {
     const col2X = padX + Math.round(usableW * (3 / 6));
     const col3X = padX + Math.round(usableW * (5 / 6));
 
-    // Two rows inside the panel interior
+    // Two rows inside the panel interior. The panel PNG has transparent
+    // margins around the frame art — measured from the composited canvas,
+    // the usable interior spans 27%–60% of the image height, so the flow
+    // bar and both rows must sit in that band.
     ctx.textBaseline = 'middle';
-    const row1Y = panelY + Math.round(panelH * 0.3);
-    const row2Y = panelY + Math.round(panelH * 0.68);
+    const row1Y = panelY + Math.round(panelH * 0.39);
+    const row2Y = panelY + Math.round(panelH * 0.52);
 
     const fontSize = Math.round(8 * scale);
     const fontSize2 = Math.round(7 * scale);
@@ -8783,18 +8786,19 @@ function drawPanelHUD() {
         ctx.globalAlpha = 1;
     }
 
-    // Flow bar across the top edge of the panel; flashes during Shred Mode
+    // Flow bar along the top of the panel interior; flashes during Shred Mode
     if (gameState.flowMeter > 0 || shredActive()) {
         const flowFill = clamp(gameState.flowMeter / 100, 0, 1);
-        const barH = Math.max(3, Math.round(3 * scale));
+        const barH = Math.max(2, Math.round(2 * scale));
+        const barY = panelY + Math.round(panelH * 0.285);
         ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-        ctx.fillRect(0, panelY, CANVAS_WIDTH, barH);
+        ctx.fillRect(padX, barY, usableW, barH);
         if (shredActive()) {
             ctx.fillStyle = getNeonColor();
         } else {
             ctx.fillStyle = flowFill >= 0.99 ? COLORS.gold : COLORS.cyan;
         }
-        ctx.fillRect(0, panelY, Math.round(CANVAS_WIDTH * flowFill), barH);
+        ctx.fillRect(padX, barY, Math.round(usableW * flowFill), barH);
     }
 
     // Danger warning (above the panel)
