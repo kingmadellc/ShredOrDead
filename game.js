@@ -5489,14 +5489,10 @@ function updateCamera(dt) {
         camera.targetY -= cameraShift;
     }
 
-    // Zoom out for extreme altitude so player + ground stay in frame
-    if (player.airborne && player.altitude > 400) {
-        const zoomOutAmount = Math.min(0.3, (player.altitude - 400) / 2000);
-        camera.targetZoom = 1.0 - zoomOutAmount; // Range: 1.0 to 0.7
-    } else {
-        camera.targetZoom = 1.0;
-    }
-    camera.zoom = expLerp(camera.zoom, camera.targetZoom, 8, dt);
+    // No altitude zoom-out: the camera shift above keeps the player in frame,
+    // and scaling the scene down left visible margins around the view.
+    camera.targetZoom = 1.0;
+    camera.zoom = 1.0;
 
     // If player is very far ahead (massive jump), increase camera catch-up speed
     const distanceAhead = player.y - (camera.y + CANVAS_HEIGHT * 0.35);
