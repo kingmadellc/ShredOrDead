@@ -12,7 +12,7 @@ for line in log.splitlines():
     an, ae, cn, ce = line.split("\0")
     for name, email in [(an, ae), (cn, ce)]:
         assert email.endswith("@users.noreply.github.com") or (name == "GitHub" and email == "noreply@github.com"), "Commit metadata contains a non-noreply email"
-        assert name in {"King Made", "Codex", "Claude", "GitHub", "github-actions[bot]", "dependabot[bot]"}, "Review author attribution before publication"
+        assert name in {"King Made", "kingmadellc", "Codex", "Claude", "GitHub", "github-actions[bot]", "dependabot[bot]"}, "Review author attribution before publication"
 
 class Entry(HTMLParser):
     def handle_starttag(self, tag, attributes):
