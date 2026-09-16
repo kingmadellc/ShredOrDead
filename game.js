@@ -986,131 +986,6 @@ const dailyChallenge = {
 };
 
 // ============================================
-// GLOBAL LEADERBOARD (Firebase Firestore)
-// ============================================
-const leaderboard = {
-    db: null,
-    initialized: false,
-    allTime: [],
-    daily: [],
-    playerName: '',
-    _fetching: false,
-
-    init() {
-        try {
-            if (typeof firebase === 'undefined') return;
-            const app = firebase.initializeApp({
-                apiKey: "AIzaSyDshredordead-placeholder",
-                authDomain: "shredordead.firebaseapp.com",
-                projectId: "shredordead",
-                storageBucket: "shredordead.appspot.com",
-                messagingSenderId: "000000000000",
-                appId: "1:000000000000:web:placeholder"
-            });
-            this.db = firebase.firestore();
-            this.initialized = true;
-            // Load player name
-            try {
-                this.playerName = localStorage.getItem('shredordead_playername') || '';
-            } catch (e) {}
-        } catch (e) {
-            console.warn('Leaderboard init failed:', e);
-            // Game works fine without leaderboard
-        }
-    },
-
-    setName(name) {
-        this.playerName = name.substring(0, 12).toUpperCase().replace(/[^A-Z0-9 ]/g, '');
-        try { localStorage.setItem('shredordead_playername', this.playerName); } catch (e) {}
-    },
-
-    async submitScore(score, distance, maxCombo, mapName, isDaily) {
-        if (!this.initialized || !this.db || !this.playerName) return;
-        try {
-            const collection = isDaily ? 'daily_' + new Date().toISOString().split('T')[0] : 'alltime';
-            await this.db.collection(collection).add({
-                name: this.playerName,
-                score: score,
-                distance: distance,
-                combo: maxCombo,
-                map: mapName || 'Classic',
-                timestamp: firebase.firestore.FieldValue.serverTimestamp()
-            });
-        } catch (e) {
-            console.warn('Score submit failed:', e);
-        }
-    },
-
-    async fetchTopScores(isDaily, limit = 10) {
-        if (!this.initialized || !this.db || this._fetching) return [];
-        this._fetching = true;
-        try {
-            const collection = isDaily ? 'daily_' + new Date().toISOString().split('T')[0] : 'alltime';
-            const snapshot = await this.db.collection(collection)
-                .orderBy('score', 'desc')
-                .limit(limit)
-                .get();
-            const scores = [];
-            snapshot.forEach(doc => {
-                const d = doc.data();
-                scores.push({ name: d.name, score: d.score, distance: d.distance, combo: d.combo });
-            });
-            if (isDaily) this.daily = scores;
-            else this.allTime = scores;
-            this._fetching = false;
-            return scores;
-        } catch (e) {
-            this._fetching = false;
-            return [];
-        }
-    },
-
-    hasName() {
-        return this.playerName.length > 0;
-    },
-
-    // Draw leaderboard on canvas (used in high scores submenu or game over)
-    drawScoreboard(ctx, x, y, width, scores, title, highlight) {
-        const rowH = 22;
-        ctx.save();
-        // Title
-        ctx.font = 'bold 10px "Press Start 2P", monospace';
-        ctx.textAlign = 'center';
-        ctx.fillStyle = COLORS.gold;
-        ctx.shadowColor = COLORS.gold;
-        ctx.shadowBlur = getShadowBlur(4);
-        ctx.fillText(title, x + width / 2, y);
-        ctx.shadowBlur = 0;
-
-        if (!scores || scores.length === 0) {
-            ctx.font = '8px "Press Start 2P", monospace';
-            ctx.fillStyle = '#888';
-            ctx.fillText('NO SCORES YET', x + width / 2, y + 30);
-            ctx.restore();
-            return;
-        }
-
-        for (let i = 0; i < scores.length && i < 10; i++) {
-            const s = scores[i];
-            const ry = y + 18 + i * rowH;
-            const isMe = highlight && s.name === this.playerName;
-            ctx.font = '8px "Press Start 2P", monospace';
-            // Rank
-            ctx.textAlign = 'left';
-            ctx.fillStyle = isMe ? COLORS.cyan : (i < 3 ? COLORS.gold : '#aaa');
-            ctx.fillText(`${i + 1}.`, x + 4, ry);
-            // Name
-            ctx.fillText(s.name || '???', x + 30, ry);
-            // Score
-            ctx.textAlign = 'right';
-            ctx.fillStyle = isMe ? COLORS.cyan : '#fff';
-            ctx.fillText(s.score.toLocaleString(), x + width - 4, ry);
-        }
-        ctx.restore();
-    }
-};
-
-// ============================================
 // INTERACTIVE TUTORIAL SYSTEM
 // ============================================
 const tutorial = {
@@ -2458,8 +2333,6 @@ function handleTouchEnd(e) {
                 musicManager.stop();
             } else if (action === 'share') {
                 shareRun();
-            } else if (action === 'setname') {
-                promptNameEntry();
             }
             // Don't fire space - buttons handle it
         } else {
@@ -2517,8 +2390,6 @@ function setupCanvasInteraction() {
             musicManager.stop();
         } else if (action === 'share') {
             shareRun();
-        } else if (action === 'setname') {
-            promptNameEntry();
         }
     });
 
@@ -9189,48 +9060,10 @@ function drawGameOverScreen() {
     ctx.fillText(gameState._shareConfirm ? 'COPIED!' : 'SHARE YOUR RUN', cx, btnY + btnSpacing * 2);
     ctx.shadowBlur = 0;
 
-    // Leaderboard name entry prompt (shows if no name set and good score)
-    if (!leaderboard.hasName() && !gameState._nameEntryActive && gameState.score > 0) {
-        ctx.font = '8px "Press Start 2P", monospace';
-        ctx.fillStyle = COLORS.gold;
-        const namePulse = 0.6 + 0.4 * Math.sin(gameState.animationTime * 3);
-        ctx.globalAlpha = namePulse;
-        ctx.fillText('TAP HERE TO SET YOUR NAME FOR LEADERBOARDS', cx, CANVAS_HEIGHT * 0.88);
-        ctx.globalAlpha = 1;
-        // Add a clickable region
-        if (!gameState._gameOverButtons.find(b => b.action === 'setname')) {
-            gameState._gameOverButtons.push({
-                x: cx - 200, y: CANVAS_HEIGHT * 0.88 - 12, w: 400, h: 24, action: 'setname'
-            });
-        }
-    } else if (leaderboard.hasName()) {
-        ctx.font = '8px "Press Start 2P", monospace';
-        ctx.fillStyle = 'rgba(0, 255, 255, 0.5)';
-        ctx.fillText('PLAYING AS: ' + leaderboard.playerName, cx, CANVAS_HEIGHT * 0.88);
-    }
-
     // Keyboard hint (smaller, subtle)
     ctx.font = '10px "Press Start 2P", monospace';
     ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
     ctx.fillText('SPACE/A to retry \u00B7 ESC/B for menu', cx, CANVAS_HEIGHT * 0.95);
-}
-
-// Name entry overlay for leaderboard
-function promptNameEntry() {
-    const name = prompt('ENTER YOUR NAME FOR LEADERBOARDS (max 12 chars):');
-    if (name && name.trim()) {
-        leaderboard.setName(name.trim());
-        // Retroactively submit this score
-        if (leaderboard.initialized) {
-            leaderboard.submitScore(
-                gameState.score,
-                gameState.distance,
-                gameState.maxCombo,
-                gameState.selectedMap || 'classic',
-                false
-            );
-        }
-    }
 }
 
 // ===================
@@ -9508,17 +9341,6 @@ function triggerGameOver(cause) {
 
     // Stop ghost recording and save if personal best
     ghostSystem.stopRecording(gameState.score);
-
-    // Submit to global leaderboard
-    if (leaderboard.initialized && leaderboard.playerName) {
-        leaderboard.submitScore(
-            gameState.score,
-            gameState.distance,
-            gameState.maxCombo,
-            gameState.selectedMap || 'classic',
-            dailyChallenge.active
-        );
-    }
 
     // Save daily challenge if active
     if (dailyChallenge.active) {
@@ -12978,7 +12800,6 @@ function init() {
     shredCoinState.load();
     dailyChallenge.generateForToday();
     ghostSystem.loadGhost();
-    leaderboard.init();
     embedMode.init();
     updateMapLockUI();
     updateSettingsUI();

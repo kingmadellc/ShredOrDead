@@ -16,7 +16,7 @@ Carve, trick, and outrun the yeti. **Shred or Dead** is a retro snowboarding arc
 - Ski Lodge shops, gear, food, local achievements, and seeded daily challenges.
 - Crash too often and the Beast wakes up behind you.
 
-Progress and settings are stored locally in your browser. The source includes a Firebase leaderboard integration with placeholder configuration; a working global leaderboard is not part of the public prototype.
+Progress, settings, and personal bests are stored locally in your browser. High scores, best distance, max combo, and daily records stay on that browser; the public prototype does not connect to a global leaderboard.
 
 ## Controls
 
