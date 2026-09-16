@@ -8894,10 +8894,19 @@ function drawGameOverScreen() {
     ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
+    // Lay out a fixed results panel, then fit it to the current canvas.
+    // Keep text rows and hit targets in the same coordinate system.
+    const panelHeight = 640;
+    const panelScale = Math.min(CANVAS_WIDTH / 480, CANVAS_HEIGHT / panelHeight, 1.5);
+    const panelX = (CANVAS_WIDTH - 480 * panelScale) / 2;
+    const panelY = (CANVAS_HEIGHT - panelHeight * panelScale) / 2;
+    ctx.save();
+    ctx.translate(panelX, panelY);
+    ctx.scale(panelScale, panelScale);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    const cx = CANVAS_WIDTH / 2;
+    const cx = 240;
 
     // Death message - large and prominent
     const wentOutShredding = gameState.deathCause === 'fog' && gameState.outro && gameState.outro.used;
@@ -8923,14 +8932,14 @@ function drawGameOverScreen() {
     ctx.shadowBlur = getShadowBlur(12);
     ctx.fillStyle = deathColor;
     if (gameState.deathCause === 'fog' || gameState.deathCause === 'beast') {
-        ctx.fillText(deathText, cx, CANVAS_HEIGHT * 0.2);
+        ctx.fillText(deathText, cx, panelHeight * 0.13);
         // Second line for the subject
         const subjectText = wentOutShredding ? 'SHREDDING!' :
                             (gameState.deathCause === 'fog' ? 'AVALANCHE' : 'BEAST');
         ctx.font = 'bold 36px "Press Start 2P", monospace';
-        ctx.fillText(subjectText, cx, CANVAS_HEIGHT * 0.27);
+        ctx.fillText(subjectText, cx, panelHeight * 0.20);
     } else {
-        ctx.fillText(deathText, cx, CANVAS_HEIGHT * 0.23);
+        ctx.fillText(deathText, cx, panelHeight * 0.17);
     }
     ctx.shadowBlur = 0;
 
@@ -8939,14 +8948,14 @@ function drawGameOverScreen() {
     ctx.globalAlpha = 0.3;
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(cx - 140, CANVAS_HEIGHT * 0.33);
-    ctx.lineTo(cx + 140, CANVAS_HEIGHT * 0.33);
+    ctx.moveTo(cx - 140, panelHeight * 0.25);
+    ctx.lineTo(cx + 140, panelHeight * 0.25);
     ctx.stroke();
     ctx.globalAlpha = 1;
 
     // Stats - larger font, cleaner layout
-    const statsY = CANVAS_HEIGHT * 0.40;
-    const statsSpacing = CANVAS_HEIGHT * 0.08;
+    const statsY = panelHeight * 0.31;
+    const statsSpacing = panelHeight * 0.064;
 
     ctx.font = '16px "Press Start 2P", monospace';
 
@@ -8991,7 +9000,7 @@ function drawGameOverScreen() {
         ctx.fillStyle = COLORS.limeGreen;
         ctx.shadowColor = COLORS.limeGreen;
         ctx.shadowBlur = getShadowBlur(4);
-        ctx.fillText(`+${coinsEarned} SHRED COINS`, cx, statsY + statsSpacing * 3);
+        ctx.fillText(`+${coinsEarned} SHRED COINS`, cx, 356);
         ctx.shadowBlur = 0;
     }
 
@@ -9000,20 +9009,26 @@ function drawGameOverScreen() {
     const achTotal = achievementState.getTotal();
     ctx.font = '10px "Press Start 2P", monospace';
     ctx.fillStyle = 'rgba(255, 215, 0, 0.6)';
-    ctx.fillText(`${achCount}/${achTotal} ACHIEVEMENTS`, cx, statsY + statsSpacing * 3.6);
+    ctx.fillText(`${achCount}/${achTotal} ACHIEVEMENTS`, cx, 386);
 
     // Buttons - drawn on canvas for both desktop and mobile
     const btnW = 280;
     const btnH = 44;
-    const btnY = CANVAS_HEIGHT * 0.70;
-    const btnSpacing = 52;
+    const btnY = 432;
+    const btnSpacing = 56;
 
     // Store button rects for click/tap detection
     gameState._gameOverButtons = [
         { x: cx - btnW/2, y: btnY - btnH/2, w: btnW, h: btnH, action: 'restart' },
         { x: cx - btnW/2, y: btnY + btnSpacing - btnH/2, w: btnW, h: btnH, action: 'menu' },
         { x: cx - btnW/2, y: btnY + btnSpacing * 2 - btnH/2, w: btnW, h: btnH, action: 'share' }
-    ];
+    ].map(button => ({
+        ...button,
+        x: panelX + button.x * panelScale,
+        y: panelY + button.y * panelScale,
+        w: button.w * panelScale,
+        h: button.h * panelScale
+    }));
 
     // Retry button
     const retryHover = gameState._gameOverHover === 'restart';
@@ -9063,7 +9078,8 @@ function drawGameOverScreen() {
     // Keyboard hint (smaller, subtle)
     ctx.font = '10px "Press Start 2P", monospace';
     ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-    ctx.fillText('SPACE/A to retry \u00B7 ESC/B for menu', cx, CANVAS_HEIGHT * 0.95);
+    ctx.fillText('SPACE/A to retry \u00B7 ESC/B for menu', cx, panelHeight * 0.95);
+    ctx.restore();
 }
 
 // ===================
